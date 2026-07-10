@@ -1,0 +1,2000 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>MUSPEL · OPS</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  :root {
+    --azul:#1a3a5c; --azul2:#2563a8; --verde:#1a7a4a; --rojo:#b91c1c;
+    --naranja:#c2410c; --gris:#f4f6fa; --borde:#dde3ed; --texto:#1e293b;
+    --blanco:#ffffff; --sombra:0 2px 8px rgba(26,58,92,0.10);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--gris);color:var(--texto);min-height:100vh;}
+  /* HEADER */
+  .header{background:var(--azul);color:var(--blanco);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,0.18);}
+  .header-logo{font-size:1.15rem;font-weight:800;letter-spacing:2px;}
+  .header-logo span{color:#7ec8f4;font-weight:400;font-size:0.85rem;letter-spacing:1px;margin-left:6px;}
+  .header-fecha{font-size:0.75rem;color:#a8c4e0;}
+  /* TABS */
+  .tabs{display:flex;background:var(--azul);border-top:1px solid rgba(255,255,255,0.1);overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;touch-action:pan-x;}
+  .tabs::-webkit-scrollbar{display:none;}
+  .tab{flex:0 0 88px;min-width:88px;padding:10px 6px 8px;text-align:center;font-size:0.66rem;font-weight:600;color:rgba(255,255,255,0.55);cursor:pointer;border-bottom:3px solid transparent;transition:all .2s;white-space:nowrap;letter-spacing:0.3px;text-transform:uppercase;}
+  .tab.active{color:#fff;border-bottom-color:#7ec8f4;}
+  .tab:hover:not(.active){color:rgba(255,255,255,0.8);}
+  /* CONTENIDO */
+  .content{display:none;padding:14px;max-width:700px;margin:0 auto;}
+  .content.active{display:block;}
+  /* CARDS */
+  .card{background:var(--blanco);border-radius:10px;box-shadow:var(--sombra);padding:14px;margin-bottom:12px;border:1px solid var(--borde);}
+  .card-title{font-size:0.8rem;font-weight:700;color:var(--azul);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--borde);}
+  /* RESUMEN STATS */
+  .stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px;}
+  .stat{background:var(--blanco);border-radius:10px;padding:12px;text-align:center;border:1px solid var(--borde);box-shadow:var(--sombra);}
+  .stat-n{font-size:1.8rem;font-weight:800;line-height:1;}
+  .stat-label{font-size:0.68rem;color:#64748b;margin-top:4px;text-transform:uppercase;letter-spacing:0.5px;}
+  .stat.verde .stat-n{color:var(--verde);}
+  .stat.rojo .stat-n{color:var(--rojo);}
+  .stat.azul .stat-n{color:var(--azul2);}
+  .stat.naranja .stat-n{color:var(--naranja);}
+  /* BARRA PROGRESO */
+  .prog-wrap{background:var(--blanco);border-radius:10px;padding:14px;border:1px solid var(--borde);box-shadow:var(--sombra);margin-bottom:12px;}
+  .prog-label{display:flex;justify-content:space-between;font-size:0.78rem;margin-bottom:6px;}
+  .prog-label span:first-child{font-weight:600;color:var(--azul);}
+  .prog-bar{height:10px;background:#e2e8f0;border-radius:99px;overflow:hidden;}
+  .prog-fill{height:100%;background:linear-gradient(90deg,var(--azul2),var(--verde));border-radius:99px;transition:width .5s;}
+  /* BOTONES */
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 16px;border-radius:8px;font-size:0.82rem;font-weight:600;cursor:pointer;border:none;transition:all .2s;width:100%;margin-bottom:8px;}
+  .btn-primary{background:var(--azul2);color:var(--blanco);}
+  .btn-primary:hover{background:#1d4f8c;}
+  .btn-verde{background:var(--verde);color:var(--blanco);}
+  .btn-verde:hover{background:#155f38;}
+  .btn-rojo{background:var(--rojo);color:var(--blanco);}
+  .btn-rojo:hover{background:#991b1b;}
+  .btn-naranja{background:var(--naranja);color:var(--blanco);}
+  .btn-outline{background:transparent;color:var(--azul2);border:1.5px solid var(--azul2);}
+  .btn-outline:hover{background:var(--azul2);color:var(--blanco);}
+  .btn-sm{padding:6px 12px;font-size:0.75rem;width:auto;margin-bottom:0;}
+  /* BADGE */
+  .badge{display:inline-block;padding:2px 8px;border-radius:99px;font-size:0.68rem;font-weight:700;text-transform:uppercase;}
+  .badge-verde{background:#dcfce7;color:#15803d;}
+  .badge-rojo{background:#fee2e2;color:#b91c1c;}
+  .badge-naranja{background:#ffedd5;color:#c2410c;}
+  .badge-azul{background:#dbeafe;color:#1d4ed8;}
+  .badge-gris{background:#f1f5f9;color:#64748b;}
+  /* PAQUETES */
+  .grupo-titulo{font-size:0.72rem;font-weight:700;color:var(--azul2);text-transform:uppercase;letter-spacing:1px;padding:8px 0 4px;margin-top:4px;}
+  .paquete-item{background:var(--blanco);border:1px solid var(--borde);border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:flex-start;gap:10px;}
+  .paquete-item.entregado{border-left:3px solid var(--verde);opacity:0.7;}
+  .paquete-item.devuelto{border-left:3px solid var(--rojo);opacity:0.7;}
+  .paquete-item.daniado{border-left:3px solid var(--naranja);opacity:0.7;}
+  .paquete-info{flex:1;min-width:0;}
+  .paquete-nombre{font-weight:600;font-size:0.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .paquete-dir{font-size:0.72rem;color:#64748b;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .paquete-codigo{font-size:0.68rem;color:#94a3b8;font-family:monospace;}
+  .paquete-acciones{display:flex;gap:4px;flex-shrink:0;}
+  /* INPUT / SELECT */
+  .form-group{margin-bottom:10px;}
+  .form-label{font-size:0.75rem;font-weight:600;color:var(--azul);margin-bottom:4px;display:block;}
+  .form-input,.form-select{width:100%;padding:9px 12px;border:1.5px solid var(--borde);border-radius:8px;font-size:0.85rem;background:var(--blanco);color:var(--texto);transition:border .2s;}
+  .form-input:focus,.form-select:focus{outline:none;border-color:var(--azul2);}
+  .form-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  /* UPLOAD */
+  .upload-area{border:2px dashed var(--borde);border-radius:10px;padding:24px;text-align:center;cursor:pointer;transition:all .2s;background:var(--gris);}
+  .upload-area:hover{border-color:var(--azul2);background:#eff6ff;}
+  .upload-icon{font-size:2rem;margin-bottom:8px;}
+  .upload-text{font-size:0.82rem;color:#64748b;}
+  /* QR */
+  #qr-reader{width:100%;border-radius:10px;overflow:hidden;}
+  .qr-result{padding:12px;border-radius:8px;margin-top:10px;font-size:0.85rem;}
+  .qr-result.ok{background:#dcfce7;color:#15803d;border:1px solid #bbf7d0;}
+  .qr-result.err{background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;}
+  /* HISTORIAL */
+  .hist-item{background:var(--blanco);border:1px solid var(--borde);border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;}
+  .hist-fecha{font-size:0.78rem;font-weight:600;color:var(--azul);}
+  .hist-stats{font-size:0.72rem;color:#64748b;margin-top:2px;}
+  /* DASHBOARD */
+  .dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}
+  .dash-card{background:var(--blanco);border-radius:10px;padding:14px;border:1px solid var(--borde);box-shadow:var(--sombra);}
+  .dash-card-title{font-size:0.7rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;}
+  .dash-big{font-size:2rem;font-weight:800;color:var(--azul);line-height:1;}
+  .dash-sub{font-size:0.72rem;color:#94a3b8;margin-top:4px;}
+  .semana-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--borde);font-size:0.78rem;}
+  .semana-row:last-child{border-bottom:none;}
+  /* CIERRE */
+  .resumen-cierre{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px;margin-bottom:10px;}
+  .resumen-cierre-row{display:flex;justify-content:space-between;padding:4px 0;font-size:0.83rem;}
+  .resumen-cierre-row strong{color:var(--azul);}
+  /* ALERTA */
+  .alerta{padding:10px 14px;border-radius:8px;font-size:0.8rem;margin-bottom:10px;}
+  .alerta-info{background:#dbeafe;color:#1d4ed8;border:1px solid #bfdbfe;}
+  .alerta-ok{background:#dcfce7;color:#15803d;border:1px solid #bbf7d0;}
+  .alerta-warn{background:#ffedd5;color:#c2410c;border:1px solid #fdba74;}
+  /* FILTRO */
+  .filtro-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
+  .filtro-btn{padding:5px 12px;border-radius:99px;font-size:0.72rem;font-weight:600;cursor:pointer;border:1.5px solid var(--borde);background:var(--blanco);color:#64748b;transition:all .2s;}
+  .filtro-btn.active{background:var(--azul2);color:var(--blanco);border-color:var(--azul2);}
+  /* MODAL DETALLE ORDEN */
+  .modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:200;align-items:flex-end;}
+  .modal-overlay.open{display:flex;}
+  .modal-box{background:var(--blanco);border-radius:16px 16px 0 0;padding:20px 16px 32px;width:100%;max-height:85vh;overflow-y:auto;}
+  .modal-handle{width:40px;height:4px;background:#dde3ed;border-radius:99px;margin:0 auto 16px;}
+  .modal-titulo{font-size:1rem;font-weight:700;color:var(--azul);margin-bottom:4px;}
+  .modal-codigo{font-size:0.72rem;color:#94a3b8;font-family:monospace;margin-bottom:14px;}
+  .modal-campo{display:flex;flex-direction:column;margin-bottom:10px;}
+  .modal-campo-label{font-size:0.68rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;}
+  .modal-campo-valor{font-size:0.88rem;color:var(--texto);}
+  .modal-acciones{display:flex;gap:8px;margin-top:16px;}
+  .modal-acciones .btn{margin-bottom:0;}
+  /* SYNC STATUS */
+  .sync-badge{display:inline-flex;align-items:center;gap:4px;font-size:0.68rem;padding:3px 8px;border-radius:99px;font-weight:600;}
+  .sync-badge.ok{background:#dcfce7;color:#15803d;}
+  .sync-badge.pend{background:#ffedd5;color:#c2410c;}
+  .sync-badge.err{background:#fee2e2;color:#b91c1c;}
+  .sync-badge.sinc{background:#dbeafe;color:#1d4ed8;}
+</style>
+</head>
+<body>
+
+<!-- MODAL DETALLE RESUMEN -->
+<div class="modal-overlay" id="modal-resumen-overlay" onclick="cerrarResumenDetalle(event)">
+  <div class="modal-box">
+    <div class="modal-handle"></div>
+    <div class="modal-titulo" id="modal-resumen-titulo">—</div>
+    <div style="font-size:0.75rem;color:#64748b;margin-bottom:12px;" id="modal-resumen-subtitulo">—</div>
+    <div id="modal-resumen-lista"></div>
+  </div>
+</div>
+
+<!-- MODAL DETALLE ORDEN -->
+<div class="modal-overlay" id="modal-overlay" onclick="cerrarModal(event)">
+  <div class="modal-box">
+    <div class="modal-handle"></div>
+    <div class="modal-titulo" id="modal-nombre">—</div>
+    <div class="modal-codigo" id="modal-codigo">—</div>
+    <div class="modal-campo">
+      <span class="modal-campo-label">🏪 Empresa que envía</span>
+      <span class="modal-campo-valor" id="modal-empresa">—</span>
+    </div>
+    <div class="modal-campo">
+      <span class="modal-campo-label">📋 N° Orden Alas (Folio)</span>
+      <span class="modal-campo-valor" id="modal-folio">—</span>
+    </div>
+    <div class="modal-campo">
+      <span class="modal-campo-label">📦 N° Bulto de entrega</span>
+      <span class="modal-campo-valor" id="modal-bulto">—</span>
+    </div>
+    <div class="modal-campo">
+      <span class="modal-campo-label">📍 Dirección</span>
+      <span class="modal-campo-valor" id="modal-dir">—</span>
+    </div>
+    <div class="modal-campo">
+      <span class="modal-campo-label">🏙 Comuna</span>
+      <span class="modal-campo-valor" id="modal-comuna">—</span>
+    </div>
+    <div class="modal-campo">
+      <span class="modal-campo-label">📞 Teléfono</span>
+      <span class="modal-campo-valor" id="modal-tel">—</span>
+    </div>
+    <div class="modal-campo">
+      <span class="modal-campo-label">🚚 Tipo ruta</span>
+      <span class="modal-campo-valor" id="modal-tipo">—</span>
+    </div>
+    <div class="modal-campo">
+      <span class="modal-campo-label">📋 Estado actual</span>
+      <span class="modal-campo-valor" id="modal-estado">—</span>
+    </div>
+    <div id="modal-repetido" style="display:none;margin-top:8px;padding:8px 12px;background:#fee2e2;border-radius:8px;font-size:0.78rem;color:var(--rojo);font-weight:600;">⚠️ Esta orden ya existía en un día anterior — verificar con Alas</div>
+    <div class="modal-acciones" id="modal-acciones"></div>
+  </div>
+</div>
+
+<div class="header">
+  <div>
+    <div class="header-logo">MUSPEL <span>OPS</span></div>
+    <div class="header-fecha" id="header-fecha"></div>
+  </div>
+  <div style="text-align:right">
+    <div style="font-size:0.75rem;color:#a8c4e0;" id="header-paquetes">0 órdenes</div>
+    <div style="font-size:0.72rem;color:#7ec8f4;" id="header-ef">—</div>
+    <div id="sync-indicator" style="margin-top:4px;"></div>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="showTab('resumen')">📊 Resumen</div>
+  <div class="tab" onclick="showTab('importar')">📥 Importar</div>
+  <div class="tab" onclick="showTab('paquetes')">📦 Órdenes</div>
+  <div class="tab" onclick="showTab('qr')">📷 QR</div>
+  <div class="tab" onclick="showTab('cierre')">✅ Cierre</div>
+  <div class="tab" onclick="showTab('dashboard')">📈 Dashboard</div>
+  <div class="tab" onclick="showTab('historial')">🗂 Historial</div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- TAB: RESUMEN -->
+<!-- ══════════════════════════════════════════ -->
+<div class="content active" id="tab-resumen">
+  <div class="alerta alerta-warn" id="banner-operacional" style="display:none;"></div>
+  <div class="alerta alerta-info" id="alerta-dia"></div>
+  <div class="stats-grid">
+    <div class="stat azul" onclick="abrirResumenDetalle('todos')" style="cursor:pointer;"><div class="stat-n" id="s-recibidos">0</div><div class="stat-label">Recibidos</div></div>
+    <div class="stat verde" onclick="abrirResumenDetalle('entregado')" style="cursor:pointer;"><div class="stat-n" id="s-entregados">0</div><div class="stat-label">Entregados</div></div>
+    <div class="stat rojo" onclick="abrirResumenDetalle('devuelto')" style="cursor:pointer;"><div class="stat-n" id="s-devueltos">0</div><div class="stat-label">Devueltos</div></div>
+    <div class="stat naranja" onclick="abrirResumenDetalle('pendiente')" style="cursor:pointer;"><div class="stat-n" id="s-pendientes">0</div><div class="stat-label">Pendientes</div></div>
+  </div>
+  <div class="prog-wrap">
+    <div class="prog-label">
+      <span>Efectividad del día</span>
+      <span id="p-efectividad-txt" style="font-weight:700;color:var(--verde);">—</span>
+    </div>
+    <div class="prog-bar"><div class="prog-fill" id="p-entregados" style="width:0%"></div></div>
+  </div>
+  <div class="stats-grid">
+    <div class="stat azul" onclick="abrirResumenDetalle('principal')" style="cursor:pointer;"><div class="stat-n" id="s-principal" style="font-size:1.4rem;">0</div><div class="stat-label">Principal</div></div>
+    <div class="stat naranja" onclick="abrirResumenDetalle('ramal')" style="cursor:pointer;"><div class="stat-n" id="s-ramal" style="font-size:1.4rem;">0</div><div class="stat-label">Ramal</div></div>
+  </div>
+  <div class="card">
+    <div class="card-title">💰 Ingresos estimados hoy</div>
+    <div style="font-size:2rem;font-weight:800;color:var(--verde);" id="s-ingreso">$0</div>
+    <div style="font-size:0.72rem;color:#64748b;margin-top:4px;">Solo entregas confirmadas × $2.000</div>
+  </div>
+  <div class="card">
+    <div class="card-title">⚙️ Configuración operacional</div>
+    <div style="font-size:0.75rem;color:#64748b;margin-bottom:10px;">Ajusta el modo de operación del día. Los cambios se sincronizan con Cristian automáticamente.</div>
+    <button id="btn-no-operativo" class="btn btn-rojo" onclick="marcarDiaNoOperativo()" style="margin-bottom:6px;">⛔ Marcar día no operativo</button>
+    <button id="btn-feriado" class="btn btn-naranja" onclick="marcarFeriado()" style="margin-bottom:6px;">🗓 Marcar feriado</button>
+    <div style="font-size:0.72rem;font-weight:700;color:#64748b;margin:8px 0 6px;text-transform:uppercase;letter-spacing:0.5px;">Temporada especial</div>
+    <div style="display:flex;gap:8px;">
+      <button id="btn-cyber" class="btn btn-primary" onclick="toggleModoEspecial('cyber')" style="flex:1;margin-bottom:0;">🛒 CyberDay</button>
+      <button id="btn-black" class="btn btn-primary" onclick="toggleModoEspecial('black')" style="flex:1;margin-bottom:0;">🖤 Black Weekend</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">☁️ Sincronización con Google Sheets</div>
+    <div id="sync-status-box" style="font-size:0.8rem;color:#64748b;">Verificando...</div>
+    <button class="btn btn-outline" style="margin-top:8px;" onclick="sincronizarTodo()">🔄 Sincronizar ahora</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- TAB: IMPORTAR -->
+<!-- ══════════════════════════════════════════ -->
+<div class="content" id="tab-importar">
+  <div class="card">
+    <div class="card-title">📥 Cargar Excel de Alas</div>
+    <label class="upload-area" for="excel-input">
+      <div class="upload-icon">📄</div>
+      <div class="upload-text">Toca aquí para seleccionar el Excel de Alas<br><span style="font-size:0.7rem;color:#94a3b8;">.xlsx o .xls</span></div>
+    </label>
+    <input type="file" id="excel-input" accept=".xlsx,.xls" style="display:none" onchange="importarExcel(this)">
+    <div id="import-status" style="margin-top:8px;font-size:0.8rem;color:#64748b;"></div>
+  </div>
+  <div class="card manual-section">
+    <div class="card-title">✏️ Agregar orden manual</div>
+    <div class="form-group">
+      <label class="form-label">Código orden</label>
+      <input class="form-input" id="m-codigo" placeholder="Ej: ALS-123456">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Nombre destinatario</label>
+      <input class="form-input" id="m-nombre" placeholder="Nombre completo">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Dirección</label>
+      <input class="form-input" id="m-dir" placeholder="Calle y número">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Comuna</label>
+        <input class="form-input" id="m-comuna" placeholder="Comuna">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tipo</label>
+        <select class="form-select" id="m-tipo">
+          <option>Principal</option>
+          <option>Ramal</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Teléfono</label>
+      <input class="form-input" id="m-tel" placeholder="+56 9 ...">
+    </div>
+    <button class="btn btn-primary" onclick="agregarManual()">+ Agregar orden</button>
+  </div>
+  <button class="btn btn-rojo" onclick="limpiarDia()" style="margin-top:4px;">🗑 Limpiar día actual</button>
+  <button class="btn btn-outline" onclick="descargarOrdenesDesdeSheets(function(n){ if(n>0) renderPaquetes(); })" style="margin-top:4px;">⬇️ Descargar órdenes desde la nube</button>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- TAB: PAQUETES -->
+<!-- ══════════════════════════════════════════ -->
+<div class="content" id="tab-paquetes">
+  <div class="filtro-bar">
+    <button class="filtro-btn active" onclick="filtrarPaquetes('todos',this)">Todos</button>
+    <button class="filtro-btn" onclick="filtrarPaquetes('pendiente',this)">Pendientes</button>
+    <button class="filtro-btn" onclick="filtrarPaquetes('entregado',this)">Entregados</button>
+    <button class="filtro-btn" onclick="filtrarPaquetes('devuelto',this)">Devueltos</button>
+  </div>
+  <button class="btn btn-primary" onclick="generarRutaOptimizada()" style="margin-bottom:6px;">🗺 Generar ruta optimizada del día</button>
+  <button class="btn btn-verde" id="btn-siguiente-tramo" onclick="siguienteTramo()" style="display:none;margin-bottom:10px;">▶ Siguiente tramo</button>
+  <div id="lista-ruta-optimizada" style="display:none;margin-bottom:12px;"></div>
+  <div id="lista-paquetes"></div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- TAB: QR -->
+<!-- ══════════════════════════════════════════ -->
+<div class="content" id="tab-qr">
+  <div class="card">
+    <div class="card-title">📷 Escanear código QR</div>
+    <button class="btn btn-primary" id="btn-qr" onclick="toggleQR()">Activar cámara</button>
+    <div id="qr-reader" style="margin-top:10px;"></div>
+    <div id="qr-result-box"></div>
+  </div>
+  <div class="card" id="qr-paquete-card" style="display:none">
+    <div class="card-title">📦 Orden escaneada</div>
+    <div id="qr-paquete-info"></div>
+    <div id="qr-multibulto-box" style="display:none;margin-top:10px;background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px;"></div>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button class="btn btn-verde btn-sm" style="flex:1;padding:10px;" onclick="marcarDesdeQR('entregado')">✅ Entregado</button>
+      <button class="btn btn-rojo btn-sm" style="flex:1;padding:10px;" onclick="marcarDesdeQR('devuelto')">↩️ Devuelto</button>
+      <button class="btn btn-naranja btn-sm" style="flex:1;padding:10px;" onclick="marcarDesdeQR('daniado')">⚠️ Dañado</button>
+    </div>
+    <div id="qr-multibulto-acciones" style="display:none;margin-top:8px;">
+      <button class="btn btn-verde" onclick="marcarTodoMultibulto('entregado')" style="margin-bottom:6px;">✅ Marcar TODOS entregados</button>
+      <button class="btn btn-rojo" onclick="marcarTodoMultibulto('devuelto')">↩️ Marcar TODOS devueltos</button>
+    </div>
+    <button class="btn btn-outline" style="margin-top:10px;" onclick="limpiarQR()">🔄 Escanear siguiente</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- TAB: CIERRE -->
+<!-- ══════════════════════════════════════════ -->
+<div class="content" id="tab-cierre">
+  <div class="card">
+    <div class="card-title">✅ Resumen de cierre del día</div>
+    <div class="resumen-cierre" id="resumen-cierre-box"></div>
+    <button class="btn btn-verde" onclick="exportarExcelDia()">📥 Exportar Excel del día</button>
+    <button class="btn btn-primary" onclick="enviarWhatsApp()">💬 Enviar resumen por WhatsApp</button>
+    <button class="btn btn-outline" onclick="cerrarDia()">🔒 Cerrar día y guardar en historial</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- TAB: DASHBOARD -->
+<!-- ══════════════════════════════════════════ -->
+<div class="content" id="tab-dashboard">
+  <div class="dash-grid">
+    <div class="dash-card">
+      <div class="dash-card-title">Entregas este mes</div>
+      <div class="dash-big" id="d-entregas-mes">0</div>
+      <div class="dash-sub" id="d-dias-mes">0 días operados</div>
+    </div>
+    <div class="dash-card">
+      <div class="dash-card-title">Ingresos del mes</div>
+      <div class="dash-big" id="d-ingresos-mes" style="font-size:1.4rem;color:var(--verde);">$0</div>
+      <div class="dash-sub">× $2.000 por entrega</div>
+    </div>
+    <div class="dash-card">
+      <div class="dash-card-title">Efectividad promedio</div>
+      <div class="dash-big" id="d-efectividad">—</div>
+      <div class="dash-sub">entregas / recibidos</div>
+    </div>
+    <div class="dash-card">
+      <div class="dash-card-title">Total devoluciones</div>
+      <div class="dash-big" id="d-devoluciones" style="color:var(--rojo);">0</div>
+      <div class="dash-sub" id="d-tasa-dev">0% del total</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">📅 Últimos días operados</div>
+    <div id="d-dias-lista"></div>
+  </div>
+  <div class="card">
+    <div class="card-title">📥 Exportar reporte mensual</div>
+    <button class="btn btn-primary" onclick="exportarReporteMensual()">Descargar Excel del mes</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- TAB: HISTORIAL -->
+<!-- ══════════════════════════════════════════ -->
+<div class="content" id="tab-historial">
+  <div class="card">
+    <div class="card-title">🗂 Días cerrados</div>
+    <div id="lista-historial"></div>
+    <div id="historial-vacio" class="alerta alerta-info" style="display:none">Aún no hay días cerrados.</div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════
+// CONFIGURACIÓN GOOGLE SHEETS
+// ════════════════════════════════════════
+var SHEETS_URL = 'https://script.google.com/macros/s/AKfycbx6aAlb99tMoR2leEQep0V7k3fBFh2JxvpjWXdwKuY1n4NUptpO6stNSc4gFU0xEalG/exec';
+var SYNC_PENDIENTE = [];
+var sincronizando = false;
+var TAMANO_LOTE = 50; // órdenes por lote al subir
+
+function cargarColaSync(){
+  try{ SYNC_PENDIENTE = JSON.parse(localStorage.getItem('muspel_sync_pendiente')||'[]'); }catch(e){ SYNC_PENDIENTE=[]; }
+}
+function guardarColaSync(){
+  localStorage.setItem('muspel_sync_pendiente', JSON.stringify(SYNC_PENDIENTE));
+  actualizarIndicadorSync();
+}
+function actualizarIndicadorSync(){
+  var ind = document.getElementById('sync-indicator');
+  var box = document.getElementById('sync-status-box');
+  if(!ind) return;
+  if(SYNC_PENDIENTE.length === 0){
+    ind.innerHTML = '<span class="sync-badge ok">☁️ Sincronizado</span>';
+    if(box) box.innerHTML = '✅ Todo está sincronizado con Google Sheets. Cristian y tú ven la misma información.';
+  } else {
+    ind.innerHTML = '<span class="sync-badge pend">⏳ '+SYNC_PENDIENTE.length+' por enviar</span>';
+    if(box) box.innerHTML = '⏳ Hay '+SYNC_PENDIENTE.length+' cambios esperando subir a Google Sheets. Se enviarán solos cuando haya internet, o toca "Sincronizar ahora".';
+  }
+}
+
+// Envía un registro a Sheets; si falla, lo deja en cola para reintentar
+function enviarASheets(tipo, contenido){
+  var registro = {tipo:tipo, contenido:contenido, intentos:0};
+  SYNC_PENDIENTE.push(registro);
+  guardarColaSync();
+  procesarColaSync();
+}
+
+// ════════════════════════════════════════
+// SUBIDA DE ÓRDENES EN LOTES
+// ════════════════════════════════════════
+function subirOrdenesEnLotes(listaOrdenes, onProgreso, onFin){
+  var totalLotes = Math.ceil(listaOrdenes.length / TAMANO_LOTE);
+  var loteActual = 0;
+
+  // Primero limpia la hoja Ordenes en Sheets
+  fetch(SHEETS_URL, {
+    method:'POST',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body: JSON.stringify({tipo:'limpiar_ordenes', contenido:{}})
+  }).then(function(){
+    subirSiguienteLote();
+  }).catch(function(){
+    subirSiguienteLote(); // intenta igual aunque falle el limpiar
+  });
+
+  function subirSiguienteLote(){
+    if(loteActual >= totalLotes){
+      if(onFin) onFin();
+      return;
+    }
+    var inicio = loteActual * TAMANO_LOTE;
+    var lote = listaOrdenes.slice(inicio, inicio + TAMANO_LOTE);
+    var fecha = new Date().toLocaleDateString('es-CL');
+    fetch(SHEETS_URL, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({
+        tipo:'lote_ordenes',
+        contenido:{
+          ordenes: lote,
+          lote: loteActual + 1,
+          totalLotes: totalLotes,
+          fecha: fecha
+        }
+      })
+    }).then(function(){
+      loteActual++;
+      if(onProgreso) onProgreso(loteActual, totalLotes);
+      setTimeout(subirSiguienteLote, 300); // pausa entre lotes para no saturar
+    }).catch(function(){
+      // reintenta este lote en 2 segundos si falla
+      setTimeout(subirSiguienteLote, 2000);
+    });
+  }
+}
+
+// ════════════════════════════════════════
+// DESCARGA DE ÓRDENES DESDE SHEETS
+// ════════════════════════════════════════
+function descargarOrdenesDesdeSheets(onFin){
+  var status = document.getElementById('import-status');
+  if(status){ status.style.color='var(--azul2)'; status.textContent = '⬇️ Descargando órdenes desde la nube...'; }
+
+  fetch(SHEETS_URL + '?tipo=ordenes').then(function(r){ return r.json(); }).then(function(rows){
+    if(!rows || rows.length <= 1){
+      if(status) { status.textContent = ''; }
+      if(onFin) onFin(0);
+      return;
+    }
+    // fila 0 es encabezado: id,codigo,folio,bulto,nombre,tel,dir,comuna,region,tipo,b2b,estado,ts,repetidoDeHistorial
+    var importadas = 0;
+    rows.slice(1).forEach(function(row){
+      if(!row[1]) return; // sin código, skip
+      var codigo = String(row[1]).trim();
+      if(!codigo) return;
+      if(paquetes.find(function(p){ return p.codigo === codigo; })) return; // ya existe
+      paquetes.push({
+        id: row[0] || Date.now(),
+        codigo: codigo,
+        folio: String(row[2]||'').trim(),
+        bulto: String(row[3]||'').trim(),
+        nombre: String(row[4]||'Sin nombre').trim(),
+        tel: String(row[5]||'').trim(),
+        dir: String(row[6]||'').trim(),
+        comuna: String(row[7]||'').trim(),
+        region: String(row[8]||'').trim(),
+        tipo: String(row[9]||'Principal').trim(),
+        b2b: String(row[10]||'').trim(),
+        estado: String(row[11]||'pendiente').trim(),
+        ts: row[12] || Date.now(),
+        repetidoDeHistorial: row[13] === true || row[13] === 'true'
+      });
+      importadas++;
+    });
+    if(importadas > 0){
+      guardarStorage();
+      actualizarResumen();
+    }
+    if(status) { status.style.color='var(--verde)'; status.textContent = importadas > 0 ? '✅ '+importadas+' órdenes descargadas desde la nube.' : ''; }
+    if(onFin) onFin(importadas);
+  }).catch(function(err){
+    if(status) { status.style.color='var(--rojo)'; status.textContent = '❌ Error al descargar desde la nube.'; }
+    if(onFin) onFin(0);
+  });
+}
+
+function procesarColaSync(){
+  if(sincronizando || SYNC_PENDIENTE.length === 0) return;
+  sincronizando = true;
+  var item = SYNC_PENDIENTE[0];
+  fetch(SHEETS_URL, {
+    method:'POST',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body: JSON.stringify({tipo:item.tipo, contenido:item.contenido})
+  }).then(function(r){
+    SYNC_PENDIENTE.shift();
+    guardarColaSync();
+    sincronizando = false;
+    if(SYNC_PENDIENTE.length > 0) procesarColaSync();
+  }).catch(function(err){
+    item.intentos = (item.intentos||0)+1;
+    guardarColaSync();
+    sincronizando = false;
+    // reintenta en 8 segundos si falla (ej: sin internet)
+    setTimeout(procesarColaSync, 8000);
+  });
+}
+
+function sincronizarTodo(){
+  var box = document.getElementById('sync-status-box');
+  if(box) box.innerHTML = '🔄 Sincronizando...';
+  procesarColaSync();
+  setTimeout(actualizarIndicadorSync, 1500);
+}
+
+// reintenta automáticamente cada 20 segundos si quedan pendientes
+setInterval(function(){
+  if(SYNC_PENDIENTE.length>0) procesarColaSync();
+}, 20000);
+
+// ════════════════════════════════════════
+// ESTADO GLOBAL
+// ════════════════════════════════════════
+var paquetes = [];
+var historial = [];
+var qrScanner = null;
+var qrActivo = false;
+var qrPaqueteActual = null;
+var filtroActual = 'todos';
+
+// ════════════════════════════════════════
+// CONFIGURACIÓN OPERACIONAL
+// ════════════════════════════════════════
+var configOp = {
+  modoEspecial: null,        // null | 'cyber' | 'black'
+  diaNoOperativo: null,      // fecha ISO del día no operativo marcado
+  feriado: null,             // fecha ISO del feriado
+  feriadoOperativo: false    // si el feriado se trabaja igual
+};
+
+function cargarConfigOp(){
+  try{ configOp = JSON.parse(localStorage.getItem('muspel_config_op')||'{}');
+    if(!configOp.modoEspecial) configOp.modoEspecial = null;
+    if(!configOp.diaNoOperativo) configOp.diaNoOperativo = null;
+    if(!configOp.feriado) configOp.feriado = null;
+    if(configOp.feriadoOperativo === undefined) configOp.feriadoOperativo = false;
+  }catch(e){ configOp = {modoEspecial:null, diaNoOperativo:null, feriado:null, feriadoOperativo:false}; }
+}
+function guardarConfigOp(){
+  localStorage.setItem('muspel_config_op', JSON.stringify(configOp));
+  // Sincroniza la configuración a Sheets para que Cristian también la vea
+  enviarASheets('config_op', configOp);
+}
+
+function getTodayISO(){
+  var d = new Date();
+  return d.getFullYear()+'-'+(d.getMonth()+1).toString().padStart(2,'0')+'-'+d.getDate().toString().padStart(2,'0');
+}
+
+function esDiaNoOperativo(){
+  return configOp.diaNoOperativo === getTodayISO();
+}
+
+function esFeriado(){
+  return configOp.feriado === getTodayISO();
+}
+
+function esModoEspecial(){
+  return configOp.modoEspecial !== null;
+}
+
+function getGrillaActual(){
+  // Esta función se llama después de que GRILLA_RUTAS y GRILLA_CYBER estén definidas
+  if(typeof GRILLA_CYBER === 'undefined' || typeof GRILLA_RUTAS === 'undefined') return {};
+  if(esModoEspecial()) return GRILLA_CYBER;
+  return GRILLA_RUTAS;
+}
+
+function marcarDiaNoOperativo(){
+  var hoy = getTodayISO();
+  if(configOp.diaNoOperativo === hoy){
+    configOp.diaNoOperativo = null;
+    guardarConfigOp();
+    actualizarBannerOperacional();
+    alert('✅ Día restaurado como operativo.');
+  } else {
+    if(!confirm('¿Confirmas que hoy NO se opera? Las órdenes pendientes se asignarán al día siguiente.')) return;
+    configOp.diaNoOperativo = hoy;
+    guardarConfigOp();
+    actualizarBannerOperacional();
+    alert('⚠️ Día marcado como no operativo. Las órdenes pendientes quedan para mañana.');
+  }
+}
+
+function marcarFeriado(){
+  var hoy = getTodayISO();
+  if(configOp.feriado === hoy){
+    // ya está marcado, preguntar si se trabaja o se quita
+    var trabaja = confirm('Hoy está marcado como feriado. ¿Se trabaja igualmente?\n\nAceptar = sí se trabaja\nCancelar = quitar feriado');
+    if(trabaja){
+      configOp.feriadoOperativo = true;
+    } else {
+      configOp.feriado = null;
+      configOp.feriadoOperativo = false;
+    }
+  } else {
+    configOp.feriado = hoy;
+    configOp.feriadoOperativo = confirm('Feriado registrado.\n\n¿Se trabaja hoy igualmente?\n\nAceptar = sí\nCancelar = no');
+  }
+  guardarConfigOp();
+  actualizarBannerOperacional();
+}
+
+function toggleModoEspecial(modo){
+  if(configOp.modoEspecial === modo){
+    configOp.modoEspecial = null;
+    guardarConfigOp();
+    actualizarBannerOperacional();
+    alert('✅ Modo especial desactivado. Grilla normal restaurada.');
+  } else {
+    configOp.modoEspecial = modo;
+    guardarConfigOp();
+    actualizarBannerOperacional();
+    var nombre = modo === 'cyber' ? 'CyberDay' : 'Black Weekend';
+    alert('🔥 Modo ' + nombre + ' activado. El lunes opera con camión y la grilla se amplía.');
+  }
+}
+
+function actualizarBannerOperacional(){
+  var banner = document.getElementById('banner-operacional');
+  if(!banner) return;
+  var msgs = [];
+  if(esDiaNoOperativo()) msgs.push('⛔ Hoy marcado como NO operativo — órdenes pasan a mañana');
+  if(esFeriado() && !configOp.feriadoOperativo) msgs.push('🗓 Feriado — no se opera hoy');
+  if(esFeriado() && configOp.feriadoOperativo) msgs.push('🗓 Feriado — se opera igualmente');
+  if(esModoEspecial()) msgs.push('🔥 Modo ' + (configOp.modoEspecial === 'cyber' ? 'CyberDay' : 'Black Weekend') + ' activo — grilla ampliada');
+  if(msgs.length > 0){
+    banner.style.display = 'block';
+    banner.innerHTML = msgs.join('<br>');
+  } else {
+    banner.style.display = 'none';
+    banner.innerHTML = '';
+  }
+  // actualizar botones
+  var btnNoOp = document.getElementById('btn-no-operativo');
+  var btnFeriado = document.getElementById('btn-feriado');
+  var btnCyber = document.getElementById('btn-cyber');
+  var btnBlack = document.getElementById('btn-black');
+  if(btnNoOp) btnNoOp.textContent = esDiaNoOperativo() ? '✅ Restaurar día operativo' : '⛔ Marcar día no operativo';
+  if(btnFeriado) btnFeriado.textContent = esFeriado() ? '🗓 Modificar feriado' : '🗓 Marcar feriado';
+  if(btnCyber) btnCyber.style.background = configOp.modoEspecial === 'cyber' ? 'var(--verde)' : '';
+  if(btnBlack) btnBlack.style.background = configOp.modoEspecial === 'black' ? 'var(--verde)' : '';
+}
+
+function cargarStorage(){
+  try{ paquetes = JSON.parse(localStorage.getItem('muspel_paquetes')||'[]'); }catch(e){ paquetes=[]; }
+  try{ historial = JSON.parse(localStorage.getItem('muspel_historial')||'[]'); }catch(e){ historial=[]; }
+}
+function guardarStorage(){
+  localStorage.setItem('muspel_paquetes', JSON.stringify(paquetes));
+  localStorage.setItem('muspel_historial', JSON.stringify(historial));
+}
+cargarStorage();
+cargarConfigOp();
+cargarColaSync();
+
+// ════════════════════════════════════════
+// LECTURA DESDE GOOGLE SHEETS (polling)
+// ════════════════════════════════════════
+var ultimaFilaLeida = 0;
+
+function descargarDeSheets(){
+  fetch(SHEETS_URL).then(function(r){ return r.json(); }).then(function(rows){
+    // rows[0] es el encabezado, lo saltamos
+    if(!rows || rows.length<=1) return;
+    var nuevasFilas = rows.slice(1);
+    var hayCambios = false;
+    nuevasFilas.forEach(function(fila){
+      // columnas: Fecha, Tipo evento, Codigo, Nombre, Telefono, Direccion, Comuna, Tipo ruta, Estado, FechaRef, Detalle
+      var tipoEvento = fila[1];
+      var codigo = fila[2];
+      if(!codigo || codigo === 'Código') return; // sin código o es la fila de encabezado: se ignora
+
+      var existente = paquetes.find(function(p){ return p.codigo === codigo; });
+
+      if(tipoEvento === 'paquete_nuevo'){
+        if(!existente){
+          paquetes.push({
+            id: 'remoto_'+codigo, codigo: codigo,
+            folio:'', nombre: fila[3]||'Sin nombre', tel: fila[4]||'',
+            dir: fila[5]||'', comuna: fila[6]||'', region:'',
+            tipo: fila[7]||'Principal', b2b:'', estado: fila[8]||'pendiente', ts: Date.now()
+          });
+          hayCambios = true;
+        }
+      } else if(tipoEvento === 'cambio_estado'){
+        if(existente && existente.estado !== fila[8]){
+          existente.estado = fila[8];
+          existente.ts_estado = Date.now();
+          hayCambios = true;
+        }
+      }
+    });
+    if(hayCambios){
+      guardarStorage();
+      actualizarResumen();
+      renderPaquetes();
+    }
+  }).catch(function(err){
+    // sin internet o error temporal: no hace nada, reintenta en el próximo ciclo
+  });
+}
+
+// consulta la nube cada 15 segundos para traer cambios de otros dispositivos
+setInterval(descargarDeSheets, 15000);
+// y también al cargar la página
+descargarDeSheets();
+
+// ════════════════════════════════════════
+// MODAL DETALLE RESUMEN
+// ════════════════════════════════════════
+function abrirResumenDetalle(filtro){
+  var titulos = {
+    'todos':'📦 Todas las órdenes',
+    'entregado':'✅ Entregadas',
+    'devuelto':'↩️ Devueltas',
+    'daniado':'⚠️ Dañadas',
+    'pendiente':'⏳ Pendientes',
+    'principal':'🏙 Ruta Principal',
+    'ramal':'🛣 Ruta Ramal'
+  };
+
+  var lista = paquetes.filter(function(p){
+    if(filtro === 'todos') return true;
+    if(filtro === 'principal') return (p.tipo||'').toLowerCase() === 'principal';
+    if(filtro === 'ramal') return (p.tipo||'').toLowerCase() === 'ramal';
+    if(filtro === 'devuelto') return p.estado === 'devuelto' || p.estado === 'daniado';
+    return p.estado === filtro;
+  });
+
+  document.getElementById('modal-resumen-titulo').textContent = titulos[filtro] || filtro;
+  document.getElementById('modal-resumen-subtitulo').textContent = lista.length + ' orden' + (lista.length !== 1 ? 'es' : '');
+
+  // Agrupar por comuna (sin tipo en la clave para mostrarlos juntos)
+  var grupos = {};
+  lista.forEach(function(p){
+    var comuna = (p.comuna||'Sin comuna').trim();
+    var tipo = (p.tipo||'Principal');
+    var key = tipo + '|||' + comuna;
+    if(!grupos[key]) grupos[key] = {tipo:tipo, comuna:comuna, items:[]};
+    grupos[key].items.push(p);
+  });
+
+  var diaSemana = new Date().getDay();
+
+  // Obtener día de entrega según grilla para una comuna
+  function getDiaEntrega(comuna){
+    for(var d=1; d<=6; d++){
+      var g = getGrillaActual()[d]||[];
+      for(var gi=0; gi<g.length; gi++){
+        if(normalizarComuna(g[gi]) === normalizarComuna(comuna)) return {dia:d, nombre:NOMBRES_DIA[d]};
+      }
+    }
+    return {dia:99, nombre:'—'};
+  }
+
+  var keys = Object.keys(grupos).sort(function(a,b){
+    var ga = grupos[a], gb = grupos[b];
+    // Principal antes que Ramal
+    if(ga.tipo.toLowerCase()==='principal' && gb.tipo.toLowerCase()!=='principal') return -1;
+    if(ga.tipo.toLowerCase()!=='principal' && gb.tipo.toLowerCase()==='principal') return 1;
+    // Dentro del mismo tipo, ordenar por prioridad de ruta del día
+    var pa = getPrioridadComuna(ga.comuna, diaSemana);
+    var pb = getPrioridadComuna(gb.comuna, diaSemana);
+    if(pa !== pb) return pa - pb;
+    // Si mismo día, ordenar por día de entrega
+    return getDiaEntrega(ga.comuna).dia - getDiaEntrega(gb.comuna).dia;
+  });
+
+  var html = '';
+  if(lista.length === 0){
+    html = '<div class="alerta alerta-info">No hay órdenes en esta categoría.</div>';
+  } else {
+    var grupoIdx = 0;
+    keys.forEach(function(key){
+      var g = grupos[key];
+      var diaInfo = getDiaEntrega(g.comuna);
+      var esHoy = diaInfo.dia === diaSemana;
+      var entregados = g.items.filter(function(p){ return p.estado==='entregado'; }).length;
+      var pendientes = g.items.filter(function(p){ return p.estado==='pendiente'; }).length;
+      var idx = grupoIdx++;
+
+      // Cabecera del desplegable
+      var colorTipo = g.tipo.toLowerCase()==='principal' ? 'var(--azul2)' : 'var(--naranja)';
+      html += '<div style="border:1px solid var(--borde);border-radius:8px;margin-bottom:8px;overflow:hidden;">';
+      html += '<div onclick="toggleGrupoResumen(\'grp-'+idx+'\')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;cursor:pointer;background:var(--gris);">';
+      html += '<div>';
+      html += '<span style="font-size:0.72rem;font-weight:700;color:'+colorTipo+';text-transform:uppercase;">'+g.tipo+'</span>';
+      html += '<span style="font-size:0.85rem;font-weight:700;color:var(--texto);margin-left:6px;">'+g.comuna+'</span>';
+      html += '<span style="font-size:0.68rem;color:#94a3b8;margin-left:4px;">('+g.items.length+')</span>';
+      html += '</div>';
+      html += '<div style="text-align:right;">';
+      html += '<div style="font-size:0.7rem;font-weight:700;color:'+(esHoy?'var(--verde)':'var(--azul)')+';"> 📅 '+(esHoy?'HOY':'')+(esHoy?'':diaInfo.nombre)+'</div>';
+      if(entregados > 0) html += '<div style="font-size:0.68rem;color:var(--verde);">✅ '+entregados+'/'+g.items.length+'</div>';
+      if(pendientes > 0) html += '<div style="font-size:0.68rem;color:var(--naranja);">⏳ '+pendientes+' pend.</div>';
+      html += '<span style="font-size:0.72rem;color:#94a3b8;" id="arrow-'+idx+'">▼</span>';
+      html += '</div>';
+      html += '</div>';
+
+      // Contenido desplegable (abierto por defecto si es hoy o tiene pendientes)
+      var abierto = esHoy || pendientes > 0;
+      html += '<div id="grp-'+idx+'" style="display:'+(abierto?'block':'none')+';padding:0 12px;">';
+      g.items.forEach(function(p){
+        var badgeClass = p.estado==='entregado'?'badge-verde':p.estado==='devuelto'?'badge-rojo':p.estado==='daniado'?'badge-naranja':'badge-gris';
+        var badgeTxt = p.estado==='entregado'?'Entregado':p.estado==='devuelto'?'Devuelto':p.estado==='daniado'?'Dañado':'Pendiente';
+        var dir = (p.dir||'').trim();
+        var dirMostrar = (dir.toLowerCase().indexOf('http')!==-1||dir.length<5) ? '' : dir;
+        html += '<div style="padding:8px 0;border-bottom:1px solid #f1f5f9;cursor:pointer;" onclick="cerrarResumenDetalle();setTimeout(function(){abrirModal('+p.id+')},100)">';
+        html += '<div style="font-weight:600;font-size:0.85rem;">'+p.nombre+'</div>';
+        if(p.b2b) html += '<div style="font-size:0.7rem;color:var(--azul2);">🏪 '+p.b2b+'</div>';
+        if(p.folio) html += '<div style="font-size:0.7rem;color:#64748b;">📋 '+p.folio+'</div>';
+        if(dirMostrar) html += '<div style="font-size:0.72rem;color:#64748b;">📍 '+dirMostrar+'</div>';
+        if(p.tel) html += '<div style="font-size:0.72rem;color:#64748b;">📞 '+p.tel+'</div>';
+        html += '<div style="margin-top:4px;"><span class="badge '+badgeClass+'">'+badgeTxt+'</span></div>';
+        html += '</div>';
+      });
+      html += '</div>';
+      html += '</div>';
+    });
+  }
+
+  document.getElementById('modal-resumen-lista').innerHTML = html;
+  document.getElementById('modal-resumen-overlay').classList.add('open');
+}
+
+function toggleGrupoResumen(id){
+  var el = document.getElementById(id);
+  var idx = id.replace('grp-','');
+  var arrow = document.getElementById('arrow-'+idx);
+  if(!el) return;
+  if(el.style.display === 'none'){
+    el.style.display = 'block';
+    if(arrow) arrow.textContent = '▼';
+  } else {
+    el.style.display = 'none';
+    if(arrow) arrow.textContent = '▶';
+  }
+}
+
+function cerrarResumenDetalle(e){
+  if(e && e.target !== document.getElementById('modal-resumen-overlay')) return;
+  document.getElementById('modal-resumen-overlay').classList.remove('open');
+}
+
+// ════════════════════════════════════════
+// MODAL DETALLE ORDEN
+// ════════════════════════════════════════
+var modalOrdenId = null;
+
+function abrirModal(id){
+  var p = paquetes.find(function(x){return x.id===id;});
+  if(!p) return;
+  modalOrdenId = id;
+
+  // Dirección: si viene como URL de Google Maps, mostrar comuna como respaldo
+  var dir = (p.dir||'').trim();
+  var dirMostrar = dir;
+  if(dir.toLowerCase().indexOf('httpsmaps') !== -1 || dir.toLowerCase().indexOf('http') !== -1 || dir.length < 5){
+    dirMostrar = dir.length > 5 ? dir : '(sin dirección registrada)';
+  }
+
+  var estadoTextos = {entregado:'✅ Entregado', devuelto:'↩️ Devuelto', daniado:'⚠️ Dañado', pendiente:'⏳ Pendiente'};
+
+  document.getElementById('modal-nombre').textContent = p.nombre || 'Sin nombre';
+  document.getElementById('modal-codigo').textContent = p.codigo || '';
+  document.getElementById('modal-empresa').textContent = p.b2b || '(no especificada)';
+  document.getElementById('modal-folio').textContent = p.folio || '—';
+  document.getElementById('modal-bulto').textContent = p.bulto || '—';
+  document.getElementById('modal-dir').textContent = dirMostrar || '(sin dirección)';
+  document.getElementById('modal-comuna').textContent = (p.comuna||'').trim() || '—';
+  document.getElementById('modal-tel').textContent = p.tel || '—';
+  document.getElementById('modal-tipo').textContent = p.tipo || 'Principal';
+  document.getElementById('modal-estado').textContent = estadoTextos[p.estado] || p.estado;
+  document.getElementById('modal-repetido').style.display = p.repetidoDeHistorial ? 'block' : 'none';
+
+  // Botones según estado actual
+  var acciones = document.getElementById('modal-acciones');
+  if(p.estado === 'pendiente'){
+    acciones.innerHTML =
+      '<button class="btn btn-verde" style="flex:1;margin-bottom:0;" onclick="marcarDesdeModal(\'entregado\')">✅ Entregado</button>' +
+      '<button class="btn btn-rojo" style="flex:1;margin-bottom:0;" onclick="marcarDesdeModal(\'devuelto\')">↩️ Devuelto</button>' +
+      '<button class="btn btn-naranja" style="flex:1;margin-bottom:0;" onclick="marcarDesdeModal(\'daniado\')">⚠️ Dañado</button>';
+  } else {
+    acciones.innerHTML =
+      '<button class="btn btn-outline" style="flex:1;margin-bottom:0;" onclick="marcarDesdeModal(\'pendiente\')">↺ Revertir a pendiente</button>';
+  }
+
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function cerrarModal(e){
+  if(e && e.target !== document.getElementById('modal-overlay')) return;
+  document.getElementById('modal-overlay').classList.remove('open');
+  modalOrdenId = null;
+}
+
+function marcarDesdeModal(estado){
+  if(!modalOrdenId) return;
+  var p = paquetes.find(function(x){return x.id===modalOrdenId;});
+  if(p){
+    p.estado = estado;
+    p.ts_estado = Date.now();
+    enviarASheets('cambio_estado', {codigo:p.codigo, nombre:p.nombre, estado:estado, fecha:new Date().toLocaleString('es-CL')});
+    if(estado === 'entregado'){
+      var dir = (p.dir||'').trim();
+      var comuna = (p.comuna||'').trim();
+      ultimaDireccionEntregada = (dir.toLowerCase().indexOf('http')!==-1||dir.length<5) ? comuna+', Osorno, Chile' : dir+', '+comuna+', Chile';
+    }
+  }
+  guardarStorage();
+  actualizarResumen();
+  renderPaquetes();
+  document.getElementById('modal-overlay').classList.remove('open');
+  modalOrdenId = null;
+  if(rutaOrdenadas.length > 0 && estado === 'entregado'){
+    recalcularRutaDesdeUbicacionActual();
+  }
+}
+
+// ════════════════════════════════════════
+// HEADER Y FECHA
+// ════════════════════════════════════════
+function actualizarHeader(){
+  var d = new Date();
+  var dias = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  var meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  document.getElementById('header-fecha').textContent = dias[d.getDay()] + ' ' + d.getDate() + ' de ' + meses[d.getMonth()] + ' ' + d.getFullYear();
+  var total = paquetes.length;
+  var ent = paquetes.filter(function(p){return p.estado==='entregado';}).length;
+  document.getElementById('header-paquetes').textContent = total + ' órdenes';
+  document.getElementById('header-ef').textContent = total > 0 ? Math.round(ent/total*100)+'% efectividad' : '—';
+  // alerta dia
+  var ai = document.getElementById('alerta-dia');
+  if(total === 0) ai.textContent = 'Sin órdenes cargadas. Ve a Importar para cargar el Excel de Alas.';
+  else ai.textContent = 'Operación en curso — ' + ent + ' de ' + total + ' órdenes entregadas.';
+  actualizarIndicadorSync();
+}
+
+// ════════════════════════════════════════
+// TABS
+// ════════════════════════════════════════
+function showTab(name){
+  document.querySelectorAll('.content').forEach(function(c){c.classList.remove('active');});
+  document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active');});
+  document.getElementById('tab-'+name).classList.add('active');
+  event.target.classList.add('active');
+  if(name==='paquetes') renderPaquetes();
+  if(name==='resumen') actualizarResumen();
+  if(name==='cierre') actualizarCierre();
+  if(name==='historial') renderHistorial();
+  if(name==='dashboard') actualizarDashboard();
+  if(name!=='qr' && qrActivo) detenerQR();
+}
+
+// ════════════════════════════════════════
+// RESUMEN
+// ════════════════════════════════════════
+function actualizarResumen(){
+  var total = paquetes.length;
+  var ent = paquetes.filter(function(p){return p.estado==='entregado';}).length;
+  var dev = paquetes.filter(function(p){return p.estado==='devuelto'||p.estado==='daniado';}).length;
+  var pend = paquetes.filter(function(p){return p.estado==='pendiente';}).length;
+  var prin = paquetes.filter(function(p){return (p.tipo||'').toLowerCase()==='principal';}).length;
+  var ram = paquetes.filter(function(p){return (p.tipo||'').toLowerCase()==='ramal';}).length;
+  var ef = total > 0 ? Math.round(ent/total*100) : 0;
+  document.getElementById('s-recibidos').textContent = total;
+  document.getElementById('s-entregados').textContent = ent;
+  document.getElementById('s-devueltos').textContent = dev;
+  document.getElementById('s-pendientes').textContent = pend;
+  document.getElementById('s-principal').textContent = prin;
+  document.getElementById('s-ramal').textContent = ram;
+  document.getElementById('s-ingreso').textContent = '$' + (ent*2000).toLocaleString('es-CL');
+  document.getElementById('p-entregados').style.width = ef+'%';
+  document.getElementById('p-efectividad-txt').textContent = ef+'%';
+  actualizarHeader();
+}
+
+// ════════════════════════════════════════
+// IMPORTAR EXCEL
+// ════════════════════════════════════════
+function importarExcel(input){
+  var file = input.files[0];
+  if(!file) return;
+  var status = document.getElementById('import-status');
+  status.textContent = 'Procesando...';
+  var reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      var wb = XLSX.read(e.target.result, {type:'binary'});
+      var ws = wb.Sheets[wb.SheetNames[0]];
+      var data = XLSX.utils.sheet_to_json(ws, {header:1});
+      // Detectar si hay dos filas de encabezado (caso Excel de Alas)
+      // La fila real de encabezados es la que contiene "CÓDIGO PAQUETE"
+      var headerRowIdx = 0;
+      for(var hi=0; hi<Math.min(3,data.length); hi++){
+        var rowStr = (data[hi]||[]).join('|').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+        if(rowStr.indexOf('CODIGO PAQUETE') !== -1){ headerRowIdx = hi; break; }
+      }
+      var header = data[headerRowIdx];
+      var idx = {};
+      for(var i=0;i<header.length;i++){
+        var h = String(header[i]).trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+        if(h==='CODIGO PAQUETE'||h==='CÓDIGO PAQUETE') idx.codigo=i;
+        if(h==='FOLIO') idx.folio=i;
+        if(h==='NOMBRE') idx.nombre=i;
+        if(h==='TELEFONO'||h==='TELÉFONO') idx.tel=i;
+        if(h==='DIRECCION'||h==='DIRECCIÓN') idx.dir=i;
+        if(h==='COMUNA') idx.comuna=i;
+        if(h==='REGION'||h==='REGIÓN') idx.region=i;
+        if(h==='TIPO DESTINO') idx.tipo=i;
+        if(h==='ESTADO') idx.estado=i;
+        if(h==='B2B') idx.b2b=i;
+        if(h==='BULTO DE ENTREGA') idx.bulto=i;
+      }
+      var nuevos=0, dup=0, alertas=[];
+      for(var r=headerRowIdx+1;r<data.length;r++){
+        var row=data[r];
+        if(!row||!row[idx.codigo]) continue;
+        var codigo=String(row[idx.codigo]).trim();
+        if(!codigo) continue;
+        // revisa duplicado en el día actual
+        if(paquetes.find(function(p){return p.codigo===codigo;})){dup++;continue;}
+        // revisa si ese código ya fue entregado/procesado en días anteriores (historial)
+        var enHistorial = null;
+        for(var hIdx=historial.length-1; hIdx>=0 && !enHistorial; hIdx--){
+          enHistorial = historial[hIdx].detalle.find(function(p){return p.codigo===codigo;});
+          if(enHistorial) enHistorial._fechaHist = historial[hIdx].fecha;
+        }
+        if(enHistorial){
+          alertas.push(codigo+' (ya estaba "'+enHistorial.estado+'" el '+enHistorial._fechaHist+')');
+        }
+        var nuevoPaquete = {
+          id:Date.now()+r, codigo:codigo,
+          folio:row[idx.folio]?String(row[idx.folio]).trim():'',
+          bulto:row[idx.bulto]?String(row[idx.bulto]).trim():'',
+          nombre:row[idx.nombre]?String(row[idx.nombre]).trim():'Sin nombre',
+          tel:row[idx.tel]?String(row[idx.tel]).trim():'',
+          dir:row[idx.dir]?String(row[idx.dir]).trim():'',
+          comuna:row[idx.comuna]?String(row[idx.comuna]).trim():'',
+          region:row[idx.region]?String(row[idx.region]).trim():'',
+          tipo:row[idx.tipo]?String(row[idx.tipo]).trim():'Principal',
+          b2b:row[idx.b2b]?String(row[idx.b2b]).trim():'',
+          estado:'pendiente', ts:Date.now(),
+          repetidoDeHistorial: enHistorial ? true : false
+        };
+        paquetes.push(nuevoPaquete);
+        nuevos++;
+      }
+      guardarStorage();
+      actualizarResumen();
+      status.style.color='var(--azul2)';
+      status.textContent = '✅ ' + nuevos + ' órdenes cargadas localmente. Subiendo a la nube para Cristian...';
+      if(alertas.length>0){
+        status.innerHTML += '<br><span style="color:var(--naranja);font-weight:600;">⚠️ '+alertas.length+' código(s) ya existían en días anteriores: '+alertas.join(', ')+'</span>';
+      }
+      // Subir todas las órdenes en lotes a Sheets
+      subirOrdenesEnLotes(paquetes, function(loteActual, totalLotes){
+        status.style.color='var(--azul2)';
+        status.textContent = '☁️ Subiendo a la nube... lote '+loteActual+' de '+totalLotes;
+      }, function(){
+        status.style.color='var(--verde)';
+        status.textContent = '✅ ' + nuevos + ' órdenes listas — Cristian ya puede verlas en su celular.';
+        if(alertas.length>0){
+          status.innerHTML += '<br><span style="color:var(--naranja);font-weight:600;">⚠️ '+alertas.length+' código(s) ya existían en días anteriores.</span>';
+        }
+      });
+    }catch(err){
+      status.style.color='var(--rojo)';
+      status.textContent = '❌ Error al leer el archivo: '+err.message;
+    }
+  };
+  reader.readAsBinaryString(file);
+  input.value='';
+}
+
+// ════════════════════════════════════════
+// MANUAL
+// ════════════════════════════════════════
+function agregarManual(){
+  var codigo = document.getElementById('m-codigo').value.trim();
+  if(!codigo){alert('Ingresa el código de la orden.');return;}
+  if(paquetes.find(function(p){return p.codigo===codigo;})){alert('Ya existe una orden con ese código.');return;}
+  var nuevoPaquete = {
+    id:Date.now(), codigo:codigo,
+    folio:'', nombre:document.getElementById('m-nombre').value.trim()||'Sin nombre',
+    tel:document.getElementById('m-tel').value.trim(),
+    dir:document.getElementById('m-dir').value.trim(),
+    comuna:document.getElementById('m-comuna').value.trim(),
+    region:'', tipo:document.getElementById('m-tipo').value,
+    b2b:'', estado:'pendiente', ts:Date.now()
+  };
+  paquetes.push(nuevoPaquete);
+  guardarStorage();
+  actualizarResumen();
+  enviarASheets('paquete_nuevo', nuevoPaquete);
+  ['m-codigo','m-nombre','m-tel','m-dir','m-comuna'].forEach(function(id){document.getElementById(id).value='';});
+  alert('Orden agregada.');
+}
+
+function limpiarDia(){
+  if(!confirm('¿Seguro que quieres eliminar todas las órdenes del día actual?')) return;
+  paquetes=[];
+  guardarStorage();
+  actualizarResumen();
+}
+
+// ════════════════════════════════════════
+// OPTIMIZACIÓN DE RUTA POR GRILLA OPERACIONAL
+// ════════════════════════════════════════
+var BASE_MUSPEL = '-40.6530786,-73.2716605'; // Base Muspel — Ruta U-486 Km 1,5, Trinquicahuin, Osorno
+var BASE_COORDS = [-73.2716605, -40.6530786]; // [lng, lat] para ORS
+var ORS_KEY = 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImI2NDRiYTkwZTYyMTRiZGI4ZTdiN2JmZDJiODcwZmMzIiwiaCI6Im11cm11cjY0In0=';
+
+// Geocodifica una dirección con ORS → devuelve [lng, lat] o null
+function geocodificarDireccion(dir, callback){
+  var query = encodeURIComponent(dir + ', Osorno, Chile');
+  fetch('https://api.openrouteservice.org/geocode/search?api_key='+ORS_KEY+'&text='+query+'&boundary.country=CL&size=1', {
+    headers: { 'Authorization': ORS_KEY }
+  }).then(function(r){ return r.json(); }).then(function(data){
+    if(data.features && data.features.length > 0){
+      callback(data.features[0].geometry.coordinates); // [lng, lat]
+    } else {
+      callback(null);
+    }
+  }).catch(function(){ callback(null); });
+}
+
+// Optimiza hasta 50 paradas con ORS y devuelve el orden óptimo
+function optimizarRutaORS(coordenadas, callback){
+  // coordenadas: array de [lng, lat], incluyendo base al inicio y final
+  var jobs = [];
+  for(var i=1; i<coordenadas.length-1; i++){
+    jobs.push({ id: i, location: coordenadas[i] });
+  }
+  var body = {
+    jobs: jobs,
+    vehicles: [{
+      id: 1,
+      start: coordenadas[0],
+      end: coordenadas[coordenadas.length-1],
+      profile: 'driving-car'
+    }]
+  };
+  fetch('https://api.openrouteservice.org/optimization', {
+    method: 'POST',
+    headers: {
+      'Authorization': ORS_KEY,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  }).then(function(r){ return r.json(); }).then(function(data){
+    if(data.routes && data.routes[0] && data.routes[0].steps){
+      var orden = data.routes[0].steps
+        .filter(function(s){ return s.type === 'job'; })
+        .map(function(s){ return s.job - 1; }); // índice en el array original (sin base)
+      callback(orden);
+    } else {
+      callback(null);
+    }
+  }).catch(function(){ callback(null); })
+}
+
+// Función para normalizar nombres de comunas (quita tildes, espacios extra)
+function normalizarComuna(c){
+  return (c||'').toLowerCase().trim()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/\s+/g,' ');
+}
+
+// Grilla operacional según propuesta a Alas Express Base J5
+// Orden refleja la secuencia de salida desde la base y vuelta a la base
+// 0=Dom, 1=Lun, 2=Mar, 3=Mie, 4=Jue, 5=Vie, 6=Sab
+var GRILLA_RUTAS = {
+  0: [], // Domingo: descanso
+  1: ['osorno','san pablo','la union','rio bueno'],          // Lun: corredor norte + san pablo primero (cerca de base)
+  2: ['osorno','purranque','rio negro','puerto octay'],       // Mar: corredor sur
+  3: ['osorno','la union','lago ranco'],                      // Mie: corredor norte-oriente
+  4: ['osorno','san juan de la costa','rio negro','purranque'], // Jue: oeste primero, sur en regreso
+  5: ['osorno','la union','rio bueno'],                       // Vie: corredor norte
+  6: ['osorno','puyehue']                                     // Sab: corredor oriente
+};
+
+// Grilla ampliada para Cyber/Black Weekend
+var GRILLA_CYBER = {
+  0: [],
+  1: ['osorno','purranque','rio negro','puerto octay'],       // Lun en cyber = ruta martes (camión llega lunes)
+  2: ['osorno','purranque','rio negro','puerto octay'],
+  3: ['osorno','la union','lago ranco'],
+  4: ['osorno','san juan de la costa','rio negro','purranque'],
+  5: ['osorno','la union','rio bueno'],
+  6: ['osorno','puyehue','san pablo']                        // Sab ampliado en cyber
+};
+
+var NOMBRES_DIA = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+
+function getPrioridadComuna(comuna, diaSemana){
+  var c = normalizarComuna(comuna);
+  var grilla = getGrillaActual()[diaSemana] || [];
+  // buscar con normalización para evitar problemas de tildes
+  for(var i=0; i<grilla.length; i++){
+    if(normalizarComuna(grilla[i]) === c) return i;
+  }
+  return 999; // no está en la grilla del día, va al final
+}
+
+var rutaTramoActual = 0;
+var rutaParadasTotal = [];
+var rutaOrdenadas = []; // paradas en orden optimizado por ORS
+
+// Extrae el nombre de la calle quitando prefijos genéricos y números
+function extraerCalle(dir){
+  var original = (dir||'').toLowerCase().trim()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  var d = original;
+  // Quitar prefijos genéricos al inicio: casa N, dpto N, piso N, block N, etc.
+  d = d.replace(/^(casa|dpto|departamento|piso|block|local|oficina|bodega)\s+[\w\d]+[,\s]+/i, '');
+  // Quitar número al final
+  d = d.replace(/\s+\d+.*$/, '');
+  d = d.replace(/\s+/g,' ').trim();
+  // Resguardo: si tras limpiar queda vacío o muy corto (ej. direcciones tipo "Casa 5"
+  // sin nombre de calle), NO devolver un string vacío/corto genérico — eso hacía que
+  // direcciones distintas (ej. "Santiago Rosas" vs "Hacienda Las Quemas") se agruparan
+  // por error al compararse como iguales ("" === ""). Usamos la dirección original
+  // completa para garantizar que cada dirección real se mantenga única.
+  if(d.length <= 3){
+    return original;
+  }
+  return d;
+}
+
+function generarRutaOptimizada(){
+  var pendientes = paquetes.filter(function(p){ return p.estado === 'pendiente'; });
+  if(pendientes.length === 0){ alert('No hay órdenes pendientes.'); return; }
+
+  if(esDiaNoOperativo()){ alert('⛔ Hoy no es día operativo.'); return; }
+  if(esFeriado() && !configOp.feriadoOperativo){ alert('🗓 Hoy es feriado no operativo.'); return; }
+
+  var diaSemana = new Date().getDay();
+  if(diaSemana === 0 && !esModoEspecial()){ alert('Hoy es domingo — día de descanso.'); return; }
+
+  // Agrupar por DIRECCIÓN EXACTA (o folio para multibultos)
+  // Cada dirección exacta es una parada — no mezclamos personas distintas
+  var vistas = {};
+  var paradasUnicas = [];
+  pendientes.forEach(function(p){
+    var dir = (p.dir||'').trim();
+    var comuna = (p.comuna||'').trim();
+    if(dir.toLowerCase().indexOf('http') !== -1 || dir.length < 5) dir = comuna + ', Osorno, Chile';
+    else dir = dir + ', ' + comuna + ', Chile';
+
+    // Clave por dirección exacta + comuna (cada persona/dirección es parada distinta)
+    var key = dir.toLowerCase() + '|' + comuna.toLowerCase();
+
+    if(!vistas[key]){
+      vistas[key] = true;
+      var ordenesDir = pendientes.filter(function(x){
+        var d = (x.dir||'').trim();
+        var c = (x.comuna||'').trim();
+        if(d.toLowerCase().indexOf('http') !== -1 || d.length < 5) d = c + ', Osorno, Chile';
+        else d = d + ', ' + c + ', Chile';
+        return d.toLowerCase() === (p.dir||'').trim().toLowerCase() + ', ' + (p.comuna||'').trim().toLowerCase() + ', chile' ||
+               d.toLowerCase() + '|' + c.toLowerCase() === key;
+      });
+      paradasUnicas.push({
+        dir: dir,
+        calle: extraerCalle(dir),
+        comuna: comuna.toLowerCase(),
+        ordenes: ordenesDir,
+        prioridad: getPrioridadComuna(comuna, diaSemana)
+      });
+    }
+  });
+  paradasUnicas.sort(function(a,b){ return a.prioridad - b.prioridad; });
+
+  // Mostrar indicador de carga
+  var listaRuta = document.getElementById('lista-ruta-optimizada');
+  listaRuta.style.display = 'block';
+  listaRuta.innerHTML = '<div class="alerta alerta-info">🔄 Optimizando ruta con ORS... puede tomar unos segundos.</div>';
+
+  var MAX_ORS = 48;
+  var paradasORS = paradasUnicas.slice(0, MAX_ORS);
+  var paradasExtra = paradasUnicas.slice(MAX_ORS);
+  var pendientesGeo = paradasORS.length;
+  var coordsArr = new Array(paradasORS.length).fill(null);
+
+  paradasORS.forEach(function(p, i){
+    geocodificarDireccion(p.dir, function(coords){
+      coordsArr[i] = coords || BASE_COORDS;
+      pendientesGeo--;
+      if(pendientesGeo === 0){
+        var todasCoords = [BASE_COORDS].concat(coordsArr).concat([BASE_COORDS]);
+        optimizarRutaORS(todasCoords, function(orden){
+          var ordenadas;
+          if(orden && orden.length > 0){
+            ordenadas = orden.map(function(i){ return paradasORS[i]; });
+          } else {
+            ordenadas = paradasORS;
+          }
+          // Agrupar paradas de la misma calle que quedaron contiguas en el orden ORS
+          rutaOrdenadas = agruparCallesContiguas(ordenadas.concat(paradasExtra));
+          mostrarListaRutaOptimizada();
+        });
+      }
+    });
+  });
+}
+
+// Agrupa visualmente las paradas de la misma calle que quedaron consecutivas en la ruta ORS
+// No mezcla personas ni direcciones — solo las muestra agrupadas si quedaron juntas
+function agruparCallesContiguas(paradas){
+  var resultado = [];
+  var i = 0;
+  while(i < paradas.length){
+    var p = paradas[i];
+    var calleActual = p.calle;
+    var comunaActual = p.comuna;
+    // Buscar paradas contiguas de la misma calle
+    var grupo = [p];
+    var j = i + 1;
+    while(j < paradas.length && paradas[j].calle === calleActual && paradas[j].comuna === comunaActual){
+      grupo.push(paradas[j]);
+      j++;
+    }
+    if(grupo.length > 1){
+      // Crear parada agrupada visualmente
+      resultado.push({
+        dir: p.dir,
+        calle: calleActual,
+        comuna: comunaActual,
+        ordenes: p.ordenes,
+        calleGrupo: grupo, // todas las paradas de esa calle consecutivas
+        prioridad: p.prioridad
+      });
+      // Agregar el resto del grupo como sub-paradas
+      for(var k=1; k<grupo.length; k++){
+        resultado.push(grupo[k]);
+      }
+    } else {
+      resultado.push(p);
+    }
+    i = j;
+  }
+  return resultado;
+}
+
+function mostrarListaRutaOptimizada(){
+  var listaRuta = document.getElementById('lista-ruta-optimizada');
+  if(rutaOrdenadas.length === 0){ listaRuta.style.display = 'none'; return; }
+
+  var totalParadas = rutaOrdenadas.length;
+  var html = '<div style="background:var(--azul);color:white;border-radius:10px;padding:10px 14px;margin-bottom:8px;">';
+  html += '<div style="font-size:0.8rem;font-weight:700;">🗺 Ruta optimizada — '+totalParadas+' paradas</div>';
+  html += '<div style="font-size:0.7rem;color:#a8c4e0;margin-top:3px;">📦 Carga en orden inverso: lo último que entra es lo primero en entregar</div>';
+  html += '</div>';
+
+  rutaOrdenadas.forEach(function(p, idx){
+    var entregadas = p.ordenes.filter(function(x){ return x.estado==='entregado'; }).length;
+    var total = p.ordenes.length;
+    var todoEntregado = entregadas === total;
+    var numCarga = totalParadas - idx;
+    var mapsUrl = 'https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(p.dir)+'&travelmode=driving';
+
+    // Detectar si es multibulto (mismo folio, misma persona) o entregas distintas en misma calle
+    var esMultibulto = total > 1 && p.ordenes.every(function(o){ return getFolioBase(o.folio) === getFolioBase(p.ordenes[0].folio); });
+    var mismaCalle = p.calleGrupo && p.calleGrupo.length > 1;
+
+    html += '<div style="background:var(--blanco);border:1px solid var(--borde);border-radius:8px;padding:10px 12px;margin-bottom:6px;'+(todoEntregado?'opacity:0.5;border-left:3px solid var(--verde);':'')+(mismaCalle?'border-left:3px solid #7ec8f4;':'')+'">';
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">';
+    html += '<div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;gap:2px;">';
+    html += '<div style="background:'+(todoEntregado?'var(--verde)':'var(--azul2)')+';color:white;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:0.78rem;font-weight:700;">'+(idx+1)+'</div>';
+    html += '<div style="font-size:0.58rem;color:#94a3b8;">carga '+numCarga+'</div>';
+    html += '</div>';
+    html += '<div style="flex:1;min-width:0;">';
+    html += '<div style="font-weight:600;font-size:0.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+p.ordenes[0].nombre+'</div>';
+    html += '<div style="font-size:0.72rem;color:#64748b;margin-top:1px;">'+p.dir+'</div>';
+    // Distinguir multibulto de misma calle
+    if(esMultibulto){
+      html += '<div style="font-size:0.7rem;color:var(--naranja);font-weight:600;margin-top:2px;">📦 Multibulto: '+total+' bultos, misma persona'+(entregadas>0?' · ✅'+entregadas+'/'+total:'')+'</div>';
+    } else if(mismaCalle){
+      html += '<div style="font-size:0.7rem;color:var(--azul2);font-weight:600;margin-top:2px;">📍 Hay más entregas en esta calle — ver siguiente(s)</div>';
+    }
+    html += '</div>';
+    if(!todoEntregado){
+      html += '<a href="'+mapsUrl+'" target="_blank" style="background:var(--azul2);color:white;border-radius:8px;padding:8px 10px;font-size:0.72rem;font-weight:700;text-decoration:none;flex-shrink:0;">📍 Nav</a>';
+    } else {
+      html += '<div style="color:var(--verde);font-size:1.4rem;flex-shrink:0;">✅</div>';
+    }
+    html += '</div>';
+    p.ordenes.forEach(function(o){
+      var badgeClass = o.estado==='entregado'?'badge-verde':o.estado==='devuelto'?'badge-rojo':o.estado==='daniado'?'badge-naranja':'badge-gris';
+      var badgeTxt = o.estado==='entregado'?'✅ Entregado':o.estado==='devuelto'?'↩️ Devuelto':o.estado==='daniado'?'⚠️ Dañado':'⏳ Pendiente';
+      html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-top:1px solid #f1f5f9;font-size:0.75rem;cursor:pointer;" onclick="abrirModal('+o.id+')">';
+      html += '<span style="color:#64748b;">'+(o.folio||o.codigo)+'</span>';
+      html += '<span class="badge '+badgeClass+'">'+badgeTxt+'</span>';
+      html += '</div>';
+    });
+    html += '</div>';
+  });
+
+  listaRuta.innerHTML = html;
+  listaRuta.style.display = 'block';
+}
+
+var ultimaDireccionEntregada = null; // guarda la última dirección entregada
+
+function recalcularRutaDesdeUbicacionActual(){
+  var pendientes = paquetes.filter(function(p){ return p.estado === 'pendiente'; });
+  if(pendientes.length === 0){
+    rutaOrdenadas = [];
+    var listaRuta = document.getElementById('lista-ruta-optimizada');
+    if(listaRuta) listaRuta.innerHTML = '<div class="alerta alerta-ok">✅ ¡Todas las órdenes del día entregadas!</div>';
+    return;
+  }
+  // Usar última dirección entregada como origen, si existe
+  if(ultimaDireccionEntregada){
+    geocodificarDireccion(ultimaDireccionEntregada, function(coords){
+      recalcularConOrigen(coords || BASE_COORDS, pendientes);
+    });
+  } else {
+    recalcularConOrigen(BASE_COORDS, pendientes);
+  }
+}
+
+// Mantener abrirRutaGoogleMaps como alias por compatibilidad
+function abrirRutaGoogleMaps(){ generarRutaOptimizada(); }
+function siguienteTramo(){ generarRutaOptimizada(); }
+function actualizarBotonRuta(){}
+
+function recalcularConOrigen(origenCoords, pendientes){
+  // Construir paradas agrupadas por CALLE
+  var vistas = {};
+  var paradasUnicas = [];
+  pendientes.forEach(function(p){
+    var dir = (p.dir||'').trim();
+    var comuna = (p.comuna||'').trim();
+    if(dir.toLowerCase().indexOf('http') !== -1 || dir.length < 5) dir = comuna + ', Osorno, Chile';
+    else dir = dir + ', ' + comuna + ', Chile';
+    var calle = extraerCalle(dir);
+    var key = calle + '|' + comuna.toLowerCase();
+    if(!vistas[key]){
+      vistas[key] = true;
+      var ordenesDir = pendientes.filter(function(x){
+        var d = (x.dir||'').trim();
+        var c = (x.comuna||'').trim();
+        if(d.toLowerCase().indexOf('http') !== -1 || d.length < 5) d = c + ', Osorno, Chile';
+        else d = d + ', ' + c + ', Chile';
+        return extraerCalle(d) === calle && c.toLowerCase() === comuna.toLowerCase();
+      });
+      paradasUnicas.push({dir:dir, calle:calle, comuna:comuna.toLowerCase(), ordenes:ordenesDir, prioridad:getPrioridadComuna(comuna, new Date().getDay())});
+    }
+  });
+
+  var MAX_ORS = 48;
+  var paradasORS = paradasUnicas.slice(0, MAX_ORS);
+  var paradasExtra = paradasUnicas.slice(MAX_ORS);
+  var pendientesGeo = paradasORS.length;
+  var coordsArr = new Array(paradasORS.length).fill(null);
+
+  paradasORS.forEach(function(p, i){
+    geocodificarDireccion(p.dir, function(coords){
+      coordsArr[i] = coords || BASE_COORDS;
+      pendientesGeo--;
+      if(pendientesGeo === 0){
+        // Usar ubicación actual como origen en vez de la base
+        var todasCoords = [origenCoords].concat(coordsArr).concat([BASE_COORDS]);
+        optimizarRutaORS(todasCoords, function(orden){
+          if(orden && orden.length > 0){
+            rutaOrdenadas = orden.map(function(i){ return paradasORS[i]; }).concat(paradasExtra);
+          } else {
+            rutaOrdenadas = paradasORS.concat(paradasExtra);
+          }
+          mostrarListaRutaOptimizada();
+        });
+      }
+    });
+  });
+}
+
+// ════════════════════════════════════════
+// RENDER PAQUETES
+// ════════════════════════════════════════
+function filtrarPaquetes(f, btn){
+  filtroActual = f;
+  document.querySelectorAll('.filtro-btn').forEach(function(b){b.classList.remove('active');});
+  btn.classList.add('active');
+  renderPaquetes();
+}
+
+function renderPaquetes(){
+  var lista = document.getElementById('lista-paquetes');
+  var filtered = filtroActual==='todos' ? paquetes : paquetes.filter(function(p){return p.estado===filtroActual;});
+  if(filtered.length===0){lista.innerHTML='<div class="alerta alerta-info">No hay órdenes en este filtro.</div>';return;}
+  // agrupar por tipo y comuna
+  var grupos = {};
+  filtered.forEach(function(p){
+    var key = (p.tipo||'Principal') + '|' + (p.comuna||'Sin comuna');
+    if(!grupos[key]) grupos[key]={tipo:p.tipo||'Principal',comuna:p.comuna||'Sin comuna',items:[]};
+    grupos[key].items.push(p);
+  });
+  var html='';
+  var diaSemana = new Date().getDay();
+  // Ordenar: Principal primero, luego por grilla operacional del día
+  var keys = Object.keys(grupos).sort(function(a,b){
+    var ta=grupos[a].tipo.toLowerCase(), tb=grupos[b].tipo.toLowerCase();
+    if(ta==='principal'&&tb!=='principal') return -1;
+    if(ta!=='principal'&&tb==='principal') return 1;
+    var pa = getPrioridadComuna(grupos[a].comuna, diaSemana);
+    var pb = getPrioridadComuna(grupos[b].comuna, diaSemana);
+    return pa - pb;
+  });
+  keys.forEach(function(key){
+    var g=grupos[key];
+    html+='<div class="grupo-titulo">'+g.tipo+' · '+g.comuna+' <span style="color:#94a3b8;font-weight:400;">('+g.items.length+')</span></div>';
+    // detectar multibultos: misma dirección exacta dentro de este grupo
+    var porDireccion = {};
+    g.items.forEach(function(p){
+      var dirKey = (p.dir||'').trim().toLowerCase();
+      if(!dirKey) dirKey = '__sindir__'+p.id; // sin dirección no se agrupa
+      if(!porDireccion[dirKey]) porDireccion[dirKey]=[];
+      porDireccion[dirKey].push(p);
+    });
+    Object.keys(porDireccion).forEach(function(dirKey){
+      var itemsDir = porDireccion[dirKey];
+      var esMultibulto = itemsDir.length > 1;
+      if(esMultibulto){
+        html+='<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:6px 10px;margin-bottom:4px;font-size:0.72rem;font-weight:700;color:#92400e;">📦 MULTIBULTO — '+itemsDir.length+' órdenes en esta dirección</div>';
+      }
+      itemsDir.forEach(function(p){
+        var badgeClass = p.estado==='entregado'?'badge-verde':p.estado==='devuelto'?'badge-rojo':p.estado==='daniado'?'badge-naranja':'badge-gris';
+        var badgeTxt = p.estado==='entregado'?'Entregado':p.estado==='devuelto'?'Devuelto':p.estado==='daniado'?'Dañado':'Pendiente';
+
+        // Dirección: si es URL de Google Maps o muy corta, mostrar solo comuna
+        var dir = (p.dir||'').trim();
+        var dirMostrar = dir;
+        if(dir.toLowerCase().indexOf('http') !== -1 || dir.length < 5){
+          dirMostrar = (p.comuna||'').trim() ? '📍 Ver detalle — '+p.comuna.trim() : '(sin dirección — tocar para ver)';
+        }
+
+        html+='<div class="paquete-item '+p.estado+'" id="pi-'+p.id+'" onclick="abrirModal('+p.id+')" style="cursor:pointer;'+(esMultibulto?'border-left:3px solid #f59e0b;':'')+(p.estado!=='pendiente'?'':'')+'">'; 
+        html+='<div class="paquete-info">';
+        if(p.repetidoDeHistorial){
+          html+='<div style="font-size:0.68rem;font-weight:700;color:var(--rojo);">⚠️ YA EXISTÍA EN UN DÍA ANTERIOR — revisar con Alas</div>';
+        }
+        html+='<div class="paquete-nombre">'+p.nombre+'</div>';
+        html+='<div class="paquete-dir">'+dirMostrar+(p.tel?' · '+p.tel:'')+'</div>';
+        html+='<div class="paquete-codigo">'+p.codigo+' <span class="badge '+badgeClass+'">'+badgeTxt+'</span></div>';
+        html+='</div>';
+        if(p.estado==='pendiente'){
+          html+='<div class="paquete-acciones" onclick="event.stopPropagation()">';
+          html+='<button class="btn btn-verde btn-sm" onclick="marcar('+p.id+',\'entregado\')">✅</button>';
+          html+='<button class="btn btn-rojo btn-sm" onclick="marcar('+p.id+',\'devuelto\')">↩️</button>';
+          html+='<button class="btn btn-naranja btn-sm" onclick="marcar('+p.id+',\'daniado\')">⚠️</button>';
+          html+='</div>';
+        }
+        html+='</div>';
+      });
+    });
+  });
+  lista.innerHTML=html;
+}
+
+function marcar(id, estado){
+  var p = paquetes.find(function(x){return x.id===id;});
+  if(p){
+    p.estado=estado;
+    p.ts_estado=Date.now();
+    enviarASheets('cambio_estado', {codigo:p.codigo, nombre:p.nombre, estado:estado, fecha:new Date().toLocaleString('es-CL')});
+    if(estado === 'entregado'){
+      var dir = (p.dir||'').trim();
+      var comuna = (p.comuna||'').trim();
+      ultimaDireccionEntregada = (dir.toLowerCase().indexOf('http')!==-1||dir.length<5) ? comuna+', Osorno, Chile' : dir+', '+comuna+', Chile';
+    }
+  }
+  guardarStorage();
+  actualizarResumen();
+  renderPaquetes();
+  if(rutaOrdenadas.length > 0 && estado === 'entregado'){
+    recalcularRutaDesdeUbicacionActual();
+  }
+}
+
+// ════════════════════════════════════════
+// QR
+// ════════════════════════════════════════
+function toggleQR(){
+  if(qrActivo) detenerQR();
+  else iniciarQR();
+}
+function iniciarQR(){
+  var btn = document.getElementById('btn-qr');
+  btn.textContent='Detener cámara';
+  btn.className='btn btn-rojo';
+  qrScanner = new Html5Qrcode('qr-reader');
+  qrScanner.start({facingMode:'environment'},{fps:10,qrbox:{width:250,height:250}},
+    function(text){
+      procesarQR(text);
+    },
+    function(){}
+  ).catch(function(err){
+    document.getElementById('qr-result-box').innerHTML='<div class="qr-result err">No se pudo acceder a la cámara.</div>';
+  });
+  qrActivo=true;
+}
+function detenerQR(){
+  if(qrScanner) qrScanner.stop().catch(function(){});
+  qrActivo=false;
+  var btn=document.getElementById('btn-qr');
+  btn.textContent='Activar cámara';
+  btn.className='btn btn-primary';
+}
+// Busca otros bultos con el mismo folio EXACTO (no base)
+function getFolioBase(folio){
+  // Mantenemos el nombre por compatibilidad pero ahora devuelve el folio completo
+  return folio ? folio.trim() : null;
+}
+
+var qrMultibultoActual = []; // todas las órdenes del mismo folio base
+
+function procesarQR(texto){
+  var p = paquetes.find(function(x){return x.codigo===texto.trim();});
+  var box = document.getElementById('qr-result-box');
+  var card = document.getElementById('qr-paquete-card');
+  var multibultoBox = document.getElementById('qr-multibulto-box');
+  var multibultoAcciones = document.getElementById('qr-multibulto-acciones');
+
+  if(p){
+    qrPaqueteActual = p;
+    box.innerHTML='<div class="qr-result ok">✅ Orden encontrada: <strong>'+p.nombre+'</strong></div>';
+    var badgeClass = p.estado==='entregado'?'badge-verde':p.estado==='devuelto'?'badge-rojo':p.estado==='daniado'?'badge-naranja':'badge-gris';
+    var badgeTxt = p.estado==='entregado'?'Entregado':p.estado==='devuelto'?'Devuelto':p.estado==='daniado'?'Dañado':'Pendiente';
+    var dir = (p.dir||'').trim();
+    var dirMostrar = (dir.toLowerCase().indexOf('http') !== -1 || dir.length < 5) ? (p.comuna||'') : dir;
+
+    document.getElementById('qr-paquete-info').innerHTML=
+      '<div style="font-weight:700;font-size:0.9rem;">'+p.nombre+'</div>'+
+      (p.b2b ? '<div style="font-size:0.72rem;color:var(--azul2);margin-top:2px;">🏪 '+p.b2b+'</div>' : '')+
+      (p.folio ? '<div style="font-size:0.72rem;color:#64748b;margin-top:2px;">📋 Folio Alas: <strong>'+p.folio+'</strong></div>' : '')+
+      (p.bulto ? '<div style="font-size:0.72rem;color:#64748b;margin-top:2px;">📦 Bulto: '+p.bulto+'</div>' : '')+
+      '<div style="font-size:0.75rem;color:#64748b;margin-top:4px;">📍 '+dirMostrar+(p.comuna?', '+p.comuna:'')+'</div>'+
+      (p.tel ? '<div style="font-size:0.75rem;color:#64748b;margin-top:2px;">📞 '+p.tel+'</div>' : '')+
+      '<div style="font-size:0.68rem;color:#94a3b8;margin-top:4px;font-family:monospace;">'+p.codigo+'</div>'+
+      '<div style="margin-top:6px;"><span class="badge '+badgeClass+'">'+badgeTxt+'</span></div>';
+
+    // Detectar multibulto por folio base
+    var folioBase = getFolioBase(p.folio);
+    qrMultibultoActual = [];
+    if(folioBase){
+      qrMultibultoActual = paquetes.filter(function(x){
+        return getFolioBase(x.folio) === folioBase && x.codigo !== p.codigo;
+      });
+    }
+
+    if(qrMultibultoActual.length > 0){
+      var totalBultos = qrMultibultoActual.length + 1;
+      var pendientes = qrMultibultoActual.filter(function(x){ return x.estado === 'pendiente'; }).length;
+      var html = '<div style="font-size:0.78rem;font-weight:700;color:#92400e;">📦 MULTIBULTO — '+totalBultos+' bultos del mismo pedido</div>';
+      html += '<div style="font-size:0.72rem;color:#92400e;margin-top:4px;">Folio base: '+folioBase+'</div>';
+      html += '<div style="margin-top:8px;">';
+      qrMultibultoActual.forEach(function(x){
+        var bc = x.estado==='entregado'?'badge-verde':x.estado==='devuelto'?'badge-rojo':x.estado==='daniado'?'badge-naranja':'badge-gris';
+        var bt = x.estado==='entregado'?'Entregado':x.estado==='devuelto'?'Devuelto':x.estado==='daniado'?'Dañado':'Pendiente';
+        html += '<div style="font-size:0.75rem;margin-bottom:4px;">📦 '+(x.bulto||x.codigo)+' <span class="badge '+bc+'">'+bt+'</span></div>';
+      });
+      html += '</div>';
+      if(pendientes > 0){
+        html += '<div style="font-size:0.72rem;color:#92400e;margin-top:6px;">⚠️ '+pendientes+' bulto(s) pendiente(s) además de este</div>';
+      }
+      multibultoBox.innerHTML = html;
+      multibultoBox.style.display = 'block';
+      multibultoAcciones.style.display = 'block';
+    } else {
+      multibultoBox.style.display = 'none';
+      multibultoAcciones.style.display = 'none';
+      qrMultibultoActual = [];
+    }
+
+    card.style.display='block';
+  }else{
+    qrPaqueteActual=null;
+    qrMultibultoActual=[];
+    box.innerHTML='<div class="qr-result err">⚠️ Código no encontrado: <strong>'+texto+'</strong></div>';
+    card.style.display='none';
+    multibultoBox.style.display='none';
+    multibultoAcciones.style.display='none';
+  }
+}
+
+function limpiarQR(){
+  qrPaqueteActual = null;
+  qrMultibultoActual = [];
+  document.getElementById('qr-result-box').innerHTML = '';
+  document.getElementById('qr-paquete-info').innerHTML = '';
+  document.getElementById('qr-paquete-card').style.display = 'none';
+  document.getElementById('qr-multibulto-box').style.display = 'none';
+  document.getElementById('qr-multibulto-acciones').style.display = 'none';
+}
+
+function marcarTodoMultibulto(estado){
+  if(!qrPaqueteActual) return;
+  // Marcar la orden escaneada
+  qrPaqueteActual.estado = estado;
+  qrPaqueteActual.ts_estado = Date.now();
+  enviarASheets('cambio_estado', {codigo:qrPaqueteActual.codigo, nombre:qrPaqueteActual.nombre, estado:estado, fecha:new Date().toLocaleString('es-CL')});
+  // Marcar todos los demás bultos del mismo folio
+  qrMultibultoActual.forEach(function(x){
+    x.estado = estado;
+    x.ts_estado = Date.now();
+    enviarASheets('cambio_estado', {codigo:x.codigo, nombre:x.nombre, estado:estado, fecha:new Date().toLocaleString('es-CL')});
+  });
+  guardarStorage();
+  actualizarResumen();
+  var textos={entregado:'✅ Todos los bultos marcados como entregados',devuelto:'↩️ Todos los bultos marcados como devueltos'};
+  document.getElementById('qr-result-box').innerHTML='<div class="qr-result ok">'+textos[estado]+'</div>';
+  document.getElementById('qr-paquete-card').style.display='none';
+  document.getElementById('qr-multibulto-box').style.display='none';
+  document.getElementById('qr-multibulto-acciones').style.display='none';
+  qrPaqueteActual=null;
+  qrMultibultoActual=[];
+}
+function marcarDesdeQR(estado){
+  if(!qrPaqueteActual) return;
+  qrPaqueteActual.estado=estado;
+  qrPaqueteActual.ts_estado=Date.now();
+  enviarASheets('cambio_estado', {codigo:qrPaqueteActual.codigo, nombre:qrPaqueteActual.nombre, estado:estado, fecha:new Date().toLocaleString('es-CL')});
+  if(estado === 'entregado'){
+    var dir = (qrPaqueteActual.dir||'').trim();
+    var comuna = (qrPaqueteActual.comuna||'').trim();
+    ultimaDireccionEntregada = (dir.toLowerCase().indexOf('http')!==-1||dir.length<5) ? comuna+', Osorno, Chile' : dir+', '+comuna+', Chile';
+  }
+  guardarStorage();
+  actualizarResumen();
+  var textos={entregado:'✅ Marcado como entregado',devuelto:'↩️ Marcado como devuelto',daniado:'⚠️ Marcado como dañado'};
+  document.getElementById('qr-result-box').innerHTML='<div class="qr-result ok">'+textos[estado]+': <strong>'+qrPaqueteActual.nombre+'</strong></div>';
+  document.getElementById('qr-paquete-card').style.display='none';
+  document.getElementById('qr-multibulto-box').style.display='none';
+  document.getElementById('qr-multibulto-acciones').style.display='none';
+  if(rutaOrdenadas.length > 0 && estado === 'entregado'){
+    recalcularRutaDesdeUbicacionActual();
+  }
+  qrPaqueteActual=null;
+  qrMultibultoActual=[];
+}
+
+// ════════════════════════════════════════
+// CIERRE
+// ════════════════════════════════════════
+function actualizarCierre(){
+  var total=paquetes.length;
+  var ent=paquetes.filter(function(p){return p.estado==='entregado';}).length;
+  var dev=paquetes.filter(function(p){return p.estado==='devuelto';}).length;
+  var dan=paquetes.filter(function(p){return p.estado==='daniado';}).length;
+  var pend=paquetes.filter(function(p){return p.estado==='pendiente';}).length;
+  var ef=total>0?Math.round(ent/total*100):0;
+  var ingreso=ent*2000;
+  document.getElementById('resumen-cierre-box').innerHTML=
+    '<div class="resumen-cierre-row"><span>Total recibidos</span><strong>'+total+'</strong></div>'+
+    '<div class="resumen-cierre-row"><span>Entregados</span><strong style="color:var(--verde)">'+ent+'</strong></div>'+
+    '<div class="resumen-cierre-row"><span>Devueltos</span><strong style="color:var(--rojo)">'+dev+'</strong></div>'+
+    '<div class="resumen-cierre-row"><span>Dañados</span><strong style="color:var(--naranja)">'+dan+'</strong></div>'+
+    '<div class="resumen-cierre-row"><span>Pendientes</span><strong style="color:var(--naranja)">'+pend+'</strong></div>'+
+    '<div class="resumen-cierre-row"><span>Efectividad</span><strong>'+ef+'%</strong></div>'+
+    '<div class="resumen-cierre-row"><span>Ingresos estimados</span><strong style="color:var(--verde)">$'+ingreso.toLocaleString('es-CL')+'</strong></div>';
+}
+
+function exportarExcelDia(){
+  var fecha=new Date().toLocaleDateString('es-CL').replace(/\//g,'-');
+  var ws_data=[['Código','Folio','Nombre','Teléfono','Dirección','Comuna','Tipo','Estado','Ingreso']];
+  paquetes.forEach(function(p){
+    ws_data.push([p.codigo,p.folio,p.nombre,p.tel,p.dir,p.comuna,p.tipo,p.estado,p.estado==='entregado'?2000:0]);
+  });
+  var wb=XLSX.utils.book_new();
+  var ws=XLSX.utils.aoa_to_sheet(ws_data);
+  XLSX.utils.book_append_sheet(wb,ws,'Muspel_'+fecha);
+  XLSX.writeFile(wb,'Muspel_OPS_'+fecha+'.xlsx');
+}
+
+function enviarWhatsApp(){
+  var total=paquetes.length;
+  var ent=paquetes.filter(function(p){return p.estado==='entregado';}).length;
+  var dev=paquetes.filter(function(p){return p.estado==='devuelto';}).length;
+  var dan=paquetes.filter(function(p){return p.estado==='daniado';}).length;
+  var ef=total>0?Math.round(ent/total*100):0;
+  var fecha=new Date().toLocaleDateString('es-CL');
+  var msg='*MUSPEL OPS — Cierre '+fecha+'*\n\n'+
+    '📦 Recibidos: '+total+'\n'+
+    '✅ Entregados: '+ent+'\n'+
+    '↩️ Devueltos: '+dev+'\n'+
+    '⚠️ Dañados: '+dan+'\n'+
+    '📊 Efectividad: '+ef+'%\n'+
+    '💰 Ingresos: $'+(ent*2000).toLocaleString('es-CL');
+  window.open('https://wa.me/56952207386?text='+encodeURIComponent(msg));
+}
+
+function cerrarDia(){
+  if(paquetes.length===0){alert('No hay órdenes para cerrar.');return;}
+  var ent=paquetes.filter(function(p){return p.estado==='entregado';}).length;
+  var dev=paquetes.filter(function(p){return p.estado==='devuelto';}).length;
+  var dan=paquetes.filter(function(p){return p.estado==='daniado';}).length;
+  var pend=paquetes.filter(function(p){return p.estado==='pendiente';}).length;
+  var total=paquetes.length;
+  var fecha=new Date().toLocaleDateString('es-CL');
+  var registroDia = {
+    fecha:fecha, ts:Date.now(),
+    total:total, entregados:ent, devueltos:dev, daniados:dan, pendientes:pend,
+    efectividad:total>0?Math.round(ent/total*100):0,
+    ingresos:ent*2000,
+    detalle:JSON.parse(JSON.stringify(paquetes))
+  };
+  historial.push(registroDia);
+  // se envía el cierre completo del día a Sheets (resumen, sin todo el detalle para no sobrecargar)
+  enviarASheets('cierre_dia', {
+    fecha:fecha, total:total, entregados:ent, devueltos:dev,
+    daniados:dan, pendientes:pend, efectividad:registroDia.efectividad, ingresos:registroDia.ingresos
+  });
+  paquetes=[];
+  guardarStorage();
+  actualizarResumen();
+  alert('✅ Día cerrado y guardado en el historial.');
+}
+
+// ════════════════════════════════════════
+// DASHBOARD
+// ════════════════════════════════════════
+function actualizarDashboard(){
+  var totalEnt=0, totalRec=0, totalDev=0, dias=historial.length;
+  historial.forEach(function(h){totalEnt+=h.entregados;totalRec+=h.total;totalDev+=h.devueltos+h.daniados;});
+  var ef=totalRec>0?Math.round(totalEnt/totalRec*100):0;
+  var tasaDev=totalRec>0?Math.round(totalDev/totalRec*100):0;
+  document.getElementById('d-entregas-mes').textContent=totalEnt.toLocaleString('es-CL');
+  document.getElementById('d-dias-mes').textContent=dias+' días operados';
+  document.getElementById('d-ingresos-mes').textContent='$'+(totalEnt*2000).toLocaleString('es-CL');
+  document.getElementById('d-efectividad').textContent=ef+'%';
+  document.getElementById('d-devoluciones').textContent=totalDev;
+  document.getElementById('d-tasa-dev').textContent=tasaDev+'% del total';
+  // ultimos dias
+  var lista=document.getElementById('d-dias-lista');
+  if(historial.length===0){lista.innerHTML='<div class="alerta alerta-info">Aún no hay días cerrados.</div>';return;}
+  var html='';
+  var ultimos=[].concat(historial).reverse().slice(0,7);
+  ultimos.forEach(function(h){
+    html+='<div class="semana-row">';
+    html+='<div><strong>'+h.fecha+'</strong><div style="font-size:0.7rem;color:#64748b;">'+h.total+' paq · '+h.efectividad+'% ef</div></div>';
+    html+='<div style="text-align:right"><div style="color:var(--verde);font-weight:700;">$'+h.ingresos.toLocaleString('es-CL')+'</div><div style="font-size:0.7rem;color:var(--rojo);">'+h.devueltos+' dev</div></div>';
+    html+='</div>';
+  });
+  lista.innerHTML=html;
+}
+
+function exportarReporteMensual(){
+  if(historial.length===0){alert('No hay datos en el historial todavía.');return;}
+  var wb=XLSX.utils.book_new();
+  // Hoja resumen
+  var resumen=[['Fecha','Recibidos','Entregados','Devueltos','Dañados','Pendientes','Efectividad %','Ingresos $']];
+  historial.forEach(function(h){
+    resumen.push([h.fecha,h.total,h.entregados,h.devueltos,h.daniados,h.pendientes,h.efectividad,h.ingresos]);
+  });
+  var wsR=XLSX.utils.aoa_to_sheet(resumen);
+  XLSX.utils.book_append_sheet(wb,wsR,'Resumen');
+  // Hoja detalle completo
+  var detalle=[['Fecha','Código','Nombre','Dirección','Comuna','Tipo','Estado','Ingreso']];
+  historial.forEach(function(h){
+    h.detalle.forEach(function(p){
+      detalle.push([h.fecha,p.codigo,p.nombre,p.dir,p.comuna,p.tipo,p.estado,p.estado==='entregado'?2000:0]);
+    });
+  });
+  var wsD=XLSX.utils.aoa_to_sheet(detalle);
+  XLSX.utils.book_append_sheet(wb,wsD,'Detalle');
+  var mes=new Date().toLocaleDateString('es-CL',{month:'long',year:'numeric'}).replace(/ /g,'_');
+  XLSX.writeFile(wb,'Muspel_Reporte_'+mes+'.xlsx');
+}
+
+// ════════════════════════════════════════
+// HISTORIAL
+// ════════════════════════════════════════
+function renderHistorial(){
+  var lista=document.getElementById('lista-historial');
+  var vacio=document.getElementById('historial-vacio');
+  if(historial.length===0){lista.innerHTML='';vacio.style.display='block';return;}
+  vacio.style.display='none';
+  var html='';
+  [].concat(historial).reverse().forEach(function(h){
+    html+='<div class="hist-item">';
+    html+='<div><div class="hist-fecha">'+h.fecha+'</div>';
+    html+='<div class="hist-stats">'+h.total+' paq · ✅'+h.entregados+' · ↩️'+h.devueltos+' · '+h.efectividad+'%</div></div>';
+    html+='<div style="text-align:right"><div style="font-weight:700;color:var(--verde);">$'+h.ingresos.toLocaleString('es-CL')+'</div>';
+    html+='<button class="btn btn-outline btn-sm" style="margin-top:4px;" onclick="exportarDiaHistorial('+historial.indexOf(h)+')">Descargar</button></div>';
+    html+='</div>';
+  });
+  lista.innerHTML=html;
+}
+
+function exportarDiaHistorial(idx){
+  var h=historial[historial.length-1-idx];
+  if(!h) return;
+  var ws_data=[['Código','Folio','Nombre','Teléfono','Dirección','Comuna','Tipo','Estado','Ingreso']];
+  h.detalle.forEach(function(p){
+    ws_data.push([p.codigo,p.folio,p.nombre,p.tel,p.dir,p.comuna,p.tipo,p.estado,p.estado==='entregado'?2000:0]);
+  });
+  var wb=XLSX.utils.book_new();
+  var ws=XLSX.utils.aoa_to_sheet(ws_data);
+  XLSX.utils.book_append_sheet(wb,ws,'Muspel_'+h.fecha.replace(/\//g,'-'));
+  XLSX.writeFile(wb,'Muspel_OPS_'+h.fecha.replace(/\//g,'-')+'.xlsx');
+}
+
+// ════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════
+actualizarResumen();
+actualizarBannerOperacional();
+procesarColaSync();
+
+// Si el dispositivo no tiene órdenes cargadas, las descarga automáticamente desde Sheets
+if(paquetes.length === 0){
+  var indSync = document.getElementById('sync-indicator');
+  if(indSync) indSync.innerHTML = '<span class="sync-badge sinc">⬇️ Buscando órdenes...</span>';
+  descargarOrdenesDesdeSheets(function(importadas){
+    if(importadas > 0){
+      renderPaquetes();
+      actualizarResumen();
+    }
+  });
+}
+</script>
+</body>
+</html>
