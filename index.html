@@ -1255,7 +1255,7 @@ function importarExcel(input){
       var headerRowIdx = 0;
       for(var hi=0; hi<Math.min(3,data.length); hi++){
         var rowStr = (data[hi]||[]).join('|').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-        if(rowStr.indexOf('CODIGO PAQUETE') !== -1){ headerRowIdx = hi; break; }
+        if(rowStr.indexOf('CODIGO PAQUETE') !== -1 || rowStr.indexOf('FOLIO') !== -1){ headerRowIdx = hi; break; }
       }
       var header = data[headerRowIdx];
       var idx = {};
@@ -1281,6 +1281,16 @@ function importarExcel(input){
         } else {
           tipoPorDefecto = 'Principal';
         }
+      }
+      // Respaldo: si el archivo no trae "CÓDIGO PAQUETE" (ej. formatos simplificados tipo "Ruta"),
+      // usar el FOLIO como código único — en esos archivos cada fila ya es 1 sola orden.
+      if(idx.codigo === undefined && idx.folio !== undefined){
+        idx.codigo = idx.folio;
+      }
+      if(idx.codigo === undefined){
+        alert('⚠️ Este archivo no tiene ni "CÓDIGO PAQUETE" ni "FOLIO" — no se puede identificar cada orden de forma única. Revisa el formato del archivo con ALAS.');
+        status.textContent = '❌ No se pudo importar: falta columna de código/folio.';
+        return;
       }
       var nuevos=0, dup=0, alertas=[];
       for(var r=headerRowIdx+1;r<data.length;r++){
