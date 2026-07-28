@@ -451,6 +451,11 @@
     <div style="font-size:0.78rem;color:#64748b;margin-bottom:10px;">Esto deshace SOLO el último día cerrado, devolviendo sus órdenes a Resumen/Órdenes para corregirlas. No afecta días anteriores.</div>
     <button class="btn btn-rojo" onclick="reabrirUltimoDia()">↩️ Reabrir último día cerrado</button>
   </div>
+  <div class="card">
+    <div class="card-title">🗑 Vaciar órdenes actuales (sin cerrar)</div>
+    <div style="font-size:0.78rem;color:#64748b;margin-bottom:10px;">Borra las órdenes que están cargadas ahora mismo en el teléfono (ej. datos de prueba), sin guardarlas en el historial ni afectar días ya cerrados. Úsalo antes de empezar a operar de verdad.</div>
+    <button class="btn btn-rojo" onclick="vaciarOrdenesActuales()">🗑 Vaciar órdenes actuales</button>
+  </div>
 </div>
 
 <script>
@@ -2190,6 +2195,20 @@ function exportarReporteMensual(){
 // ════════════════════════════════════════
 // HISTORIAL
 // ════════════════════════════════════════
+function vaciarOrdenesActuales(){
+  if(paquetes.length === 0){
+    alert('No hay órdenes cargadas actualmente en el teléfono.');
+    return;
+  }
+  var confirmar = confirm('Esto va a borrar las '+paquetes.length+' órdenes que están cargadas ahora mismo en el teléfono (por ejemplo, datos de prueba). NO se guardan en el historial ni se ve afectado ningún día ya cerrado.\n\n¿Confirmas que quieres vaciarlas?');
+  if(!confirmar) return;
+  paquetes = [];
+  guardarStorage();
+  actualizarResumen();
+  renderPaquetes();
+  alert('✅ Listo, quedaste en 0 órdenes. Ahora puedes descargar o importar las órdenes reales del día.');
+}
+
 function reabrirUltimoDia(){
   if(historial.length === 0){
     alert('No hay ningún día cerrado en el historial.');
