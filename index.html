@@ -277,6 +277,14 @@
 <!-- TAB: IMPORTAR -->
 <!-- ══════════════════════════════════════════ -->
 <div class="content" id="tab-importar">
+  <div class="card" style="border:1.5px solid var(--naranja);">
+    <div class="card-title">🔧 Corregir tipo (Principal / Ramal) de todas las órdenes cargadas</div>
+    <div style="font-size:0.78rem;color:#64748b;margin-bottom:10px;">Úsalo cuando el Excel de ALAS no trae la columna "Tipo Destino" y todo quedó marcado igual por defecto.</div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-outline" style="flex:1;" onclick="marcarTodoTipo('Principal')">Marcar TODO como Principal</button>
+      <button class="btn btn-outline" style="flex:1;" onclick="marcarTodoTipo('Ramal')">Marcar TODO como Ramal</button>
+    </div>
+  </div>
   <div class="card">
     <div class="card-title">📥 Cargar Excel de Alas</div>
     <label class="upload-area" for="excel-input">
@@ -1265,6 +1273,15 @@ function importarExcel(input){
         if(h==='B2B') idx.b2b=i;
         if(h==='BULTO DE ENTREGA') idx.bulto=i;
       }
+      var tipoPorDefecto = 'Principal';
+      if(idx.tipo === undefined){
+        var elegido = prompt('Este archivo no trae la columna "Tipo Destino" (Principal/Ramal).\n\n¿Cómo se marcan TODAS estas órdenes? Escribe: Principal o Ramal', 'Principal');
+        if(elegido && elegido.trim().toLowerCase().indexOf('ramal')===0){
+          tipoPorDefecto = 'Ramal';
+        } else {
+          tipoPorDefecto = 'Principal';
+        }
+      }
       var nuevos=0, dup=0, alertas=[];
       for(var r=headerRowIdx+1;r<data.length;r++){
         var row=data[r];
@@ -1291,7 +1308,7 @@ function importarExcel(input){
           dir:row[idx.dir]?String(row[idx.dir]).trim():'',
           comuna:row[idx.comuna]?String(row[idx.comuna]).trim():'',
           region:row[idx.region]?String(row[idx.region]).trim():'',
-          tipo:row[idx.tipo]?String(row[idx.tipo]).trim():'Principal',
+          tipo:row[idx.tipo]?String(row[idx.tipo]).trim():tipoPorDefecto,
           b2b:row[idx.b2b]?String(row[idx.b2b]).trim():'',
           estado:'pendiente', ts:Date.now(),
           repetidoDeHistorial: enHistorial ? true : false
@@ -1364,9 +1381,28 @@ var BASE_MUSPEL = '-40.6530786,-73.2716605'; // Base Muspel — Ruta U-486 Km 1,
 var BASE_COORDS = [-73.2716605, -40.6530786]; // [lng, lat] para ORS
 var ORS_KEY = 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImI2NDRiYTkwZTYyMTRiZGI4ZTdiN2JmZDJiODcwZmMzIiwiaCI6Im11cm11cjY0In0=';
 
+// Quita frases de referencia ambiguas ("cerca al", "frente a", etc.) que confunden
+// al geocodificador — se queda solo con la parte de la dirección real.
+function limpiarDireccionParaGeocodificar(dir){
+  if(!dir) return dir;
+  var limpio = dir;
+  var frasesRuido = [
+    /cerca\s+(al|del|de\s+la|de|a)\s+/gi,
+    /frente\s+(al|del|de\s+la|de|a)\s+/gi,
+    /al\s+lado\s+(del|de\s+la|de)\s+/gi,
+    /diagonal\s+(al|del|a)\s+/gi,
+    /atr[aá]s\s+(del|de\s+la|de)\s+/gi,
+    /esquina\s+(con|de)\s+/gi,
+    /a\s+un\s+costado\s+(del|de\s+la|de)\s+/gi,
+  ];
+  frasesRuido.forEach(function(re){ limpio = limpio.replace(re, ''); });
+  limpio = limpio.replace(/\s{2,}/g, ' ').replace(/^[,\s]+|[,\s]+$/g, '').trim();
+  return limpio || dir; // si quedó vacío, usar la original tal cual
+}
+
 // Geocodifica una dirección con ORS → devuelve [lng, lat] o null
 function geocodificarDireccion(dir, callback){
-  var query = encodeURIComponent(dir + ', Osorno, Chile');
+  var query = encodeURIComponent(limpiarDireccionParaGeocodificar(dir) + ', Osorno, Chile');
   fetch('https://api.openrouteservice.org/geocode/search?api_key='+ORS_KEY+'&text='+query+'&boundary.country=CL&size=1', {
     headers: { 'Authorization': ORS_KEY }
   }).then(function(r){ return r.json(); }).then(function(data){
@@ -1411,6 +1447,74 @@ function optimizarRutaORS(coordenadas, callback){
       callback(null);
     }
   }).catch(function(){ callback(null); })
+}
+
+// Optimiza un subconjunto de paradas (por ejemplo, las de UNA comuna), con inicio fijo
+// y fin opcional. Si no se pasa fin, la ruta queda "abierta" (ORS decide dónde termina,
+// sin obligar a volver a la base) — así se puede encadenar con la siguiente comuna.
+function optimizarSubrutaORS(coordInicio, coordsGrupo, coordFinOpcional, callback){
+  var jobs = coordsGrupo.map(function(c, i){ return { id: i+1, location: c }; });
+  var vehicle = { id: 1, start: coordInicio, profile: 'driving-car' };
+  if(coordFinOpcional) vehicle.end = coordFinOpcional;
+  var body = { jobs: jobs, vehicles: [vehicle] };
+  fetch('https://api.openrouteservice.org/optimization', {
+    method: 'POST',
+    headers: { 'Authorization': ORS_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  }).then(function(r){ return r.json(); }).then(function(data){
+    if(data.routes && data.routes[0] && data.routes[0].steps){
+      var steps = data.routes[0].steps;
+      var jobSteps = steps.filter(function(s){ return s.type === 'job'; });
+      var orden = jobSteps.map(function(s){ return s.job - 1; });
+      var ultimoStep = steps[steps.length-1];
+      var ultimaCoord = (ultimoStep && ultimoStep.location) ? ultimoStep.location : (orden.length ? coordsGrupo[orden[orden.length-1]] : coordInicio);
+      callback(orden, ultimaCoord);
+    } else {
+      callback(null, null);
+    }
+  }).catch(function(){ callback(null, null); });
+}
+
+// Agrupa las paradas YA ORDENADAS POR PRIORIDAD DE COMUNA en bloques contiguos por comuna,
+// y optimiza cada bloque por separado, encadenando el final de uno con el inicio del siguiente.
+// Así nunca se cruza de una comuna a otra y se vuelve — se hace toda una comuna y se sigue a la próxima.
+function optimizarPorComunasEncadenado(paradasORS, coordsArr, coordInicio, coordFinFinal, callback){
+  if(paradasORS.length === 0){ callback([]); return; }
+  var grupos = [];
+  var grupoActual = null;
+  paradasORS.forEach(function(p, idx){
+    if(!grupoActual || grupoActual.comuna !== p.comuna){
+      grupoActual = { comuna: p.comuna, paradas: [], coords: [] };
+      grupos.push(grupoActual);
+    }
+    grupoActual.paradas.push(p);
+    grupoActual.coords.push(coordsArr[idx]);
+  });
+
+  function procesarGrupo(idx, coordActual, acumulado){
+    if(idx >= grupos.length){ callback(acumulado); return; }
+    var grupo = grupos[idx];
+    var esUltimo = (idx === grupos.length - 1);
+    var coordFin = esUltimo ? coordFinFinal : null;
+
+    if(grupo.coords.length === 1){
+      acumulado = acumulado.concat(grupo.paradas);
+      procesarGrupo(idx+1, grupo.coords[0], acumulado);
+      return;
+    }
+
+    optimizarSubrutaORS(coordActual, grupo.coords, coordFin, function(orden, ultimaCoord){
+      var ordenadasGrupo;
+      if(orden && orden.length > 0){
+        ordenadasGrupo = orden.map(function(i){ return grupo.paradas[i]; });
+      } else {
+        ordenadasGrupo = grupo.paradas;
+      }
+      acumulado = acumulado.concat(ordenadasGrupo);
+      procesarGrupo(idx+1, ultimaCoord || grupo.coords[grupo.coords.length-1], acumulado);
+    });
+  }
+  procesarGrupo(0, coordInicio, []);
 }
 
 // Función para normalizar nombres de comunas (quita tildes, espacios extra)
@@ -1531,15 +1635,7 @@ function generarRutaOptimizada(){
       coordsArr[i] = coords || BASE_COORDS;
       pendientesGeo--;
       if(pendientesGeo === 0){
-        var todasCoords = [BASE_COORDS].concat(coordsArr).concat([BASE_COORDS]);
-        optimizarRutaORS(todasCoords, function(orden){
-          var ordenadas;
-          if(orden && orden.length > 0){
-            ordenadas = orden.map(function(i){ return paradasORS[i]; });
-          } else {
-            ordenadas = paradasORS;
-          }
-          // Agrupar paradas de la misma calle que quedaron contiguas en el orden ORS
+        optimizarPorComunasEncadenado(paradasORS, coordsArr, BASE_COORDS, BASE_COORDS, function(ordenadas){
           rutaOrdenadas = agruparCallesContiguas(ordenadas.concat(paradasExtra));
           mostrarListaRutaOptimizada();
         });
@@ -1692,6 +1788,7 @@ function recalcularConOrigen(origenCoords, pendientes){
       paradasUnicas.push({dir:dir, calle:calle, comuna:comuna.toLowerCase(), ordenes:ordenesDir, prioridad:getPrioridadComuna(comuna, new Date().getDay())});
     }
   });
+  paradasUnicas.sort(function(a,b){ return a.prioridad - b.prioridad; });
 
   var MAX_ORS = 48;
   var paradasORS = paradasUnicas.slice(0, MAX_ORS);
@@ -1704,14 +1801,9 @@ function recalcularConOrigen(origenCoords, pendientes){
       coordsArr[i] = coords || BASE_COORDS;
       pendientesGeo--;
       if(pendientesGeo === 0){
-        // Usar ubicación actual como origen en vez de la base
-        var todasCoords = [origenCoords].concat(coordsArr).concat([BASE_COORDS]);
-        optimizarRutaORS(todasCoords, function(orden){
-          if(orden && orden.length > 0){
-            rutaOrdenadas = orden.map(function(i){ return paradasORS[i]; }).concat(paradasExtra);
-          } else {
-            rutaOrdenadas = paradasORS.concat(paradasExtra);
-          }
+        // Usar ubicación actual como origen en vez de la base, optimizando comuna por comuna
+        optimizarPorComunasEncadenado(paradasORS, coordsArr, origenCoords, BASE_COORDS, function(ordenadas){
+          rutaOrdenadas = ordenadas.concat(paradasExtra);
           mostrarListaRutaOptimizada();
         });
       }
@@ -2195,6 +2287,20 @@ function exportarReporteMensual(){
 // ════════════════════════════════════════
 // HISTORIAL
 // ════════════════════════════════════════
+function marcarTodoTipo(tipo){
+  if(paquetes.length === 0){
+    alert('No hay órdenes cargadas todavía.');
+    return;
+  }
+  var confirmar = confirm('¿Marcar las '+paquetes.length+' órdenes cargadas actualmente como "'+tipo+'"? Esto reemplaza el tipo que tenían antes.');
+  if(!confirmar) return;
+  paquetes.forEach(function(p){ p.tipo = tipo; });
+  guardarStorage();
+  actualizarResumen();
+  renderPaquetes();
+  alert('✅ Listo, las '+paquetes.length+' órdenes quedaron marcadas como "'+tipo+'".');
+}
+
 function vaciarOrdenesActuales(){
   if(paquetes.length === 0){
     alert('No hay órdenes cargadas actualmente en el teléfono.');
