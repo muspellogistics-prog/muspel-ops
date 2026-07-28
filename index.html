@@ -25,6 +25,9 @@
   .tab{flex:0 0 88px;min-width:88px;padding:10px 6px 8px;text-align:center;font-size:0.66rem;font-weight:600;color:rgba(255,255,255,0.55);cursor:pointer;border-bottom:3px solid transparent;transition:all .2s;white-space:nowrap;letter-spacing:0.3px;text-transform:uppercase;}
   .tab.active{color:#fff;border-bottom-color:#7ec8f4;}
   .tab:hover:not(.active){color:rgba(255,255,255,0.8);}
+  .perfil-btn{display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);color:#fff;padding:5px 10px;border-radius:20px;font-size:0.68rem;font-weight:700;cursor:pointer;margin-top:4px;}
+  .perfil-btn:active{background:rgba(255,255,255,0.22);}
+  body:not(.perfil-comercial) .solo-comercial{display:none !important;}
   /* CONTENIDO */
   .content{display:none;padding:14px;max-width:700px;margin:0 auto;}
   .content.active{display:block;}
@@ -102,6 +105,11 @@
   .dash-card-title{font-size:0.7rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;}
   .dash-big{font-size:2rem;font-weight:800;color:var(--azul);line-height:1;}
   .dash-sub{font-size:0.72rem;color:#94a3b8;margin-top:4px;}
+  .subtabs{display:flex;gap:8px;margin-bottom:14px;}
+  .subtab{flex:1;text-align:center;padding:10px 6px;border-radius:10px;font-size:0.78rem;font-weight:700;background:var(--blanco);border:1px solid var(--borde);color:#64748b;cursor:pointer;transition:all .2s;}
+  .subtab.active{background:var(--azul);color:#fff;border-color:var(--azul);}
+  .subcontent{display:none;}
+  .subcontent.active{display:block;}
   .semana-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--borde);font-size:0.78rem;}
   .semana-row:last-child{border-bottom:none;}
   /* CIERRE */
@@ -187,6 +195,10 @@
       <span class="modal-campo-label">📋 Estado actual</span>
       <span class="modal-campo-valor" id="modal-estado">—</span>
     </div>
+    <div class="modal-campo" id="modal-motivo-row" style="display:none;">
+      <span class="modal-campo-label">📝 Motivo</span>
+      <span class="modal-campo-valor" id="modal-motivo">—</span>
+    </div>
     <div id="modal-repetido" style="display:none;margin-top:8px;padding:8px 12px;background:#fee2e2;border-radius:8px;font-size:0.78rem;color:var(--rojo);font-weight:600;">⚠️ Esta orden ya existía en un día anterior — verificar con Alas</div>
     <div class="modal-acciones" id="modal-acciones"></div>
   </div>
@@ -201,17 +213,18 @@
     <div style="font-size:0.75rem;color:#a8c4e0;" id="header-paquetes">0 órdenes</div>
     <div style="font-size:0.72rem;color:#7ec8f4;" id="header-ef">—</div>
     <div id="sync-indicator" style="margin-top:4px;"></div>
+    <div class="perfil-btn" onclick="cambiarPerfil()" id="perfil-btn">👷 Operativo</div>
   </div>
 </div>
 
 <div class="tabs">
   <div class="tab active" onclick="showTab('resumen')">📊 Resumen</div>
-  <div class="tab" onclick="showTab('importar')">📥 Importar</div>
+  <div class="tab solo-comercial" onclick="showTab('importar')">📥 Importar</div>
   <div class="tab" onclick="showTab('paquetes')">📦 Órdenes</div>
   <div class="tab" onclick="showTab('qr')">📷 QR</div>
   <div class="tab" onclick="showTab('cierre')">✅ Cierre</div>
-  <div class="tab" onclick="showTab('dashboard')">📈 Dashboard</div>
-  <div class="tab" onclick="showTab('historial')">🗂 Historial</div>
+  <div class="tab solo-comercial" onclick="showTab('dashboard')">📈 Dashboard</div>
+  <div class="tab solo-comercial" onclick="showTab('historial')">🗂 Historial</div>
 </div>
 
 <!-- ══════════════════════════════════════════ -->
@@ -238,9 +251,9 @@
     <div class="stat naranja" onclick="abrirResumenDetalle('ramal')" style="cursor:pointer;"><div class="stat-n" id="s-ramal" style="font-size:1.4rem;">0</div><div class="stat-label">Ramal</div></div>
   </div>
   <div class="card">
-    <div class="card-title">💰 Ingresos estimados hoy</div>
-    <div style="font-size:2rem;font-weight:800;color:var(--verde);" id="s-ingreso">$0</div>
-    <div style="font-size:0.72rem;color:#64748b;margin-top:4px;">Solo entregas confirmadas × $2.000</div>
+    <div class="card-title">📊 Efectividad del mes</div>
+    <div style="font-size:2rem;font-weight:800;color:var(--azul);" id="s-ef-mes-txt">0%</div>
+    <div style="font-size:0.72rem;color:#94a3b8;margin-top:4px;">Acumulada del historial de días cerrados</div>
   </div>
   <div class="card">
     <div class="card-title">⚙️ Configuración operacional</div>
@@ -370,28 +383,50 @@
 <!-- TAB: DASHBOARD -->
 <!-- ══════════════════════════════════════════ -->
 <div class="content" id="tab-dashboard">
-  <div class="dash-grid">
-    <div class="dash-card">
-      <div class="dash-card-title">Entregas este mes</div>
-      <div class="dash-big" id="d-entregas-mes">0</div>
-      <div class="dash-sub" id="d-dias-mes">0 días operados</div>
+  <div class="subtabs">
+    <div class="subtab active" id="subtab-btn-ingresos" onclick="showDashSub('ingresos')">💰 Ingresos</div>
+    <div class="subtab" id="subtab-btn-efectividad" onclick="showDashSub('efectividad')">📊 Efectividad</div>
+  </div>
+
+  <div class="subcontent active" id="subtab-ingresos">
+    <div class="dash-grid">
+      <div class="dash-card">
+        <div class="dash-card-title">Entregas este mes</div>
+        <div class="dash-big" id="d-entregas-mes">0</div>
+        <div class="dash-sub" id="d-dias-mes">0 días operados</div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-card-title">Ingreso NETO del mes</div>
+        <div class="dash-big" id="d-ingresos-mes" style="font-size:1.4rem;color:var(--verde);">$0</div>
+        <div class="dash-sub">sin IVA</div>
+      </div>
     </div>
-    <div class="dash-card">
-      <div class="dash-card-title">Ingresos del mes</div>
-      <div class="dash-big" id="d-ingresos-mes" style="font-size:1.4rem;color:var(--verde);">$0</div>
-      <div class="dash-sub">× $2.000 por entrega</div>
-    </div>
-    <div class="dash-card">
-      <div class="dash-card-title">Efectividad promedio</div>
-      <div class="dash-big" id="d-efectividad">—</div>
-      <div class="dash-sub">entregas / recibidos</div>
-    </div>
-    <div class="dash-card">
-      <div class="dash-card-title">Total devoluciones</div>
-      <div class="dash-big" id="d-devoluciones" style="color:var(--rojo);">0</div>
-      <div class="dash-sub" id="d-tasa-dev">0% del total</div>
+    <div class="card">
+      <div class="card-title">🎯 Rango de bono aplicado</div>
+      <div style="font-size:0.8rem;color:#64748b;margin-bottom:6px;" id="d-bono-rango">≥97% efectividad → $2.070 + $230 bono</div>
+      <div style="font-size:1rem;font-weight:700;color:var(--azul);" id="d-bono-valor">$2.300 neto por entrega</div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--borde);">
+        <div class="dash-card-title">Total a facturar (+IVA)</div>
+        <div style="font-size:1.6rem;font-weight:800;color:var(--verde);" id="d-total-iva">$0</div>
+      </div>
     </div>
   </div>
+
+  <div class="subcontent" id="subtab-efectividad">
+    <div class="dash-grid">
+      <div class="dash-card">
+        <div class="dash-card-title">Efectividad del mes</div>
+        <div class="dash-big" id="d-efectividad">—</div>
+        <div class="dash-sub">entregas / recibidos</div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-card-title">Total devoluciones</div>
+        <div class="dash-big" id="d-devoluciones" style="color:var(--rojo);">0</div>
+        <div class="dash-sub" id="d-tasa-dev">0% del total</div>
+      </div>
+    </div>
+  </div>
+
   <div class="card">
     <div class="card-title">📅 Últimos días operados</div>
     <div id="d-dias-lista"></div>
@@ -411,6 +446,11 @@
     <div id="lista-historial"></div>
     <div id="historial-vacio" class="alerta alerta-info" style="display:none">Aún no hay días cerrados.</div>
   </div>
+  <div class="card">
+    <div class="card-title">↩️ ¿Se cerró el día por error?</div>
+    <div style="font-size:0.78rem;color:#64748b;margin-bottom:10px;">Esto deshace SOLO el último día cerrado, devolviendo sus órdenes a Resumen/Órdenes para corregirlas. No afecta días anteriores.</div>
+    <button class="btn btn-rojo" onclick="reabrirUltimoDia()">↩️ Reabrir último día cerrado</button>
+  </div>
 </div>
 
 <script>
@@ -418,6 +458,83 @@
 // CONFIGURACIÓN GOOGLE SHEETS
 // ════════════════════════════════════════
 var SHEETS_URL = 'https://script.google.com/macros/s/AKfycbx6aAlb99tMoR2leEQep0V7k3fBFh2JxvpjWXdwKuY1n4NUptpO6stNSc4gFU0xEalG/exec';
+
+// ════════════════════════════════════════
+// TARIFAS REALES (Anexo Nº1 - Contrato ALAS)
+// ════════════════════════════════════════
+var TARIFA_BASE = 2070;   // Valor NETO por entrega (sin IVA)
+var IVA_TASA = 0.19;
+
+function calcularBonoEfectividad(efPct){
+  if(efPct>=97) return 230;
+  if(efPct>=96) return 115;
+  if(efPct>=95) return 50;
+  return 0;
+}
+
+// Valor neto por entrega, según el tramo de efectividad del MES (no del día)
+function valorPorEntregaNeto(efPct){
+  return TARIFA_BASE + calcularBonoEfectividad(efPct);
+}
+
+// ════════════════════════════════════════
+// CONTEO POR ORDEN (no por bulto)
+// ALAS paga por ORDEN entregada. Un multibulto (mismo folio, varios bultos)
+// cuenta como 1 sola orden. Una orden solo cuenta "entregada" si TODOS sus
+// bultos quedaron con estado 'entregado'.
+// ════════════════════════════════════════
+function contarOrdenes(arr){
+  var grupos = {};
+  arr.forEach(function(p){
+    var key = (p.folio && p.folio.trim()) ? p.folio.trim() : ('__solo_'+p.id);
+    if(!grupos[key]) grupos[key] = [];
+    grupos[key].push(p);
+  });
+  var total = 0, entregados = 0;
+  Object.keys(grupos).forEach(function(key){
+    total++;
+    var todosEntregados = grupos[key].every(function(p){return p.estado==='entregado';});
+    if(todosEntregados) entregados++;
+  });
+  return {total:total, entregados:entregados};
+}
+
+// Igual que contarOrdenes, pero clasifica cada orden en su estado real
+// (entregada / devuelta / dañada / pendiente), asumiendo que todos los
+// bultos de una misma orden se entregan/devuelven juntos.
+function contarOrdenesPorEstado(arr){
+  var grupos = {};
+  arr.forEach(function(p){
+    var key = (p.folio && p.folio.trim()) ? p.folio.trim() : ('__solo_'+p.id);
+    if(!grupos[key]) grupos[key] = [];
+    grupos[key].push(p);
+  });
+  var total=0, entregadas=0, devueltas=0, daniadas=0, pendientes=0;
+  Object.keys(grupos).forEach(function(key){
+    total++;
+    var items = grupos[key];
+    if(items.every(function(p){return p.estado==='entregado';})) entregadas++;
+    else if(items.every(function(p){return p.estado==='devuelto';})) devueltas++;
+    else if(items.every(function(p){return p.estado==='daniado';})) daniadas++;
+    else pendientes++; // pendiente, o mezcla (caso excepcional)
+  });
+  return {total:total, entregadas:entregadas, devueltas:devueltas, daniadas:daniadas, pendientes:pendientes};
+}
+
+// Efectividad acumulada del mes en curso (historial cerrado + día de hoy en progreso)
+function efectividadMesActual(){
+  var totalEnt=0, totalRec=0;
+  historial.forEach(function(h){
+    totalEnt += (h.entregadosOrdenes!=null ? h.entregadosOrdenes : h.entregados);
+    totalRec += (h.totalOrdenes!=null ? h.totalOrdenes : h.total);
+  });
+  var ordHoy = contarOrdenes(paquetes);
+  totalEnt += ordHoy.entregados; totalRec += ordHoy.total;
+  return totalRec>0?Math.round(totalEnt/totalRec*100):0;
+}
+
+function formatoPesos(n){ return '$'+Math.round(n).toLocaleString('es-CL'); }
+
 var SYNC_PENDIENTE = [];
 var sincronizando = false;
 var TAMANO_LOTE = 50; // órdenes por lote al subir
@@ -588,6 +705,42 @@ setInterval(function(){
 // ════════════════════════════════════════
 var paquetes = [];
 var historial = [];
+
+// ════════════════════════════════════════
+// PERFILES: Operativo vs Comercial
+// ════════════════════════════════════════
+var PIN_COMERCIAL = '2026'; // clave simple para entrar a modo Comercial. Cámbiala aquí si quieres otra.
+var perfilActual = localStorage.getItem('muspel_perfil') || 'operativo';
+
+function aplicarPerfil(){
+  document.body.classList.toggle('perfil-comercial', perfilActual==='comercial');
+  var btn = document.getElementById('perfil-btn');
+  if(btn) btn.textContent = perfilActual==='comercial' ? '💼 Comercial' : '👷 Operativo';
+  // Si estaba en una pestaña solo-comercial y se vuelve a Operativo, manda a Resumen
+  if(perfilActual==='operativo'){
+    var tabActivo = document.querySelector('.content.active');
+    if(tabActivo && (tabActivo.id==='tab-dashboard' || tabActivo.id==='tab-historial' || tabActivo.id==='tab-importar')){
+      document.querySelectorAll('.content').forEach(function(c){c.classList.remove('active');});
+      document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active');});
+      document.getElementById('tab-resumen').classList.add('active');
+      document.querySelector('.tab[onclick*="resumen"]').classList.add('active');
+      actualizarResumen();
+    }
+  }
+}
+
+function cambiarPerfil(){
+  if(perfilActual==='comercial'){
+    perfilActual='operativo';
+  } else {
+    var pin = prompt('Clave para entrar a modo Comercial:');
+    if(pin===null) return;
+    if(pin.trim()!==PIN_COMERCIAL){ alert('Clave incorrecta.'); return; }
+    perfilActual='comercial';
+  }
+  localStorage.setItem('muspel_perfil', perfilActual);
+  aplicarPerfil();
+}
 var qrScanner = null;
 var qrActivo = false;
 var qrPaqueteActual = null;
@@ -947,6 +1100,13 @@ function abrirModal(id){
   document.getElementById('modal-tipo').textContent = p.tipo || 'Principal';
   document.getElementById('modal-estado').textContent = estadoTextos[p.estado] || p.estado;
   document.getElementById('modal-repetido').style.display = p.repetidoDeHistorial ? 'block' : 'none';
+  var motivoRow = document.getElementById('modal-motivo-row');
+  if((p.estado==='devuelto' || p.estado==='daniado') && p.motivo){
+    document.getElementById('modal-motivo').textContent = p.motivo;
+    motivoRow.style.display = 'flex';
+  } else {
+    motivoRow.style.display = 'none';
+  }
 
   // Botones según estado actual
   var acciones = document.getElementById('modal-acciones');
@@ -973,9 +1133,14 @@ function marcarDesdeModal(estado){
   if(!modalOrdenId) return;
   var p = paquetes.find(function(x){return x.id===modalOrdenId;});
   if(p){
+    var motivo = '';
+    if(estado === 'devuelto' || estado === 'daniado'){
+      motivo = prompt('¿Por qué se marca '+(estado==='devuelto'?'Devuelto':'Dañado')+'? (opcional)') || '';
+    }
     p.estado = estado;
+    p.motivo = motivo.trim();
     p.ts_estado = Date.now();
-    enviarASheets('cambio_estado', {codigo:p.codigo, nombre:p.nombre, estado:estado, fecha:new Date().toLocaleString('es-CL')});
+    enviarASheets('cambio_estado', {codigo:p.codigo, nombre:p.nombre, estado:estado, motivo:p.motivo, fecha:new Date().toLocaleString('es-CL')});
     if(estado === 'entregado'){
       var dir = (p.dir||'').trim();
       var comuna = (p.comuna||'').trim();
@@ -1014,6 +1179,13 @@ function actualizarHeader(){
 // ════════════════════════════════════════
 // TABS
 // ════════════════════════════════════════
+function showDashSub(name){
+  document.querySelectorAll('.subcontent').forEach(function(c){c.classList.remove('active');});
+  document.querySelectorAll('.subtab').forEach(function(t){t.classList.remove('active');});
+  document.getElementById('subtab-'+name).classList.add('active');
+  document.getElementById('subtab-btn-'+name).classList.add('active');
+}
+
 function showTab(name){
   document.querySelectorAll('.content').forEach(function(c){c.classList.remove('active');});
   document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active');});
@@ -1044,7 +1216,8 @@ function actualizarResumen(){
   document.getElementById('s-pendientes').textContent = pend;
   document.getElementById('s-principal').textContent = prin;
   document.getElementById('s-ramal').textContent = ram;
-  document.getElementById('s-ingreso').textContent = '$' + (ent*2000).toLocaleString('es-CL');
+  var _efMesR = efectividadMesActual();
+  document.getElementById('s-ef-mes-txt').textContent = _efMesR+'%';
   document.getElementById('p-entregados').style.width = ef+'%';
   document.getElementById('p-efectividad-txt').textContent = ef+'%';
   actualizarHeader();
@@ -1284,23 +1457,13 @@ var rutaOrdenadas = []; // paradas en orden optimizado por ORS
 
 // Extrae el nombre de la calle quitando prefijos genéricos y números
 function extraerCalle(dir){
-  var original = (dir||'').toLowerCase().trim()
+  var d = (dir||'').toLowerCase().trim()
     .normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-  var d = original;
   // Quitar prefijos genéricos al inicio: casa N, dpto N, piso N, block N, etc.
   d = d.replace(/^(casa|dpto|departamento|piso|block|local|oficina|bodega)\s+[\w\d]+[,\s]+/i, '');
   // Quitar número al final
   d = d.replace(/\s+\d+.*$/, '');
-  d = d.replace(/\s+/g,' ').trim();
-  // Resguardo: si tras limpiar queda vacío o muy corto (ej. direcciones tipo "Casa 5"
-  // sin nombre de calle), NO devolver un string vacío/corto genérico — eso hacía que
-  // direcciones distintas (ej. "Santiago Rosas" vs "Hacienda Las Quemas") se agruparan
-  // por error al compararse como iguales ("" === ""). Usamos la dirección original
-  // completa para garantizar que cada dirección real se mantenga única.
-  if(d.length <= 3){
-    return original;
-  }
-  return d;
+  return d.replace(/\s+/g,' ').trim();
 }
 
 function generarRutaOptimizada(){
@@ -1637,9 +1800,14 @@ function renderPaquetes(){
 function marcar(id, estado){
   var p = paquetes.find(function(x){return x.id===id;});
   if(p){
+    var motivo = '';
+    if(estado === 'devuelto' || estado === 'daniado'){
+      motivo = prompt('¿Por qué se marca '+(estado==='devuelto'?'Devuelto':'Dañado')+'? (opcional)') || '';
+    }
     p.estado=estado;
+    p.motivo=motivo.trim();
     p.ts_estado=Date.now();
-    enviarASheets('cambio_estado', {codigo:p.codigo, nombre:p.nombre, estado:estado, fecha:new Date().toLocaleString('es-CL')});
+    enviarASheets('cambio_estado', {codigo:p.codigo, nombre:p.nombre, estado:estado, motivo:p.motivo, fecha:new Date().toLocaleString('es-CL')});
     if(estado === 'entregado'){
       var dir = (p.dir||'').trim();
       var comuna = (p.comuna||'').trim();
@@ -1772,15 +1940,22 @@ function limpiarQR(){
 
 function marcarTodoMultibulto(estado){
   if(!qrPaqueteActual) return;
+  var motivo = '';
+  if(estado === 'devuelto' || estado === 'daniado'){
+    motivo = prompt('¿Por qué se marca '+(estado==='devuelto'?'Devuelto':'Dañado')+'? (opcional, aplica a todos los bultos)') || '';
+  }
+  motivo = motivo.trim();
   // Marcar la orden escaneada
   qrPaqueteActual.estado = estado;
+  qrPaqueteActual.motivo = motivo;
   qrPaqueteActual.ts_estado = Date.now();
-  enviarASheets('cambio_estado', {codigo:qrPaqueteActual.codigo, nombre:qrPaqueteActual.nombre, estado:estado, fecha:new Date().toLocaleString('es-CL')});
+  enviarASheets('cambio_estado', {codigo:qrPaqueteActual.codigo, nombre:qrPaqueteActual.nombre, estado:estado, motivo:motivo, fecha:new Date().toLocaleString('es-CL')});
   // Marcar todos los demás bultos del mismo folio
   qrMultibultoActual.forEach(function(x){
     x.estado = estado;
+    x.motivo = motivo;
     x.ts_estado = Date.now();
-    enviarASheets('cambio_estado', {codigo:x.codigo, nombre:x.nombre, estado:estado, fecha:new Date().toLocaleString('es-CL')});
+    enviarASheets('cambio_estado', {codigo:x.codigo, nombre:x.nombre, estado:estado, motivo:motivo, fecha:new Date().toLocaleString('es-CL')});
   });
   guardarStorage();
   actualizarResumen();
@@ -1794,9 +1969,14 @@ function marcarTodoMultibulto(estado){
 }
 function marcarDesdeQR(estado){
   if(!qrPaqueteActual) return;
+  var motivo = '';
+  if(estado === 'devuelto' || estado === 'daniado'){
+    motivo = prompt('¿Por qué se marca '+(estado==='devuelto'?'Devuelto':'Dañado')+'? (opcional)') || '';
+  }
   qrPaqueteActual.estado=estado;
+  qrPaqueteActual.motivo=motivo.trim();
   qrPaqueteActual.ts_estado=Date.now();
-  enviarASheets('cambio_estado', {codigo:qrPaqueteActual.codigo, nombre:qrPaqueteActual.nombre, estado:estado, fecha:new Date().toLocaleString('es-CL')});
+  enviarASheets('cambio_estado', {codigo:qrPaqueteActual.codigo, nombre:qrPaqueteActual.nombre, estado:estado, motivo:qrPaqueteActual.motivo, fecha:new Date().toLocaleString('es-CL')});
   if(estado === 'entregado'){
     var dir = (qrPaqueteActual.dir||'').trim();
     var comuna = (qrPaqueteActual.comuna||'').trim();
@@ -1820,28 +2000,47 @@ function marcarDesdeQR(estado){
 // CIERRE
 // ════════════════════════════════════════
 function actualizarCierre(){
-  var total=paquetes.length;
-  var ent=paquetes.filter(function(p){return p.estado==='entregado';}).length;
-  var dev=paquetes.filter(function(p){return p.estado==='devuelto';}).length;
-  var dan=paquetes.filter(function(p){return p.estado==='daniado';}).length;
-  var pend=paquetes.filter(function(p){return p.estado==='pendiente';}).length;
-  var ef=total>0?Math.round(ent/total*100):0;
-  var ingreso=ent*2000;
+  var ordStatsCierre=contarOrdenesPorEstado(paquetes);
+  var ef=ordStatsCierre.total>0?Math.round(ordStatsCierre.entregadas/ordStatsCierre.total*100):0;
+  var efMesActual=efectividadMesActual();
+  var valorEntrega=valorPorEntregaNeto(efMesActual);
+  var ingresoNeto=ordStatsCierre.entregadas*valorEntrega;
+  var ingresoConIva=Math.round(ingresoNeto*(1+IVA_TASA));
   document.getElementById('resumen-cierre-box').innerHTML=
-    '<div class="resumen-cierre-row"><span>Total recibidos</span><strong>'+total+'</strong></div>'+
-    '<div class="resumen-cierre-row"><span>Entregados</span><strong style="color:var(--verde)">'+ent+'</strong></div>'+
-    '<div class="resumen-cierre-row"><span>Devueltos</span><strong style="color:var(--rojo)">'+dev+'</strong></div>'+
-    '<div class="resumen-cierre-row"><span>Dañados</span><strong style="color:var(--naranja)">'+dan+'</strong></div>'+
-    '<div class="resumen-cierre-row"><span>Pendientes</span><strong style="color:var(--naranja)">'+pend+'</strong></div>'+
-    '<div class="resumen-cierre-row"><span>Efectividad</span><strong>'+ef+'%</strong></div>'+
-    '<div class="resumen-cierre-row"><span>Ingresos estimados</span><strong style="color:var(--verde)">$'+ingreso.toLocaleString('es-CL')+'</strong></div>';
+    '<div class="resumen-cierre-row"><span>Órdenes recibidas</span><strong>'+ordStatsCierre.total+'</strong></div>'+
+    '<div class="resumen-cierre-row"><span>Órdenes entregadas</span><strong style="color:var(--verde)">'+ordStatsCierre.entregadas+'</strong></div>'+
+    '<div class="resumen-cierre-row"><span>Devueltas</span><strong style="color:var(--rojo)">'+ordStatsCierre.devueltas+'</strong></div>'+
+    '<div class="resumen-cierre-row"><span>Dañadas</span><strong style="color:var(--naranja)">'+ordStatsCierre.daniadas+'</strong></div>'+
+    '<div class="resumen-cierre-row"><span>Pendientes</span><strong style="color:var(--naranja)">'+ordStatsCierre.pendientes+'</strong></div>'+
+    '<div class="resumen-cierre-row"><span>Efectividad del día</span><strong>'+ef+'%</strong></div>'+
+    '<div class="resumen-cierre-row"><span>Efectividad acum. del mes</span><strong>'+efMesActual+'%</strong></div>'+
+    '<div class="resumen-cierre-row solo-comercial"><span>Valor por entrega (neto)</span><strong>'+formatoPesos(valorEntrega)+'</strong></div>'+
+    '<div class="resumen-cierre-row solo-comercial"><span>Ingreso NETO estimado</span><strong style="color:var(--verde)">'+formatoPesos(ingresoNeto)+'</strong></div>'+
+    '<div class="resumen-cierre-row solo-comercial"><span>Total a facturar (+IVA)</span><strong style="color:#64748b">'+formatoPesos(ingresoConIva)+'</strong></div>';
 }
 
 function exportarExcelDia(){
   var fecha=new Date().toLocaleDateString('es-CL').replace(/\//g,'-');
-  var ws_data=[['Código','Folio','Nombre','Teléfono','Dirección','Comuna','Tipo','Estado','Ingreso']];
+  var _efExp=efectividadMesActual();
+  var _valExp=valorPorEntregaNeto(_efExp);
+  var _grupos={};
   paquetes.forEach(function(p){
-    ws_data.push([p.codigo,p.folio,p.nombre,p.tel,p.dir,p.comuna,p.tipo,p.estado,p.estado==='entregado'?2000:0]);
+    var key=(p.folio&&p.folio.trim())?p.folio.trim():('__solo_'+p.id);
+    if(!_grupos[key]) _grupos[key]=[];
+    _grupos[key].push(p);
+  });
+  var _ordenCompleta={};
+  Object.keys(_grupos).forEach(function(k){
+    _ordenCompleta[k]=_grupos[k].every(function(p){return p.estado==='entregado';});
+  });
+  var _yaContado={};
+  var ws_data=[['Código','Folio','Nombre','Teléfono','Dirección','Comuna','Tipo','Estado','Motivo','Orden Completa','Ingreso Neto (por orden)','Efectividad Mes %']];
+  paquetes.forEach(function(p){
+    var key=(p.folio&&p.folio.trim())?p.folio.trim():('__solo_'+p.id);
+    var completa=_ordenCompleta[key];
+    var ingresoFila=0;
+    if(completa && !_yaContado[key]){ ingresoFila=_valExp; _yaContado[key]=true; }
+    ws_data.push([p.codigo,p.folio,p.nombre,p.tel,p.dir,p.comuna,p.tipo,p.estado,p.motivo||'',completa?'Sí':'No',ingresoFila,_efExp]);
   });
   var wb=XLSX.utils.book_new();
   var ws=XLSX.utils.aoa_to_sheet(ws_data);
@@ -1850,19 +2049,22 @@ function exportarExcelDia(){
 }
 
 function enviarWhatsApp(){
-  var total=paquetes.length;
-  var ent=paquetes.filter(function(p){return p.estado==='entregado';}).length;
-  var dev=paquetes.filter(function(p){return p.estado==='devuelto';}).length;
-  var dan=paquetes.filter(function(p){return p.estado==='daniado';}).length;
-  var ef=total>0?Math.round(ent/total*100):0;
   var fecha=new Date().toLocaleDateString('es-CL');
+  var ordStatsWa=contarOrdenesPorEstado(paquetes);
+  var ef=ordStatsWa.total>0?Math.round(ordStatsWa.entregadas/ordStatsWa.total*100):0;
+  var _efWa=efectividadMesActual();
+  var _valWa=valorPorEntregaNeto(_efWa);
+  var _ingNetoWa=ordStatsWa.entregadas*_valWa;
   var msg='*MUSPEL OPS — Cierre '+fecha+'*\n\n'+
-    '📦 Recibidos: '+total+'\n'+
-    '✅ Entregados: '+ent+'\n'+
-    '↩️ Devueltos: '+dev+'\n'+
-    '⚠️ Dañados: '+dan+'\n'+
-    '📊 Efectividad: '+ef+'%\n'+
-    '💰 Ingresos: $'+(ent*2000).toLocaleString('es-CL');
+    '📦 Órdenes recibidas: '+ordStatsWa.total+'\n'+
+    '✅ Entregadas: '+ordStatsWa.entregadas+'\n'+
+    '↩️ Devueltas: '+ordStatsWa.devueltas+'\n'+
+    '⚠️ Dañadas: '+ordStatsWa.daniadas+'\n'+
+    '📊 Efectividad día: '+ef+'%\n'+
+    '📊 Efectividad mes: '+_efWa+'%';
+  if(perfilActual==='comercial'){
+    msg += '\n💰 Ingreso neto est.: '+formatoPesos(_ingNetoWa);
+  }
   window.open('https://wa.me/56952207386?text='+encodeURIComponent(msg));
 }
 
@@ -1873,19 +2075,26 @@ function cerrarDia(){
   var dan=paquetes.filter(function(p){return p.estado==='daniado';}).length;
   var pend=paquetes.filter(function(p){return p.estado==='pendiente';}).length;
   var total=paquetes.length;
+  var ordStats = contarOrdenes(paquetes);
   var fecha=new Date().toLocaleDateString('es-CL');
+  var _efCierre=efectividadMesActual();
+  var _valCierre=valorPorEntregaNeto(_efCierre);
   var registroDia = {
     fecha:fecha, ts:Date.now(),
     total:total, entregados:ent, devueltos:dev, daniados:dan, pendientes:pend,
+    totalOrdenes:ordStats.total, entregadosOrdenes:ordStats.entregados,
     efectividad:total>0?Math.round(ent/total*100):0,
-    ingresos:ent*2000,
+    efectividadMesAlCierre:_efCierre,
+    valorPorEntrega:_valCierre,
+    ingresos:ordStats.entregados*_valCierre,
     detalle:JSON.parse(JSON.stringify(paquetes))
   };
   historial.push(registroDia);
   // se envía el cierre completo del día a Sheets (resumen, sin todo el detalle para no sobrecargar)
   enviarASheets('cierre_dia', {
     fecha:fecha, total:total, entregados:ent, devueltos:dev,
-    daniados:dan, pendientes:pend, efectividad:registroDia.efectividad, ingresos:registroDia.ingresos
+    daniados:dan, pendientes:pend, totalOrdenes:ordStats.total, entregadosOrdenes:ordStats.entregados,
+    efectividad:registroDia.efectividad, ingresos:registroDia.ingresos
   });
   paquetes=[];
   guardarStorage();
@@ -1897,15 +2106,31 @@ function cerrarDia(){
 // DASHBOARD
 // ════════════════════════════════════════
 function actualizarDashboard(){
-  var totalEnt=0, totalRec=0, totalDev=0, dias=historial.length;
-  historial.forEach(function(h){totalEnt+=h.entregados;totalRec+=h.total;totalDev+=h.devueltos+h.daniados;});
-  var ef=totalRec>0?Math.round(totalEnt/totalRec*100):0;
-  var tasaDev=totalRec>0?Math.round(totalDev/totalRec*100):0;
-  document.getElementById('d-entregas-mes').textContent=totalEnt.toLocaleString('es-CL');
+  var totalEntOrd=0, totalRecOrd=0, totalDev=0, totalRecBultos=0, dias=historial.length;
+  historial.forEach(function(h){
+    totalEntOrd += (h.entregadosOrdenes!=null ? h.entregadosOrdenes : h.entregados);
+    totalRecOrd += (h.totalOrdenes!=null ? h.totalOrdenes : h.total);
+    totalDev += h.devueltos+h.daniados;
+    totalRecBultos += h.total;
+  });
+  var ef=totalRecOrd>0?Math.round(totalEntOrd/totalRecOrd*100):0;
+  var tasaDev=totalRecBultos>0?Math.round(totalDev/totalRecBultos*100):0;
+  var valorEntregaDash=valorPorEntregaNeto(ef);
+  var ingresoNetoDash=totalEntOrd*valorEntregaDash;
+  var ingresoConIvaDash=Math.round(ingresoNetoDash*(1+IVA_TASA));
+  document.getElementById('d-entregas-mes').textContent=totalEntOrd.toLocaleString('es-CL');
   document.getElementById('d-dias-mes').textContent=dias+' días operados';
-  document.getElementById('d-ingresos-mes').textContent='$'+(totalEnt*2000).toLocaleString('es-CL');
+  document.getElementById('d-ingresos-mes').textContent=formatoPesos(ingresoNetoDash);
   document.getElementById('d-efectividad').textContent=ef+'%';
   document.getElementById('d-devoluciones').textContent=totalDev;
+  var rangoTxt, bonoNum=calcularBonoEfectividad(ef);
+  if(ef>=97) rangoTxt='≥97% efectividad → $'+TARIFA_BASE.toLocaleString('es-CL')+' + $230 bono';
+  else if(ef>=96) rangoTxt='96%-97% efectividad → $'+TARIFA_BASE.toLocaleString('es-CL')+' + $115 bono';
+  else if(ef>=95) rangoTxt='95%-96% efectividad → $'+TARIFA_BASE.toLocaleString('es-CL')+' + $50 bono';
+  else rangoTxt='< 95% efectividad → $'+TARIFA_BASE.toLocaleString('es-CL')+' sin bono';
+  document.getElementById('d-bono-rango').textContent=rangoTxt;
+  document.getElementById('d-bono-valor').textContent=formatoPesos(valorEntregaDash)+' neto por entrega';
+  document.getElementById('d-total-iva').textContent=formatoPesos(ingresoConIvaDash);
   document.getElementById('d-tasa-dev').textContent=tasaDev+'% del total';
   // ultimos dias
   var lista=document.getElementById('d-dias-lista');
@@ -1925,17 +2150,35 @@ function exportarReporteMensual(){
   if(historial.length===0){alert('No hay datos en el historial todavía.');return;}
   var wb=XLSX.utils.book_new();
   // Hoja resumen
-  var resumen=[['Fecha','Recibidos','Entregados','Devueltos','Dañados','Pendientes','Efectividad %','Ingresos $']];
+  var resumen=[['Fecha','Recibidos (bultos)','Entregados (bultos)','Devueltos','Dañados','Pendientes','Órdenes Totales','Órdenes Entregadas','Efectividad Día %','Efectividad Mes al Cierre %','Valor x Entrega (Neto)','Ingresos Neto $']];
   historial.forEach(function(h){
-    resumen.push([h.fecha,h.total,h.entregados,h.devueltos,h.daniados,h.pendientes,h.efectividad,h.ingresos]);
+    resumen.push([h.fecha,h.total,h.entregados,h.devueltos,h.daniados,h.pendientes,
+      (h.totalOrdenes!=null?h.totalOrdenes:h.total),(h.entregadosOrdenes!=null?h.entregadosOrdenes:h.entregados),
+      h.efectividad,(h.efectividadMesAlCierre!=null?h.efectividadMesAlCierre:''),(h.valorPorEntrega!=null?h.valorPorEntrega:TARIFA_BASE),h.ingresos]);
   });
   var wsR=XLSX.utils.aoa_to_sheet(resumen);
   XLSX.utils.book_append_sheet(wb,wsR,'Resumen');
-  // Hoja detalle completo
-  var detalle=[['Fecha','Código','Nombre','Dirección','Comuna','Tipo','Estado','Ingreso']];
+  // Hoja detalle completo (ingreso asignado 1 sola vez por orden completa, no por bulto)
+  var detalle=[['Fecha','Código','Folio','Nombre','Dirección','Comuna','Tipo','Estado','Motivo','Orden Completa','Ingreso Neto (por orden)']];
   historial.forEach(function(h){
+    var _valH=(h.valorPorEntrega!=null?h.valorPorEntrega:TARIFA_BASE);
+    var _gruposH={};
     h.detalle.forEach(function(p){
-      detalle.push([h.fecha,p.codigo,p.nombre,p.dir,p.comuna,p.tipo,p.estado,p.estado==='entregado'?2000:0]);
+      var key=(p.folio&&p.folio.trim())?p.folio.trim():('__solo_'+p.id);
+      if(!_gruposH[key]) _gruposH[key]=[];
+      _gruposH[key].push(p);
+    });
+    var _completaH={};
+    Object.keys(_gruposH).forEach(function(k){
+      _completaH[k]=_gruposH[k].every(function(p){return p.estado==='entregado';});
+    });
+    var _yaContadoH={};
+    h.detalle.forEach(function(p){
+      var key=(p.folio&&p.folio.trim())?p.folio.trim():('__solo_'+p.id);
+      var completa=_completaH[key];
+      var ingresoFila=0;
+      if(completa && !_yaContadoH[key]){ ingresoFila=_valH; _yaContadoH[key]=true; }
+      detalle.push([h.fecha,p.codigo,p.folio,p.nombre,p.dir,p.comuna,p.tipo,p.estado,p.motivo||'',completa?'Sí':'No',ingresoFila]);
     });
   });
   var wsD=XLSX.utils.aoa_to_sheet(detalle);
@@ -1947,6 +2190,29 @@ function exportarReporteMensual(){
 // ════════════════════════════════════════
 // HISTORIAL
 // ════════════════════════════════════════
+function reabrirUltimoDia(){
+  if(historial.length === 0){
+    alert('No hay ningún día cerrado en el historial.');
+    return;
+  }
+  var ultimo = historial[historial.length - 1];
+  if(paquetes.length > 0){
+    var seguir = confirm('Tienes '+paquetes.length+' órdenes en curso sin cerrar todavía. Si reabres el día '+ultimo.fecha+', sus órdenes se van a MEZCLAR con las de hoy.\n\n¿Quieres continuar de todas formas?');
+    if(!seguir) return;
+  } else {
+    var confirmar = confirm('¿Reabrir el día '+ultimo.fecha+'? Esto lo saca del historial y devuelve sus '+ultimo.total+' órdenes a Resumen/Órdenes para que las corrijas.');
+    if(!confirmar) return;
+  }
+  var detalleRestaurado = JSON.parse(JSON.stringify(ultimo.detalle || []));
+  paquetes = paquetes.concat(detalleRestaurado);
+  historial.pop();
+  guardarStorage();
+  actualizarResumen();
+  renderPaquetes();
+  renderHistorial();
+  alert('✅ Día '+ultimo.fecha+' reabierto. Corrige lo que necesites y vuelve a cerrarlo en Cierre.\n\nOjo: si ya se había enviado el resumen a Google Sheets o por WhatsApp, avisa que ese envío queda desactualizado.');
+}
+
 function renderHistorial(){
   var lista=document.getElementById('lista-historial');
   var vacio=document.getElementById('historial-vacio');
@@ -1967,9 +2233,25 @@ function renderHistorial(){
 function exportarDiaHistorial(idx){
   var h=historial[historial.length-1-idx];
   if(!h) return;
-  var ws_data=[['Código','Folio','Nombre','Teléfono','Dirección','Comuna','Tipo','Estado','Ingreso']];
+  var _valHist=(h.valorPorEntrega!=null?h.valorPorEntrega:TARIFA_BASE);
+  var _gruposH={};
   h.detalle.forEach(function(p){
-    ws_data.push([p.codigo,p.folio,p.nombre,p.tel,p.dir,p.comuna,p.tipo,p.estado,p.estado==='entregado'?2000:0]);
+    var key=(p.folio&&p.folio.trim())?p.folio.trim():('__solo_'+p.id);
+    if(!_gruposH[key]) _gruposH[key]=[];
+    _gruposH[key].push(p);
+  });
+  var _completaH={};
+  Object.keys(_gruposH).forEach(function(k){
+    _completaH[k]=_gruposH[k].every(function(p){return p.estado==='entregado';});
+  });
+  var _yaContadoH={};
+  var ws_data=[['Codigo','Folio','Nombre','Telefono','Direccion','Comuna','Tipo','Estado','Motivo','Orden Completa','Ingreso Neto (por orden)']];
+  h.detalle.forEach(function(p){
+    var key=(p.folio&&p.folio.trim())?p.folio.trim():('__solo_'+p.id);
+    var completa=_completaH[key];
+    var ingresoFila=0;
+    if(completa && !_yaContadoH[key]){ ingresoFila=_valHist; _yaContadoH[key]=true; }
+    ws_data.push([p.codigo,p.folio,p.nombre,p.tel,p.dir,p.comuna,p.tipo,p.estado,p.motivo||'',completa?'Si':'No',ingresoFila]);
   });
   var wb=XLSX.utils.book_new();
   var ws=XLSX.utils.aoa_to_sheet(ws_data);
@@ -1980,6 +2262,7 @@ function exportarDiaHistorial(idx){
 // ════════════════════════════════════════
 // INIT
 // ════════════════════════════════════════
+aplicarPerfil();
 actualizarResumen();
 actualizarBannerOperacional();
 procesarColaSync();
