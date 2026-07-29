@@ -171,6 +171,10 @@
       <span class="modal-campo-label">📋 N° Orden Alas (Folio)</span>
       <span class="modal-campo-valor" id="modal-folio">—</span>
     </div>
+    <div class="modal-campo" id="modal-totalpaquetes-row" style="display:none;background:#fff4e0;border-radius:8px;padding:8px 10px;">
+      <span class="modal-campo-label">📦 Paquetes a entregar en esta dirección</span>
+      <span class="modal-campo-valor" id="modal-totalpaquetes" style="font-size:1.1rem;font-weight:800;color:var(--naranja);">—</span>
+    </div>
     <div class="modal-campo">
       <span class="modal-campo-label">📦 N° Bulto de entrega</span>
       <span class="modal-campo-valor" id="modal-bulto">—</span>
@@ -235,11 +239,19 @@
 <div class="content active" id="tab-resumen">
   <div class="alerta alerta-warn" id="banner-operacional" style="display:none;"></div>
   <div class="alerta alerta-info" id="alerta-dia"></div>
+  <div class="card" style="padding:12px 14px;margin-bottom:12px;">
+    <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;font-size:0.78rem;">
+      <span>📦 <b id="s-total-paquetes">0</b> paquetes</span>
+      <span>🧾 <b id="s-total-ordenes">0</b> órdenes</span>
+      <span>🔗 <b id="s-total-multibultos">0</b> multibultos</span>
+    </div>
+    <div style="font-size:0.68rem;color:#94a3b8;margin-top:4px;">Un multibulto es 1 orden con más de 1 paquete — todos sus paquetes se entregan juntos.</div>
+  </div>
   <div class="stats-grid">
-    <div class="stat azul" onclick="abrirResumenDetalle('todos')" style="cursor:pointer;"><div class="stat-n" id="s-recibidos">0</div><div class="stat-label">Recibidos</div></div>
-    <div class="stat verde" onclick="abrirResumenDetalle('entregado')" style="cursor:pointer;"><div class="stat-n" id="s-entregados">0</div><div class="stat-label">Entregados</div></div>
-    <div class="stat rojo" onclick="abrirResumenDetalle('devuelto')" style="cursor:pointer;"><div class="stat-n" id="s-devueltos">0</div><div class="stat-label">Devueltos</div></div>
-    <div class="stat naranja" onclick="abrirResumenDetalle('pendiente')" style="cursor:pointer;"><div class="stat-n" id="s-pendientes">0</div><div class="stat-label">Pendientes</div></div>
+    <div class="stat azul" onclick="abrirResumenDetalle('todos')" style="cursor:pointer;"><div class="stat-n" id="s-recibidos">0</div><div class="stat-label">Paquetes recibidos</div></div>
+    <div class="stat verde" onclick="abrirResumenDetalle('entregado')" style="cursor:pointer;"><div class="stat-n" id="s-entregados">0</div><div class="stat-label">Paquetes entregados</div></div>
+    <div class="stat rojo" onclick="abrirResumenDetalle('devuelto')" style="cursor:pointer;"><div class="stat-n" id="s-devueltos">0</div><div class="stat-label">Paquetes devueltos</div></div>
+    <div class="stat naranja" onclick="abrirResumenDetalle('pendiente')" style="cursor:pointer;"><div class="stat-n" id="s-pendientes">0</div><div class="stat-label">Paquetes pendientes</div></div>
   </div>
   <div class="prog-wrap">
     <div class="prog-label">
@@ -1108,6 +1120,21 @@ function abrirModal(id){
   document.getElementById('modal-codigo').textContent = p.codigo || '';
   document.getElementById('modal-empresa').textContent = p.b2b || '(no especificada)';
   document.getElementById('modal-folio').textContent = p.folio || '—';
+
+  // Cuántos paquetes en total tiene esta misma orden (multibulto)
+  var totalPaqRow = document.getElementById('modal-totalpaquetes-row');
+  if(p.folio && p.folio.trim()){
+    var hermanos = paquetes.filter(function(x){ return (x.folio||'').trim() === p.folio.trim(); });
+    if(hermanos.length > 1){
+      document.getElementById('modal-totalpaquetes').textContent = hermanos.length + ' paquetes (multibulto)';
+      totalPaqRow.style.display = 'flex';
+    } else {
+      totalPaqRow.style.display = 'none';
+    }
+  } else {
+    totalPaqRow.style.display = 'none';
+  }
+
   document.getElementById('modal-bulto').textContent = p.bulto || '—';
   document.getElementById('modal-dir').textContent = dirMostrar || '(sin dirección)';
   document.getElementById('modal-comuna').textContent = (p.comuna||'').trim() || '—';
@@ -1182,7 +1209,7 @@ function actualizarHeader(){
   document.getElementById('header-fecha').textContent = dias[d.getDay()] + ' ' + d.getDate() + ' de ' + meses[d.getMonth()] + ' ' + d.getFullYear();
   var total = paquetes.length;
   var ent = paquetes.filter(function(p){return p.estado==='entregado';}).length;
-  document.getElementById('header-paquetes').textContent = total + ' órdenes';
+  document.getElementById('header-paquetes').textContent = total + ' paquetes';
   document.getElementById('header-ef').textContent = total > 0 ? Math.round(ent/total*100)+'% efectividad' : '—';
   // alerta dia
   var ai = document.getElementById('alerta-dia');
@@ -1225,6 +1252,21 @@ function actualizarResumen(){
   var pend = paquetes.filter(function(p){return p.estado==='pendiente';}).length;
   var prin = paquetes.filter(function(p){return (p.tipo||'').toLowerCase()==='principal';}).length;
   var ram = paquetes.filter(function(p){return (p.tipo||'').toLowerCase()==='ramal';}).length;
+
+  // Panel Paquetes / Órdenes / Multibultos
+  var ordStatsResumen = contarOrdenes(paquetes);
+  var gruposFolio = {};
+  paquetes.forEach(function(p){
+    var key = (p.folio && p.folio.trim()) ? p.folio.trim() : ('__solo_'+p.id);
+    gruposFolio[key] = (gruposFolio[key]||0) + 1;
+  });
+  var totalMultibultos = Object.keys(gruposFolio).filter(function(k){ return gruposFolio[k] > 1; }).length;
+  var elTP = document.getElementById('s-total-paquetes');
+  var elTO = document.getElementById('s-total-ordenes');
+  var elTM = document.getElementById('s-total-multibultos');
+  if(elTP) elTP.textContent = total;
+  if(elTO) elTO.textContent = ordStatsResumen.total;
+  if(elTM) elTM.textContent = totalMultibultos;
   var ef = total > 0 ? Math.round(ent/total*100) : 0;
   document.getElementById('s-recibidos').textContent = total;
   document.getElementById('s-entregados').textContent = ent;
@@ -1573,6 +1615,26 @@ function getPrioridadComuna(comuna, diaSemana){
   return 999; // no está en la grilla del día, va al final
 }
 
+// Garantiza que las paradas queden SIEMPRE agrupadas por comuna, esté o no esa comuna
+// en la grilla del día. Si dos o más comunas no están en la grilla (prioridad 999 igual
+// para todas), antes quedaban empatadas y se mezclaban según el orden del Excel — esto
+// lo evita, asignando un orden fijo por comuna según su primera aparición.
+function ordenarParadasPorComuna(paradasUnicas, diaSemana){
+  var ordenAparicion = [];
+  var vistos = {};
+  paradasUnicas.forEach(function(p){
+    if(!vistos[p.comuna]){ vistos[p.comuna] = true; ordenAparicion.push(p.comuna); }
+  });
+  var rangoComuna = {};
+  ordenAparicion
+    .map(function(comuna, idx){ return { comuna: comuna, prioridad: getPrioridadComuna(comuna, diaSemana), idx: idx }; })
+    .sort(function(a,b){ return (a.prioridad - b.prioridad) || (a.idx - b.idx); })
+    .forEach(function(item, rango){ rangoComuna[item.comuna] = rango; });
+  var copia = paradasUnicas.slice();
+  copia.sort(function(a,b){ return rangoComuna[a.comuna] - rangoComuna[b.comuna]; });
+  return copia;
+}
+
 var rutaTramoActual = 0;
 var rutaParadasTotal = [];
 var rutaOrdenadas = []; // paradas en orden optimizado por ORS
@@ -1630,7 +1692,7 @@ function generarRutaOptimizada(){
       });
     }
   });
-  paradasUnicas.sort(function(a,b){ return a.prioridad - b.prioridad; });
+  paradasUnicas = ordenarParadasPorComuna(paradasUnicas, diaSemana);
 
   // Mostrar indicador de carga
   var listaRuta = document.getElementById('lista-ruta-optimizada');
@@ -1779,6 +1841,7 @@ function siguienteTramo(){ generarRutaOptimizada(); }
 function actualizarBotonRuta(){}
 
 function recalcularConOrigen(origenCoords, pendientes){
+  var diaSemana = new Date().getDay();
   // Construir paradas agrupadas por CALLE
   var vistas = {};
   var paradasUnicas = [];
@@ -1798,10 +1861,10 @@ function recalcularConOrigen(origenCoords, pendientes){
         else d = d + ', ' + c + ', Chile';
         return extraerCalle(d) === calle && c.toLowerCase() === comuna.toLowerCase();
       });
-      paradasUnicas.push({dir:dir, calle:calle, comuna:comuna.toLowerCase(), ordenes:ordenesDir, prioridad:getPrioridadComuna(comuna, new Date().getDay())});
+      paradasUnicas.push({dir:dir, calle:calle, comuna:comuna.toLowerCase(), ordenes:ordenesDir, prioridad:getPrioridadComuna(comuna, diaSemana)});
     }
   });
-  paradasUnicas.sort(function(a,b){ return a.prioridad - b.prioridad; });
+  paradasUnicas = ordenarParadasPorComuna(paradasUnicas, diaSemana);
 
   var MAX_ORS = 48;
   var paradasORS = paradasUnicas.slice(0, MAX_ORS);
