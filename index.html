@@ -1299,8 +1299,10 @@ function importarExcel(input){
       // La fila real de encabezados es la que contiene "CÓDIGO PAQUETE"
       var headerRowIdx = 0;
       for(var hi=0; hi<Math.min(3,data.length); hi++){
-        var rowStr = (data[hi]||[]).join('|').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-        if(rowStr.indexOf('CODIGO PAQUETE') !== -1 || rowStr.indexOf('FOLIO') !== -1){ headerRowIdx = hi; break; }
+        var celdasFila = (data[hi]||[]).map(function(v){
+          return String(v||'').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+        });
+        if(celdasFila.indexOf('CODIGO PAQUETE') !== -1 || celdasFila.indexOf('FOLIO') !== -1){ headerRowIdx = hi; break; }
       }
       var header = data[headerRowIdx];
       var idx = {};
