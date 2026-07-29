@@ -20,13 +20,13 @@
   .header-logo span{color:#7ec8f4;font-weight:400;font-size:0.85rem;letter-spacing:1px;margin-left:6px;}
   .header-fecha{font-size:0.75rem;color:#a8c4e0;}
   /* TABS */
-  .tabs{display:flex;background:var(--azul);border-top:1px solid rgba(255,255,255,0.1);overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;touch-action:pan-x;}
+  .tabs{display:flex;background:var(--azul);border-top:1px solid rgba(255,255,255,0.1);overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;touch-action:pan-x;position:sticky;z-index:99;box-shadow:0 2px 6px rgba(0,0,0,0.12);}
   .tabs::-webkit-scrollbar{display:none;}
   .tab{flex:0 0 88px;min-width:88px;padding:10px 6px 8px;text-align:center;font-size:0.66rem;font-weight:600;color:rgba(255,255,255,0.55);cursor:pointer;border-bottom:3px solid transparent;transition:all .2s;white-space:nowrap;letter-spacing:0.3px;text-transform:uppercase;}
   .tab.active{color:#fff;border-bottom-color:#7ec8f4;}
   .tab:hover:not(.active){color:rgba(255,255,255,0.8);}
-  .perfil-btn{display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);color:#fff;padding:5px 10px;border-radius:20px;font-size:0.68rem;font-weight:700;cursor:pointer;margin-top:4px;}
-  .perfil-btn:active{background:rgba(255,255,255,0.22);}
+  .perfil-flotante{display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.14);color:#fff;border:1px solid rgba(255,255,255,0.3);padding:3px 9px;border-radius:20px;font-size:0.62rem;font-weight:700;cursor:pointer;white-space:nowrap;}
+  .perfil-flotante:active{background:rgba(255,255,255,0.24);}
   body:not(.perfil-comercial) .solo-comercial{display:none !important;}
   /* CONTENIDO */
   .content{display:none;padding:14px;max-width:700px;margin:0 auto;}
@@ -204,20 +204,22 @@
   </div>
 </div>
 
-<div class="header">
+<div class="header" id="app-header">
   <div>
     <div class="header-logo">MUSPEL <span>OPS</span></div>
-    <div class="header-fecha" id="header-fecha"></div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div class="header-fecha" id="header-fecha"></div>
+      <div class="perfil-flotante" onclick="cambiarPerfil()" id="perfil-btn">👷 Operativo</div>
+    </div>
   </div>
   <div style="text-align:right">
     <div style="font-size:0.75rem;color:#a8c4e0;" id="header-paquetes">0 órdenes</div>
     <div style="font-size:0.72rem;color:#7ec8f4;" id="header-ef">—</div>
     <div id="sync-indicator" style="margin-top:4px;"></div>
-    <div class="perfil-btn" onclick="cambiarPerfil()" id="perfil-btn">👷 Operativo</div>
   </div>
 </div>
 
-<div class="tabs">
+<div class="tabs" id="tabs-nav">
   <div class="tab active" onclick="showTab('resumen')">📊 Resumen</div>
   <div class="tab solo-comercial" onclick="showTab('importar')">📥 Importar</div>
   <div class="tab" onclick="showTab('paquetes')">📦 Órdenes</div>
@@ -1187,6 +1189,7 @@ function actualizarHeader(){
   if(total === 0) ai.textContent = 'Sin órdenes cargadas. Ve a Importar para cargar el Excel de Alas.';
   else ai.textContent = 'Operación en curso — ' + ent + ' de ' + total + ' órdenes entregadas.';
   actualizarIndicadorSync();
+  if(typeof ajustarPosicionTabs === 'function') setTimeout(ajustarPosicionTabs, 0);
 }
 
 // ════════════════════════════════════════
@@ -2397,6 +2400,17 @@ function exportarDiaHistorial(idx){
 // ════════════════════════════════════════
 // INIT
 // ════════════════════════════════════════
+function ajustarPosicionTabs(){
+  var header = document.getElementById('app-header');
+  var tabs = document.getElementById('tabs-nav');
+  if(header && tabs){
+    tabs.style.top = header.offsetHeight + 'px';
+  }
+}
+window.addEventListener('resize', ajustarPosicionTabs);
+setTimeout(ajustarPosicionTabs, 50);
+setTimeout(ajustarPosicionTabs, 300); // por si el header cambia de alto tras cargar datos
+
 aplicarPerfil();
 actualizarResumen();
 actualizarBannerOperacional();
