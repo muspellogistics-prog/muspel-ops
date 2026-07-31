@@ -658,11 +658,24 @@ function descargarOrdenesDesdeSheets(onFin){
     }
     // fila 0 es encabezado: id,codigo,folio,bulto,nombre,tel,dir,comuna,region,tipo,b2b,estado,ts,repetidoDeHistorial
     var importadas = 0;
+    var actualizadas = 0;
     rows.slice(1).forEach(function(row){
       if(!row[1]) return; // sin código, skip
       var codigo = String(row[1]).trim();
       if(!codigo) return;
-      if(paquetes.find(function(p){ return p.codigo === codigo; })) return; // ya existe
+      var existente = paquetes.find(function(p){ return p.codigo === codigo; });
+      if(existente){
+        // Ya existe localmente: si en Sheets hay un cambio de estado MÁS NUEVO
+        // (por ejemplo, marcado desde otro teléfono/compu), lo traemos acá también.
+        var estadoNube = String(row[11]||'').trim();
+        var tsNube = row[12] || 0;
+        if(estadoNube && estadoNube !== existente.estado && tsNube > (existente.ts_estado || existente.ts || 0)){
+          existente.estado = estadoNube;
+          existente.ts_estado = tsNube;
+          actualizadas++;
+        }
+        return;
+      }
       paquetes.push({
         id: row[0] || Date.now(),
         codigo: codigo,
@@ -681,12 +694,20 @@ function descargarOrdenesDesdeSheets(onFin){
       });
       importadas++;
     });
-    if(importadas > 0){
+    if(importadas > 0 || actualizadas > 0){
       guardarStorage();
       actualizarResumen();
+      renderPaquetes();
     }
-    if(status) { status.style.color='var(--verde)'; status.textContent = importadas > 0 ? '✅ '+importadas+' órdenes descargadas desde la nube.' : ''; }
-    if(onFin) onFin(importadas);
+    if(status) {
+      status.style.color='var(--verde)';
+      if(importadas > 0 || actualizadas > 0){
+        status.textContent = '✅ '+importadas+' órdenes nuevas, '+actualizadas+' estados actualizados desde la nube.';
+      } else {
+        status.textContent = '';
+      }
+    }
+    if(onFin) onFin(importadas + actualizadas);
   }).catch(function(err){
     if(status) { status.style.color='var(--rojo)'; status.textContent = '❌ Error al descargar desde la nube.'; }
     if(onFin) onFin(0);
@@ -719,8 +740,17 @@ function sincronizarTodo(){
   var box = document.getElementById('sync-status-box');
   if(box) box.innerHTML = '🔄 Sincronizando...';
   procesarColaSync();
-  setTimeout(actualizarIndicadorSync, 1500);
+  descargarOrdenesDesdeSheets(function(){
+    setTimeout(actualizarIndicadorSync, 500);
+  });
 }
+
+// Trae automáticamente los cambios de estado de otros teléfonos/computadores
+// cada 30 segundos, para que el Resumen/Dashboard se mantengan al día solos.
+setInterval(function(){
+  descargarOrdenesDesdeSheets();
+  descargarCierresDesdeSheets();
+}, 30000);
 
 // reintenta automáticamente cada 20 segundos si quedan pendientes
 setInterval(function(){
@@ -1237,8 +1267,14 @@ function showTab(name){
   if(name==='paquetes') renderPaquetes();
   if(name==='resumen') actualizarResumen();
   if(name==='cierre') actualizarCierre();
-  if(name==='historial') renderHistorial();
-  if(name==='dashboard') actualizarDashboard();
+  if(name==='historial'){
+    renderHistorial();
+    descargarCierresDesdeSheets(function(n){ if(n>0) renderHistorial(); });
+  }
+  if(name==='dashboard'){
+    actualizarDashboard();
+    descargarCierresDesdeSheets(function(n){ if(n>0) actualizarDashboard(); });
+  }
   if(name!=='qr' && qrActivo) detenerQR();
 }
 
@@ -2269,7 +2305,8 @@ function cerrarDia(){
   enviarASheets('cierre_dia', {
     fecha:fecha, total:total, entregados:ent, devueltos:dev,
     daniados:dan, pendientes:pend, totalOrdenes:ordStats.total, entregadosOrdenes:ordStats.entregados,
-    efectividad:registroDia.efectividad, ingresos:registroDia.ingresos
+    efectividad:registroDia.efectividad, efectividadMesAlCierre:registroDia.efectividadMesAlCierre,
+    valorPorEntrega:registroDia.valorPorEntrega, ingresos:registroDia.ingresos
   });
   paquetes=[];
   guardarStorage();
@@ -2280,6 +2317,48 @@ function cerrarDia(){
 // ════════════════════════════════════════
 // DASHBOARD
 // ════════════════════════════════════════
+// Trae los cierres de día guardados en Sheets (por CUALQUIER dispositivo) y los combina
+// con el historial local, sin duplicar. Así el Dashboard muestra el acumulado real del
+// mes sin importar en qué teléfono/compu se haya cerrado cada día.
+function descargarCierresDesdeSheets(callback){
+  fetch(SHEETS_URL + '?tipo=cierres').then(function(r){ return r.json(); }).then(function(rows){
+    if(!rows || rows.length <= 1){ if(callback) callback(0); return; }
+    // encabezado: fecha,total,entregados,devueltos,daniados,pendientes,totalOrdenes,
+    //             entregadosOrdenes,efectividad,efectividadMesAlCierre,valorPorEntrega,ingresos,ts
+    var fechasLocales = {};
+    historial.forEach(function(h){ fechasLocales[h.fecha] = true; });
+    var agregados = 0;
+    rows.slice(1).forEach(function(row){
+      var fechaCierre = String(row[0]||'').trim();
+      if(!fechaCierre || fechasLocales[fechaCierre]) return; // ya lo tenemos localmente
+      historial.push({
+        fecha: fechaCierre,
+        ts: row[12] || Date.now(),
+        total: Number(row[1])||0,
+        entregados: Number(row[2])||0,
+        devueltos: Number(row[3])||0,
+        daniados: Number(row[4])||0,
+        pendientes: Number(row[5])||0,
+        totalOrdenes: Number(row[6])||0,
+        entregadosOrdenes: Number(row[7])||0,
+        efectividad: Number(row[8])||0,
+        efectividadMesAlCierre: Number(row[9])||0,
+        valorPorEntrega: Number(row[10])||0,
+        ingresos: Number(row[11])||0,
+        detalle: [], // el detalle por paquete no viaja en el resumen de Sheets
+        sincronizadoDesdeNube: true
+      });
+      fechasLocales[fechaCierre] = true;
+      agregados++;
+    });
+    if(agregados > 0){
+      historial.sort(function(a,b){ return (a.ts||0) - (b.ts||0); });
+      guardarStorage();
+    }
+    if(callback) callback(agregados);
+  }).catch(function(){ if(callback) callback(0); });
+}
+
 function actualizarDashboard(){
   var totalEntOrd=0, totalRecOrd=0, totalDev=0, totalRecBultos=0, dias=historial.length;
   historial.forEach(function(h){
