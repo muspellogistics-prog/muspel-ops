@@ -396,9 +396,9 @@
   <div class="card">
     <div class="card-title">✅ Resumen de cierre del día</div>
     <div class="resumen-cierre" id="resumen-cierre-box"></div>
-    <button class="btn btn-verde" onclick="exportarExcelDia()">📥 Exportar Excel del día</button>
-    <button class="btn btn-primary" onclick="enviarWhatsApp()">💬 Enviar resumen por WhatsApp</button>
-    <button class="btn btn-outline" onclick="cerrarDia()">🔒 Cerrar día y guardar en historial</button>
+    <button class="btn btn-verde" id="btn-exportar-excel-dia" onclick="exportarExcelDia()">📥 Exportar Excel del día</button>
+    <button class="btn btn-primary" id="btn-enviar-whatsapp" onclick="enviarWhatsApp()">💬 Enviar resumen por WhatsApp</button>
+    <button class="btn btn-outline" id="btn-cerrar-dia" onclick="cerrarDia()">🔒 Cerrar día y guardar en historial</button>
   </div>
 </div>
 
@@ -2293,6 +2293,41 @@ function marcarDesdeQR(estado){
 // CIERRE
 // ════════════════════════════════════════
 function actualizarCierre(){
+  var btnCerrar = document.getElementById('btn-cerrar-dia');
+  var btnExcel = document.getElementById('btn-exportar-excel-dia');
+  var btnWa = document.getElementById('btn-enviar-whatsapp');
+
+  if(paquetes.length === 0){
+    // No hay órdenes cargadas: o todavía no se importó nada, o el día ya se cerró recién.
+    var ultimoCierre = historial.length > 0 ? historial[historial.length-1] : null;
+    var hoy = new Date();
+    var hoyDDMMAAAA = String(hoy.getDate()).padStart(2,'0')+'-'+String(hoy.getMonth()+1).padStart(2,'0')+'-'+hoy.getFullYear();
+    var pareceCerradoHoy = ultimoCierre && formatoFechaLegible(ultimoCierre.fecha) === hoyDDMMAAAA;
+
+    if(pareceCerradoHoy){
+      document.getElementById('resumen-cierre-box').innerHTML =
+        '<div style="text-align:center;padding:20px 10px;">'+
+        '<div style="font-size:2.2rem;">✅</div>'+
+        '<div style="font-weight:800;color:var(--verde);font-size:1.05rem;margin-top:6px;">Día ya cerrado</div>'+
+        '<div style="font-size:0.8rem;color:#64748b;margin-top:6px;">El día de hoy ('+hoyDDMMAAAA+') ya se cerró y quedó guardado en el historial.</div></div>';
+      if(btnCerrar){ btnCerrar.textContent = '🔒 Día cerrado'; }
+    } else {
+      document.getElementById('resumen-cierre-box').innerHTML =
+        '<div style="text-align:center;padding:20px 10px;">'+
+        '<div style="font-size:2.2rem;">📭</div>'+
+        '<div style="font-weight:700;color:#64748b;font-size:1rem;margin-top:6px;">No hay órdenes cargadas todavía</div>'+
+        '<div style="font-size:0.8rem;color:#94a3b8;margin-top:6px;">Importa la base del día en la pestaña Importar antes de cerrar.</div></div>';
+      if(btnCerrar){ btnCerrar.textContent = '🔒 Cerrar día y guardar en historial'; }
+    }
+    if(btnCerrar){ btnCerrar.disabled = true; btnCerrar.style.opacity = '0.45'; btnCerrar.style.pointerEvents = 'none'; }
+    if(btnExcel){ btnExcel.disabled = true; btnExcel.style.opacity = '0.45'; btnExcel.style.pointerEvents = 'none'; }
+    if(btnWa){ btnWa.disabled = true; btnWa.style.opacity = '0.45'; btnWa.style.pointerEvents = 'none'; }
+    return;
+  }
+  if(btnCerrar){ btnCerrar.disabled = false; btnCerrar.style.opacity = '1'; btnCerrar.style.pointerEvents = 'auto'; btnCerrar.textContent = '🔒 Cerrar día y guardar en historial'; }
+  if(btnExcel){ btnExcel.disabled = false; btnExcel.style.opacity = '1'; btnExcel.style.pointerEvents = 'auto'; }
+  if(btnWa){ btnWa.disabled = false; btnWa.style.opacity = '1'; btnWa.style.pointerEvents = 'auto'; }
+
   var ordStatsCierre=contarOrdenesPorEstado(paquetes);
   var ef=ordStatsCierre.total>0?Math.round(ordStatsCierre.entregadas/ordStatsCierre.total*100):0;
   var efMesActual=efectividadMesActual();
