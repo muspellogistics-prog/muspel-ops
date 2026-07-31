@@ -2308,10 +2308,11 @@ function cerrarDia(){
     efectividad:registroDia.efectividad, efectividadMesAlCierre:registroDia.efectividadMesAlCierre,
     valorPorEntrega:registroDia.valorPorEntrega, ingresos:registroDia.ingresos
   });
+  enviarASheets('limpiar_ordenes', {}); // deja la hoja "Ordenes" en 0 para que mañana no reaparezcan solas
   paquetes=[];
   guardarStorage();
   actualizarResumen();
-  alert('✅ Día cerrado y guardado en el historial.');
+  alert('✅ Día cerrado y guardado en el historial. Google Sheets también quedó en 0, listo para mañana.');
 }
 
 // ════════════════════════════════════════
