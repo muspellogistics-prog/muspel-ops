@@ -174,6 +174,7 @@
     <div class="modal-campo" id="modal-totalpaquetes-row" style="display:none;background:#fff4e0;border-radius:8px;padding:8px 10px;">
       <span class="modal-campo-label">📦 Paquetes a entregar en esta dirección</span>
       <span class="modal-campo-valor" id="modal-totalpaquetes" style="font-size:1.1rem;font-weight:800;color:var(--naranja);">—</span>
+      <div id="modal-desglose-paquetes" style="margin-top:6px;font-size:0.72rem;color:#78716c;"></div>
     </div>
     <div class="modal-campo">
       <span class="modal-campo-label">📦 N° Bulto de entrega</span>
@@ -513,7 +514,7 @@ function valorPorEntregaNeto(efPct){
 function contarOrdenes(arr){
   var grupos = {};
   arr.forEach(function(p){
-    var key = (p.folio && p.folio.trim()) ? p.folio.trim() : ('__solo_'+p.id);
+    var key = getFolioBase(p.folio) || ('__solo_'+p.id);
     if(!grupos[key]) grupos[key] = [];
     grupos[key].push(p);
   });
@@ -532,7 +533,7 @@ function contarOrdenes(arr){
 function contarOrdenesPorEstado(arr){
   var grupos = {};
   arr.forEach(function(p){
-    var key = (p.folio && p.folio.trim()) ? p.folio.trim() : ('__solo_'+p.id);
+    var key = getFolioBase(p.folio) || ('__solo_'+p.id);
     if(!grupos[key]) grupos[key] = [];
     grupos[key].push(p);
   });
@@ -1153,16 +1154,41 @@ function abrirModal(id){
 
   // Cuántos paquetes en total tiene esta misma orden (multibulto)
   var totalPaqRow = document.getElementById('modal-totalpaquetes-row');
+  var desgloseDiv = document.getElementById('modal-desglose-paquetes');
+  var grupo = [];
+  var porFolioBase = false;
   if(p.folio && p.folio.trim()){
-    var hermanos = paquetes.filter(function(x){ return (x.folio||'').trim() === p.folio.trim(); });
-    if(hermanos.length > 1){
-      document.getElementById('modal-totalpaquetes').textContent = hermanos.length + ' paquetes (multibulto)';
-      totalPaqRow.style.display = 'flex';
-    } else {
-      totalPaqRow.style.display = 'none';
+    grupo = paquetes.filter(function(x){ return getFolioBase(x.folio) === getFolioBase(p.folio); });
+    if(grupo.length > 1) porFolioBase = true;
+  }
+  // Respaldo: si por folio no se detectó multibulto, cruzar también por misma dirección + mismo teléfono
+  // (cubre casos donde ALAS usa folios totalmente distintos para el mismo cliente)
+  var porDireccion = false;
+  if(grupo.length <= 1 && p.dir && p.tel){
+    var dirNorm = String(p.dir).trim().toLowerCase();
+    var telNorm = String(p.tel).trim();
+    var candidatos = paquetes.filter(function(x){
+      return x.codigo !== p.codigo && String(x.dir||'').trim().toLowerCase() === dirNorm && String(x.tel||'').trim() === telNorm && dirNorm && telNorm;
+    });
+    if(candidatos.length > 0){
+      grupo = [p].concat(candidatos);
+      porDireccion = true;
+    }
+  }
+  if(grupo.length > 1){
+    var etiqueta = porFolioBase ? ' (multibulto)' : ' (misma dirección y teléfono — verificar folio)';
+    document.getElementById('modal-totalpaquetes').textContent = grupo.length + ' paquetes' + etiqueta;
+    totalPaqRow.style.display = 'flex';
+    var estadoIcono = {entregado:'✅',devuelto:'↩️',daniado:'⚠️',pendiente:'⏳'};
+    desgloseDiv.innerHTML = grupo.map(function(x){
+      return (estadoIcono[x.estado]||'⏳')+' '+(x.codigo||'')+(x.folio?' · folio '+x.folio:'');
+    }).join('<br>');
+    if(porDireccion){
+      desgloseDiv.innerHTML = '<span style="color:var(--naranja);">⚠️ Folios distintos, misma dirección/teléfono — confirma que sea el mismo pedido antes de entregar junto.</span><br>' + desgloseDiv.innerHTML;
     }
   } else {
     totalPaqRow.style.display = 'none';
+    desgloseDiv.innerHTML = '';
   }
 
   document.getElementById('modal-bulto').textContent = p.bulto || '—';
@@ -1201,6 +1227,26 @@ function cerrarModal(e){
   modalOrdenId = null;
 }
 
+// Calcula el grupo completo (multibulto) al que pertenece un paquete: primero por folio
+// base, y si no hay coincidencia, como respaldo por misma dirección + mismo teléfono.
+// Se usa para que marcar UN paquete del grupo marque siempre a TODOS juntos.
+function calcularGrupoMultibulto(p){
+  var grupo = [];
+  if(p.folio && p.folio.trim()){
+    grupo = paquetes.filter(function(x){ return getFolioBase(x.folio) === getFolioBase(p.folio); });
+  }
+  if(grupo.length <= 1 && p.dir && p.tel){
+    var dirNorm = String(p.dir).trim().toLowerCase();
+    var telNorm = String(p.tel).trim();
+    if(dirNorm && telNorm){
+      grupo = paquetes.filter(function(x){
+        return String(x.dir||'').trim().toLowerCase() === dirNorm && String(x.tel||'').trim() === telNorm;
+      });
+    }
+  }
+  return grupo.length > 1 ? grupo : [p];
+}
+
 function marcarDesdeModal(estado){
   if(!modalOrdenId) return;
   var p = paquetes.find(function(x){return x.id===modalOrdenId;});
@@ -1209,10 +1255,17 @@ function marcarDesdeModal(estado){
     if(estado === 'devuelto' || estado === 'daniado'){
       motivo = prompt('¿Por qué se marca '+(estado==='devuelto'?'Devuelto':'Dañado')+'? (opcional)') || '';
     }
-    p.estado = estado;
-    p.motivo = motivo.trim();
-    p.ts_estado = Date.now();
-    enviarASheets('cambio_estado', {codigo:p.codigo, nombre:p.nombre, estado:estado, motivo:p.motivo, fecha:new Date().toLocaleString('es-CL')});
+    motivo = motivo.trim();
+    var grupo = calcularGrupoMultibulto(p);
+    if(grupo.length > 1){
+      alert('📦 Esta orden tiene '+grupo.length+' paquetes — se van a marcar TODOS como '+estado+' juntos.');
+    }
+    grupo.forEach(function(item){
+      item.estado = estado;
+      item.motivo = motivo;
+      item.ts_estado = Date.now();
+      enviarASheets('cambio_estado', {codigo:item.codigo, nombre:item.nombre, estado:estado, motivo:motivo, fecha:new Date().toLocaleString('es-CL')});
+    });
     if(estado === 'entregado'){
       var dir = (p.dir||'').trim();
       var comuna = (p.comuna||'').trim();
@@ -1293,7 +1346,7 @@ function actualizarResumen(){
   var ordStatsResumen = contarOrdenes(paquetes);
   var gruposFolio = {};
   paquetes.forEach(function(p){
-    var key = (p.folio && p.folio.trim()) ? p.folio.trim() : ('__solo_'+p.id);
+    var key = getFolioBase(p.folio) || ('__solo_'+p.id);
     gruposFolio[key] = (gruposFolio[key]||0) + 1;
   });
   var totalMultibultos = Object.keys(gruposFolio).filter(function(k){ return gruposFolio[k] > 1; }).length;
@@ -1375,8 +1428,17 @@ function importarExcel(input){
         status.textContent = '❌ No se pudo importar: falta columna de código/folio.';
         return;
       }
-      var nuevos=0, dup=0, alertas=[];
+      // Detectar filas ocultas en el Excel (alguien las ocultó a propósito, ej. paquetes
+      // que aún no llegan) — se saltan igual que si no estuvieran en el archivo.
+      var filasOcultas = {};
+      if(ws['!rows']){
+        ws['!rows'].forEach(function(rowInfo, idxFila){
+          if(rowInfo && rowInfo.hidden) filasOcultas[idxFila] = true;
+        });
+      }
+      var nuevos=0, dup=0, ocultasSalteadas=0, alertas=[];
       for(var r=headerRowIdx+1;r<data.length;r++){
+        if(filasOcultas[r]){ ocultasSalteadas++; continue; }
         var row=data[r];
         if(!row||!row[idx.codigo]) continue;
         var codigo=String(row[idx.codigo]).trim();
@@ -1412,7 +1474,10 @@ function importarExcel(input){
       guardarStorage();
       actualizarResumen();
       status.style.color='var(--azul2)';
-      status.textContent = '✅ ' + nuevos + ' órdenes cargadas localmente. Subiendo a la nube para Cristian...';
+      status.textContent = '✅ ' + nuevos + ' órdenes cargadas localmente. Subiendo a la nube...';
+      if(ocultasSalteadas>0){
+        status.innerHTML += '<br><span style="color:var(--naranja);font-weight:600;">👁️‍🗨️ '+ocultasSalteadas+' fila(s) ocultas en el Excel se saltaron (no se importaron).</span>';
+      }
       if(alertas.length>0){
         status.innerHTML += '<br><span style="color:var(--naranja);font-weight:600;">⚠️ '+alertas.length+' código(s) ya existían en días anteriores: '+alertas.join(', ')+'</span>';
       }
@@ -1422,7 +1487,7 @@ function importarExcel(input){
         status.textContent = '☁️ Subiendo a la nube... lote '+loteActual+' de '+totalLotes;
       }, function(){
         status.style.color='var(--verde)';
-        status.textContent = '✅ ' + nuevos + ' órdenes listas — Cristian ya puede verlas en su celular.';
+        status.textContent = '✅ ' + nuevos + ' órdenes listas para repartir.';
         if(alertas.length>0){
           status.innerHTML += '<br><span style="color:var(--naranja);font-weight:600;">⚠️ '+alertas.length+' código(s) ya existían en días anteriores.</span>';
         }
@@ -2015,10 +2080,17 @@ function marcar(id, estado){
     if(estado === 'devuelto' || estado === 'daniado'){
       motivo = prompt('¿Por qué se marca '+(estado==='devuelto'?'Devuelto':'Dañado')+'? (opcional)') || '';
     }
-    p.estado=estado;
-    p.motivo=motivo.trim();
-    p.ts_estado=Date.now();
-    enviarASheets('cambio_estado', {codigo:p.codigo, nombre:p.nombre, estado:estado, motivo:p.motivo, fecha:new Date().toLocaleString('es-CL')});
+    motivo = motivo.trim();
+    var grupo = calcularGrupoMultibulto(p);
+    if(grupo.length > 1){
+      alert('📦 Esta orden tiene '+grupo.length+' paquetes — se van a marcar TODOS como '+estado+' juntos.');
+    }
+    grupo.forEach(function(item){
+      item.estado = estado;
+      item.motivo = motivo;
+      item.ts_estado = Date.now();
+      enviarASheets('cambio_estado', {codigo:item.codigo, nombre:item.nombre, estado:estado, motivo:motivo, fecha:new Date().toLocaleString('es-CL')});
+    });
     if(estado === 'entregado'){
       var dir = (p.dir||'').trim();
       var comuna = (p.comuna||'').trim();
@@ -2064,8 +2136,11 @@ function detenerQR(){
 }
 // Busca otros bultos con el mismo folio EXACTO (no base)
 function getFolioBase(folio){
-  // Mantenemos el nombre por compatibilidad pero ahora devuelve el folio completo
-  return folio ? folio.trim() : null;
+  if(!folio) return null;
+  var f = String(folio).trim();
+  // Quita sufijos tipo "-1/2", "-2/2", "-2" al final del folio (multibulto con folios
+  // variantes, ej. "179508" y "179508-2", o "Desco40625-1/2" y "Desco40625-2/2")
+  return f.replace(/-\d+(\/\d+)?$/, '').trim() || f;
 }
 
 var qrMultibultoActual = []; // todas las órdenes del mismo folio base
@@ -2184,10 +2259,17 @@ function marcarDesdeQR(estado){
   if(estado === 'devuelto' || estado === 'daniado'){
     motivo = prompt('¿Por qué se marca '+(estado==='devuelto'?'Devuelto':'Dañado')+'? (opcional)') || '';
   }
-  qrPaqueteActual.estado=estado;
-  qrPaqueteActual.motivo=motivo.trim();
-  qrPaqueteActual.ts_estado=Date.now();
-  enviarASheets('cambio_estado', {codigo:qrPaqueteActual.codigo, nombre:qrPaqueteActual.nombre, estado:estado, motivo:qrPaqueteActual.motivo, fecha:new Date().toLocaleString('es-CL')});
+  motivo = motivo.trim();
+  var grupo = calcularGrupoMultibulto(qrPaqueteActual);
+  if(grupo.length > 1){
+    alert('📦 Esta orden tiene '+grupo.length+' paquetes — se van a marcar TODOS como '+estado+' juntos.');
+  }
+  grupo.forEach(function(item){
+    item.estado = estado;
+    item.motivo = motivo;
+    item.ts_estado = Date.now();
+    enviarASheets('cambio_estado', {codigo:item.codigo, nombre:item.nombre, estado:estado, motivo:motivo, fecha:new Date().toLocaleString('es-CL')});
+  });
   if(estado === 'entregado'){
     var dir = (qrPaqueteActual.dir||'').trim();
     var comuna = (qrPaqueteActual.comuna||'').trim();
@@ -2236,7 +2318,7 @@ function exportarExcelDia(){
   var _valExp=valorPorEntregaNeto(_efExp);
   var _grupos={};
   paquetes.forEach(function(p){
-    var key=(p.folio&&p.folio.trim())?p.folio.trim():('__solo_'+p.id);
+    var key=getFolioBase(p.folio) || ('__solo_'+p.id);
     if(!_grupos[key]) _grupos[key]=[];
     _grupos[key].push(p);
   });
@@ -2247,7 +2329,7 @@ function exportarExcelDia(){
   var _yaContado={};
   var ws_data=[['Código','Folio','Nombre','Teléfono','Dirección','Comuna','Tipo','Estado','Motivo','Orden Completa','Ingreso Neto (por orden)','Efectividad Mes %']];
   paquetes.forEach(function(p){
-    var key=(p.folio&&p.folio.trim())?p.folio.trim():('__solo_'+p.id);
+    var key=getFolioBase(p.folio) || ('__solo_'+p.id);
     var completa=_ordenCompleta[key];
     var ingresoFila=0;
     if(completa && !_yaContado[key]){ ingresoFila=_valExp; _yaContado[key]=true; }
@@ -2433,7 +2515,7 @@ function exportarReporteMensual(){
     var _valH=(h.valorPorEntrega!=null?h.valorPorEntrega:TARIFA_BASE);
     var _gruposH={};
     h.detalle.forEach(function(p){
-      var key=(p.folio&&p.folio.trim())?p.folio.trim():('__solo_'+p.id);
+      var key=getFolioBase(p.folio) || ('__solo_'+p.id);
       if(!_gruposH[key]) _gruposH[key]=[];
       _gruposH[key].push(p);
     });
@@ -2443,7 +2525,7 @@ function exportarReporteMensual(){
     });
     var _yaContadoH={};
     h.detalle.forEach(function(p){
-      var key=(p.folio&&p.folio.trim())?p.folio.trim():('__solo_'+p.id);
+      var key=getFolioBase(p.folio) || ('__solo_'+p.id);
       var completa=_completaH[key];
       var ingresoFila=0;
       if(completa && !_yaContadoH[key]){ ingresoFila=_valH; _yaContadoH[key]=true; }
@@ -2533,7 +2615,7 @@ function exportarDiaHistorial(idx){
   var _valHist=(h.valorPorEntrega!=null?h.valorPorEntrega:TARIFA_BASE);
   var _gruposH={};
   h.detalle.forEach(function(p){
-    var key=(p.folio&&p.folio.trim())?p.folio.trim():('__solo_'+p.id);
+    var key=getFolioBase(p.folio) || ('__solo_'+p.id);
     if(!_gruposH[key]) _gruposH[key]=[];
     _gruposH[key].push(p);
   });
@@ -2544,7 +2626,7 @@ function exportarDiaHistorial(idx){
   var _yaContadoH={};
   var ws_data=[['Codigo','Folio','Nombre','Telefono','Direccion','Comuna','Tipo','Estado','Motivo','Orden Completa','Ingreso Neto (por orden)']];
   h.detalle.forEach(function(p){
-    var key=(p.folio&&p.folio.trim())?p.folio.trim():('__solo_'+p.id);
+    var key=getFolioBase(p.folio) || ('__solo_'+p.id);
     var completa=_completaH[key];
     var ingresoFila=0;
     if(completa && !_yaContadoH[key]){ ingresoFila=_valHist; _yaContadoH[key]=true; }
