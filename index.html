@@ -1436,6 +1436,13 @@ function importarExcel(input){
           if(rowInfo && rowInfo.hidden) filasOcultas[idxFila] = true;
         });
       }
+      // Foto de los códigos que YA estaban cargados antes de esta importación (de días/lotes
+      // anteriores). Solo esos cuentan como "duplicado real". Si el mismo código se repite
+      // varias veces DENTRO de este mismo archivo, es un multibulto (varios paquetes con el
+      // mismo código, incluso mismo folio) — no se descarta.
+      var codigosPreExistentes = {};
+      paquetes.forEach(function(p){ codigosPreExistentes[p.codigo] = true; });
+
       var nuevos=0, dup=0, ocultasSalteadas=0, alertas=[];
       for(var r=headerRowIdx+1;r<data.length;r++){
         if(filasOcultas[r]){ ocultasSalteadas++; continue; }
@@ -1443,8 +1450,8 @@ function importarExcel(input){
         if(!row||!row[idx.codigo]) continue;
         var codigo=String(row[idx.codigo]).trim();
         if(!codigo) continue;
-        // revisa duplicado en el día actual
-        if(paquetes.find(function(p){return p.codigo===codigo;})){dup++;continue;}
+        // revisa duplicado real (de una importación anterior), no dentro de este mismo archivo
+        if(codigosPreExistentes[codigo]){dup++;continue;}
         // revisa si ese código ya fue entregado/procesado en días anteriores (historial)
         var enHistorial = null;
         for(var hIdx=historial.length-1; hIdx>=0 && !enHistorial; hIdx--){
