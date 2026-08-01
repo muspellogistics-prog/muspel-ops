@@ -2496,6 +2496,7 @@ function cerrarDia(){
       efectividad:registroActualizado.efectividad, efectividadMesAlCierre:registroActualizado.efectividadMesAlCierre,
       valorPorEntrega:registroActualizado.valorPorEntrega, ingresos:registroActualizado.ingresos
     });
+    enviarASheets('detalle_dia', { fecha:registroActualizado.fecha, paquetes:detalleActualizado });
     enviarASheets('limpiar_ordenes', {});
     diaEnCompletar = null;
     paquetes=[];
@@ -2525,13 +2526,14 @@ function cerrarDia(){
     detalle:JSON.parse(JSON.stringify(paquetes))
   };
   historial.push(registroDia);
-  // se envía el cierre completo del día a Sheets (resumen, sin todo el detalle para no sobrecargar)
+  // se envía el cierre completo del día a Sheets (resumen en "Cierres", detalle completo en "DetalleHistorico")
   enviarASheets('cierre_dia', {
     fecha:fecha, total:total, entregados:ent, devueltos:dev,
     daniados:dan, pendientes:pend, totalOrdenes:ordStats.total, entregadosOrdenes:ordStats.entregados,
     efectividad:registroDia.efectividad, efectividadMesAlCierre:registroDia.efectividadMesAlCierre,
     valorPorEntrega:registroDia.valorPorEntrega, ingresos:registroDia.ingresos
   });
+  enviarASheets('detalle_dia', { fecha:fecha, paquetes:registroDia.detalle });
   enviarASheets('limpiar_ordenes', {}); // deja la hoja "Ordenes" en 0 para que mañana no reaparezcan solas
   paquetes=[];
   guardarStorage();
@@ -2665,7 +2667,38 @@ function actualizarDashboard(){
   lista.innerHTML=html;
 }
 
-function exportarReporteMensual(){
+// Trae el detalle completo por paquete desde Sheets, para los días que en este equipo
+// solo tenían el resumen (sincronizadoDesdeNube, sin detalle). Así el reporte mensual
+// sale completo sin importar en qué equipo se haya cerrado cada día.
+function completarDetalleDesdeSheets(callback){
+  var diasSinDetalle = historial.filter(function(h){ return h.sincronizadoDesdeNube && (!h.detalle || h.detalle.length===0); });
+  if(diasSinDetalle.length === 0){ if(callback) callback(0); return; }
+  fetch(SHEETS_URL + '?tipo=detalle_historico').then(function(r){ return r.json(); }).then(function(rows){
+    if(!rows || rows.length <= 1){ if(callback) callback(0); return; }
+    // encabezado: fecha,codigo,folio,nombre,dir,comuna,tipo,estado,motivo
+    var porFecha = {};
+    rows.slice(1).forEach(function(row){
+      var f = String(row[0]||'').trim();
+      if(!f) return;
+      if(!porFecha[f]) porFecha[f] = [];
+      porFecha[f].push({
+        codigo: row[1]||'', folio: row[2]||'', nombre: row[3]||'', dir: row[4]||'',
+        comuna: row[5]||'', tipo: row[6]||'', estado: row[7]||'', motivo: row[8]||''
+      });
+    });
+    var completados = 0;
+    diasSinDetalle.forEach(function(h){
+      if(porFecha[h.fecha]){
+        h.detalle = porFecha[h.fecha];
+        completados++;
+      }
+    });
+    if(completados > 0) guardarStorage();
+    if(callback) callback(completados);
+  }).catch(function(){ if(callback) callback(0); });
+}
+
+function exportarReporteMensualAhora(){
   if(historial.length===0){alert('No hay datos en el historial todavía.');return;}
   var historialDelMes = historial.filter(function(h){ return perteneceAMesActual(h.fecha); });
   if(historialDelMes.length===0){alert('No hay días cerrados del mes actual todavía.');return;}
@@ -2673,7 +2706,7 @@ function exportarReporteMensual(){
   // Hoja resumen
   var resumen=[['Fecha','Recibidos (bultos)','Entregados (bultos)','Devueltos','Dañados','Pendientes','Órdenes Totales','Órdenes Entregadas','Efectividad Día %','Efectividad Mes al Cierre %','Valor x Entrega (Neto)','Ingresos Neto $']];
   historialDelMes.forEach(function(h){
-    resumen.push([h.fecha,h.total,h.entregados,h.devueltos,h.daniados,h.pendientes,
+    resumen.push([formatoFechaLegible(h.fecha),h.total,h.entregados,h.devueltos,h.daniados,h.pendientes,
       (h.totalOrdenes!=null?h.totalOrdenes:h.total),(h.entregadosOrdenes!=null?h.entregadosOrdenes:h.entregados),
       h.efectividad,(h.efectividadMesAlCierre!=null?h.efectividadMesAlCierre:''),(h.valorPorEntrega!=null?h.valorPorEntrega:TARIFA_BASE),h.ingresos]);
   });
@@ -2699,13 +2732,21 @@ function exportarReporteMensual(){
       var completa=_completaH[key];
       var ingresoFila=0;
       if(completa && !_yaContadoH[key]){ ingresoFila=_valH; _yaContadoH[key]=true; }
-      detalle.push([h.fecha,p.codigo,p.folio,p.nombre,p.dir,p.comuna,p.tipo,p.estado,p.motivo||'',completa?'Sí':'No',ingresoFila]);
+      detalle.push([formatoFechaLegible(h.fecha),p.codigo,p.folio,p.nombre,p.dir,p.comuna,p.tipo,p.estado,p.motivo||'',completa?'Sí':'No',ingresoFila]);
     });
   });
   var wsD=XLSX.utils.aoa_to_sheet(detalle);
   XLSX.utils.book_append_sheet(wb,wsD,'Detalle');
   var mes=new Date().toLocaleDateString('es-CL',{month:'long',year:'numeric'}).replace(/ /g,'_');
   XLSX.writeFile(wb,'Muspel_Reporte_'+mes+'.xlsx');
+}
+
+// Función pública del botón: primero completa el detalle desde Sheets (por si algún día
+// del mes solo tenía el resumen), y recién ahí genera el Excel con todo completo.
+function exportarReporteMensual(){
+  completarDetalleDesdeSheets(function(){
+    exportarReporteMensualAhora();
+  });
 }
 
 // ════════════════════════════════════════
@@ -2858,8 +2899,9 @@ function exportarDiaHistorial(idx){
   });
   var wb=XLSX.utils.book_new();
   var ws=XLSX.utils.aoa_to_sheet(ws_data);
-  XLSX.utils.book_append_sheet(wb,ws,'Muspel_'+h.fecha.replace(/\//g,'-'));
-  XLSX.writeFile(wb,'Muspel_OPS_'+h.fecha.replace(/\//g,'-')+'.xlsx');
+  var fechaArchivo = formatoFechaLegible(h.fecha);
+  XLSX.utils.book_append_sheet(wb,ws,'Muspel_'+fechaArchivo);
+  XLSX.writeFile(wb,'Muspel_OPS_'+fechaArchivo+'.xlsx');
 }
 
 // ════════════════════════════════════════
