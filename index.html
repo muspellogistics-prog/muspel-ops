@@ -660,25 +660,36 @@ function descargarOrdenesDesdeSheets(onFin){
     // fila 0 es encabezado: id,codigo,folio,bulto,nombre,tel,dir,comuna,region,tipo,b2b,estado,ts,repetidoDeHistorial
     var importadas = 0;
     var actualizadas = 0;
+    // Cuenta cuántas veces aparece cada código LOCALMENTE (para no confundir multibulto
+    // -código repetido- con "ya existe, no agregar")
+    var localCount = {};
+    paquetes.forEach(function(p){ localCount[p.codigo] = (localCount[p.codigo]||0) + 1; });
+    var vistosEnSheets = {};
     rows.slice(1).forEach(function(row){
       if(!row[1]) return; // sin código, skip
       var codigo = String(row[1]).trim();
       if(!codigo) return;
-      var existente = paquetes.find(function(p){ return p.codigo === codigo; });
-      if(existente){
-        // Ya existe localmente: si en Sheets hay un cambio de estado MÁS NUEVO
-        // (por ejemplo, marcado desde otro teléfono/compu), lo traemos acá también.
+      vistosEnSheets[codigo] = (vistosEnSheets[codigo]||0) + 1;
+      var yaLocal = localCount[codigo] || 0;
+
+      if(vistosEnSheets[codigo] <= yaLocal){
+        // Esta ocurrencia ya existe localmente (por código y por posición) — solo revisamos
+        // si el estado en Sheets es más nuevo, y si es así, actualizamos TODOS los paquetes
+        // locales con este código (multibulto: siempre se marcan juntos).
         var estadoNube = String(row[11]||'').trim();
         var tsNube = row[12] || 0;
-        if(estadoNube && estadoNube !== existente.estado && tsNube > (existente.ts_estado || existente.ts || 0)){
-          existente.estado = estadoNube;
-          existente.ts_estado = tsNube;
-          actualizadas++;
-        }
+        paquetes.forEach(function(existente){
+          if(existente.codigo === codigo && estadoNube && estadoNube !== existente.estado && tsNube > (existente.ts_estado || existente.ts || 0)){
+            existente.estado = estadoNube;
+            existente.ts_estado = tsNube;
+            actualizadas++;
+          }
+        });
         return;
       }
+      // Ocurrencia nueva (no existía localmente todavía) — se agrega, aunque el código se repita
       paquetes.push({
-        id: row[0] || Date.now(),
+        id: row[0] || (Date.now()+Math.random()),
         codigo: codigo,
         folio: String(row[2]||'').trim(),
         bulto: String(row[3]||'').trim(),
