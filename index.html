@@ -470,6 +470,11 @@
     <div id="historial-vacio" class="alerta alerta-info" style="display:none">Aún no hay días cerrados.</div>
   </div>
   <div class="card">
+    <div class="card-title">✅ ¿Quedaron pendientes por completar?</div>
+    <div style="font-size:0.78rem;color:#64748b;margin-bottom:10px;">Trae SOLO las órdenes que quedaron pendientes del último día cerrado, sin tocar lo ya entregado/devuelto de ese día (eso sigue contabilizado). Al terminar, el cierre actualiza ese mismo día en vez de crear uno nuevo.</div>
+    <button class="btn btn-primary" onclick="completarPendientesUltimoDia()">✅ Completar pendientes del último día</button>
+  </div>
+  <div class="card">
     <div class="card-title">↩️ ¿Se cerró el día por error?</div>
     <div style="font-size:0.78rem;color:#64748b;margin-bottom:10px;">Esto deshace SOLO el último día cerrado, devolviendo sus órdenes a Resumen/Órdenes para corregirlas. No afecta días anteriores.</div>
     <button class="btn btn-rojo" onclick="reabrirUltimoDia()">↩️ Reabrir último día cerrado</button>
@@ -549,10 +554,22 @@ function contarOrdenesPorEstado(arr){
   return {total:total, entregadas:entregadas, devueltas:devueltas, daniadas:daniadas, pendientes:pendientes};
 }
 
+// ¿Esta fecha (del historial) pertenece al mes calendario actual? Así el cálculo de
+// efectividad/ingreso del mes se reinicia solo cada mes, en vez de acumular para siempre.
+function perteneceAMesActual(fechaStr){
+  var legible = formatoFechaLegible(fechaStr); // siempre queda como DD-MM-AAAA
+  var partes = legible.split('-');
+  if(partes.length !== 3) return false;
+  var mes = parseInt(partes[1], 10);
+  var anio = parseInt(partes[2], 10);
+  var hoy = new Date();
+  return mes === (hoy.getMonth()+1) && anio === hoy.getFullYear();
+}
+
 // Efectividad acumulada del mes en curso (historial cerrado + día de hoy en progreso)
 function efectividadMesActual(){
   var totalEnt=0, totalRec=0;
-  historial.forEach(function(h){
+  historial.filter(function(h){ return perteneceAMesActual(h.fecha); }).forEach(function(h){
     totalEnt += (h.entregadosOrdenes!=null ? h.entregadosOrdenes : h.entregados);
     totalRec += (h.totalOrdenes!=null ? h.totalOrdenes : h.total);
   });
@@ -653,6 +670,21 @@ function descargarOrdenesDesdeSheets(onFin){
 
   fetch(SHEETS_URL + '?tipo=ordenes').then(function(r){ return r.json(); }).then(function(rows){
     if(!rows || rows.length <= 1){
+      // La nube (Sheets "Ordenes") está vacía — normalmente significa que el día ya se
+      // cerró en otro dispositivo. Si acá todavía quedaban paquetes cargados, se limpian
+      // solos, para que nadie tenga que entrar a "Vaciar órdenes actuales" a mano.
+      // EXCEPCIÓN: si se está completando pendientes de un día anterior, NO se auto-limpia
+      // (ese trabajo es local e independiente del día en curso en Sheets).
+      if(paquetes.length > 0 && !diaEnCompletar){
+        var cuantosTeniamos = paquetes.length;
+        paquetes = [];
+        guardarStorage();
+        actualizarResumen();
+        renderPaquetes();
+        if(status){ status.style.color='var(--azul2)'; status.textContent = '✅ El día ya se cerró en otro equipo — se limpiaron '+cuantosTeniamos+' paquetes locales para quedar al día.'; }
+        if(onFin) onFin(0);
+        return;
+      }
       if(status) { status.textContent = ''; }
       if(onFin) onFin(0);
       return;
@@ -774,6 +806,7 @@ setInterval(function(){
 // ════════════════════════════════════════
 var paquetes = [];
 var historial = [];
+var diaEnCompletar = null; // {fecha, indexHistorial} — si no es null, estamos completando pendientes de un día ya cerrado, no armando uno nuevo
 
 // ════════════════════════════════════════
 // PERFILES: Operativo vs Comercial
@@ -942,10 +975,12 @@ function actualizarBannerOperacional(){
 function cargarStorage(){
   try{ paquetes = JSON.parse(localStorage.getItem('muspel_paquetes')||'[]'); }catch(e){ paquetes=[]; }
   try{ historial = JSON.parse(localStorage.getItem('muspel_historial')||'[]'); }catch(e){ historial=[]; }
+  try{ diaEnCompletar = JSON.parse(localStorage.getItem('muspel_dia_en_completar')||'null'); }catch(e){ diaEnCompletar=null; }
 }
 function guardarStorage(){
   localStorage.setItem('muspel_paquetes', JSON.stringify(paquetes));
   localStorage.setItem('muspel_historial', JSON.stringify(historial));
+  localStorage.setItem('muspel_dia_en_completar', JSON.stringify(diaEnCompletar));
 }
 cargarStorage();
 cargarConfigOp();
@@ -2342,7 +2377,10 @@ function actualizarCierre(){
     if(btnWa){ btnWa.disabled = true; btnWa.style.opacity = '0.45'; btnWa.style.pointerEvents = 'none'; }
     return;
   }
-  if(btnCerrar){ btnCerrar.disabled = false; btnCerrar.style.opacity = '1'; btnCerrar.style.pointerEvents = 'auto'; btnCerrar.textContent = '🔒 Cerrar día y guardar en historial'; }
+  if(btnCerrar){
+    btnCerrar.disabled = false; btnCerrar.style.opacity = '1'; btnCerrar.style.pointerEvents = 'auto';
+    btnCerrar.textContent = diaEnCompletar ? ('✅ Completar cierre del '+diaEnCompletar.fecha) : '🔒 Cerrar día y guardar en historial';
+  }
   if(btnExcel){ btnExcel.disabled = false; btnExcel.style.opacity = '1'; btnExcel.style.pointerEvents = 'auto'; }
   if(btnWa){ btnWa.disabled = false; btnWa.style.opacity = '1'; btnWa.style.pointerEvents = 'auto'; }
 
@@ -2416,6 +2454,57 @@ function enviarWhatsApp(){
 
 function cerrarDia(){
   if(paquetes.length===0){alert('No hay órdenes para cerrar.');return;}
+
+  if(diaEnCompletar){
+    // Estamos completando pendientes de un día YA cerrado: se actualiza ese mismo día,
+    // combinando lo que ya estaba (entregado/devuelto) con lo recién resuelto — no se
+    // crea un día nuevo ni se duplica nada en el Dashboard.
+    var idx = historial.findIndex(function(h){ return h.fecha === diaEnCompletar.fecha; });
+    var diaOriginal = historial[idx];
+    if(idx === -1 || !diaOriginal){
+      alert('⚠️ No se encontró el día original ('+diaEnCompletar.fecha+') en el historial — no se pudo completar. Avisa a soporte.');
+      diaEnCompletar = null;
+      return;
+    }
+    var resueltos = paquetes; // las que estaban pendientes, ahora con su estado final
+    var detalleActualizado = (diaOriginal.detalle || []).map(function(p){
+      var actualizado = resueltos.find(function(r){ return r.id === p.id; });
+      return actualizado || p;
+    });
+    var ent=detalleActualizado.filter(function(p){return p.estado==='entregado';}).length;
+    var dev=detalleActualizado.filter(function(p){return p.estado==='devuelto';}).length;
+    var dan=detalleActualizado.filter(function(p){return p.estado==='daniado';}).length;
+    var pend=detalleActualizado.filter(function(p){return p.estado==='pendiente';}).length;
+    var total=detalleActualizado.length;
+    var ordStats = contarOrdenes(detalleActualizado);
+    var _efCierre=efectividadMesActual();
+    var _valCierre=valorPorEntregaNeto(_efCierre);
+    var registroActualizado = {
+      fecha: diaOriginal.fecha, ts: Date.now(),
+      total:total, entregados:ent, devueltos:dev, daniados:dan, pendientes:pend,
+      totalOrdenes:ordStats.total, entregadosOrdenes:ordStats.entregados,
+      efectividad:total>0?Math.round(ent/total*100):0,
+      efectividadMesAlCierre:_efCierre,
+      valorPorEntrega:_valCierre,
+      ingresos:ordStats.entregados*_valCierre,
+      detalle:detalleActualizado
+    };
+    historial[idx] = registroActualizado;
+    enviarASheets('cierre_dia', {
+      fecha:registroActualizado.fecha, total:total, entregados:ent, devueltos:dev,
+      daniados:dan, pendientes:pend, totalOrdenes:ordStats.total, entregadosOrdenes:ordStats.entregados,
+      efectividad:registroActualizado.efectividad, efectividadMesAlCierre:registroActualizado.efectividadMesAlCierre,
+      valorPorEntrega:registroActualizado.valorPorEntrega, ingresos:registroActualizado.ingresos
+    });
+    enviarASheets('limpiar_ordenes', {});
+    diaEnCompletar = null;
+    paquetes=[];
+    guardarStorage();
+    actualizarResumen();
+    alert('✅ Día '+registroActualizado.fecha+' completado y actualizado — ahora con '+total+' paquetes contabilizados en total ('+ent+' entregados). El Dashboard queda al día, sin duplicar el día.');
+    return;
+  }
+
   var ent=paquetes.filter(function(p){return p.estado==='entregado';}).length;
   var dev=paquetes.filter(function(p){return p.estado==='devuelto';}).length;
   var dan=paquetes.filter(function(p){return p.estado==='daniado';}).length;
@@ -2461,15 +2550,28 @@ function descargarCierresDesdeSheets(callback){
     if(!rows || rows.length <= 1){ if(callback) callback(0); return; }
     // encabezado: fecha,total,entregados,devueltos,daniados,pendientes,totalOrdenes,
     //             entregadosOrdenes,efectividad,efectividadMesAlCierre,valorPorEntrega,ingresos,ts
-    var fechasLocales = {};
-    historial.forEach(function(h){ fechasLocales[h.fecha] = true; });
-    var agregados = 0;
+
+    // Si un día se completó después (pendientes resueltas), en Sheets van a existir VARIAS
+    // filas con la misma fecha — nos quedamos solo con la más nueva (mayor ts) de cada fecha.
+    var masRecientePorFecha = {};
     rows.slice(1).forEach(function(row){
       var fechaCierre = String(row[0]||'').trim();
-      if(!fechaCierre || fechasLocales[fechaCierre]) return; // ya lo tenemos localmente
-      historial.push({
+      if(!fechaCierre) return;
+      var tsRow = row[12] || 0;
+      if(!masRecientePorFecha[fechaCierre] || tsRow > masRecientePorFecha[fechaCierre].ts){
+        masRecientePorFecha[fechaCierre] = { row: row, ts: tsRow };
+      }
+    });
+
+    var porFecha = {};
+    historial.forEach(function(h, i){ porFecha[h.fecha] = i; });
+    var agregados = 0;
+    Object.keys(masRecientePorFecha).forEach(function(fechaCierre){
+      var row = masRecientePorFecha[fechaCierre].row;
+      var tsNube = masRecientePorFecha[fechaCierre].ts;
+      var nuevoRegistro = {
         fecha: fechaCierre,
-        ts: row[12] || Date.now(),
+        ts: tsNube,
         total: Number(row[1])||0,
         entregados: Number(row[2])||0,
         devueltos: Number(row[3])||0,
@@ -2483,9 +2585,21 @@ function descargarCierresDesdeSheets(callback){
         ingresos: Number(row[11])||0,
         detalle: [], // el detalle por paquete no viaja en el resumen de Sheets
         sincronizadoDesdeNube: true
-      });
-      fechasLocales[fechaCierre] = true;
-      agregados++;
+      };
+      if(porFecha[fechaCierre] === undefined){
+        // No lo teníamos: lo agregamos
+        historial.push(nuevoRegistro);
+        porFecha[fechaCierre] = historial.length - 1;
+        agregados++;
+      } else {
+        var existente = historial[porFecha[fechaCierre]];
+        // Solo actualizamos si nuestra copia también vino de la nube (no pisamos un cierre
+        // hecho de verdad en ESTE equipo) y si la de Sheets es más nueva.
+        if(existente.sincronizadoDesdeNube && tsNube > (existente.ts||0)){
+          historial[porFecha[fechaCierre]] = nuevoRegistro;
+          agregados++;
+        }
+      }
     });
     if(agregados > 0){
       historial.sort(function(a,b){ return (a.ts||0) - (b.ts||0); });
@@ -2510,8 +2624,9 @@ function formatoFechaLegible(fechaStr){
 }
 
 function actualizarDashboard(){
-  var totalEntOrd=0, totalRecOrd=0, totalDev=0, totalRecBultos=0, dias=historial.length;
-  historial.forEach(function(h){
+  var historialDelMes = historial.filter(function(h){ return perteneceAMesActual(h.fecha); });
+  var totalEntOrd=0, totalRecOrd=0, totalDev=0, totalRecBultos=0, dias=historialDelMes.length;
+  historialDelMes.forEach(function(h){
     totalEntOrd += (h.entregadosOrdenes!=null ? h.entregadosOrdenes : h.entregados);
     totalRecOrd += (h.totalOrdenes!=null ? h.totalOrdenes : h.total);
     totalDev += h.devueltos+h.daniados;
@@ -2552,10 +2667,12 @@ function actualizarDashboard(){
 
 function exportarReporteMensual(){
   if(historial.length===0){alert('No hay datos en el historial todavía.');return;}
+  var historialDelMes = historial.filter(function(h){ return perteneceAMesActual(h.fecha); });
+  if(historialDelMes.length===0){alert('No hay días cerrados del mes actual todavía.');return;}
   var wb=XLSX.utils.book_new();
   // Hoja resumen
   var resumen=[['Fecha','Recibidos (bultos)','Entregados (bultos)','Devueltos','Dañados','Pendientes','Órdenes Totales','Órdenes Entregadas','Efectividad Día %','Efectividad Mes al Cierre %','Valor x Entrega (Neto)','Ingresos Neto $']];
-  historial.forEach(function(h){
+  historialDelMes.forEach(function(h){
     resumen.push([h.fecha,h.total,h.entregados,h.devueltos,h.daniados,h.pendientes,
       (h.totalOrdenes!=null?h.totalOrdenes:h.total),(h.entregadosOrdenes!=null?h.entregadosOrdenes:h.entregados),
       h.efectividad,(h.efectividadMesAlCierre!=null?h.efectividadMesAlCierre:''),(h.valorPorEntrega!=null?h.valorPorEntrega:TARIFA_BASE),h.ingresos]);
@@ -2564,7 +2681,7 @@ function exportarReporteMensual(){
   XLSX.utils.book_append_sheet(wb,wsR,'Resumen');
   // Hoja detalle completo (ingreso asignado 1 sola vez por orden completa, no por bulto)
   var detalle=[['Fecha','Código','Folio','Nombre','Dirección','Comuna','Tipo','Estado','Motivo','Orden Completa','Ingreso Neto (por orden)']];
-  historial.forEach(function(h){
+  historialDelMes.forEach(function(h){
     var _valH=(h.valorPorEntrega!=null?h.valorPorEntrega:TARIFA_BASE);
     var _gruposH={};
     h.detalle.forEach(function(p){
@@ -2609,17 +2726,57 @@ function marcarTodoTipo(tipo){
 }
 
 function vaciarOrdenesActuales(){
-  if(paquetes.length === 0){
+  if(paquetes.length === 0 && !diaEnCompletar){
     alert('No hay órdenes cargadas actualmente en el teléfono.');
     return;
   }
-  var confirmar = confirm('Esto va a borrar las '+paquetes.length+' órdenes que están cargadas ahora mismo en el teléfono (por ejemplo, datos de prueba). NO se guardan en el historial ni se ve afectado ningún día ya cerrado.\n\n¿Confirmas que quieres vaciarlas?');
+  var mensajeExtra = diaEnCompletar ? ('\n\nOjo: esto también CANCELA el completar pendientes del día '+diaEnCompletar.fecha+' que tenías en curso — ese día queda tal como estaba, sin completar.') : '';
+  var confirmar = confirm('Esto va a borrar las '+paquetes.length+' órdenes que están cargadas ahora mismo en el teléfono (por ejemplo, datos de prueba). NO se guardan en el historial ni se ve afectado ningún día ya cerrado.'+mensajeExtra+'\n\n¿Confirmas que quieres vaciarlas?');
   if(!confirmar) return;
   paquetes = [];
+  diaEnCompletar = null;
   guardarStorage();
   actualizarResumen();
   renderPaquetes();
+  actualizarCierre();
   alert('✅ Listo, quedaste en 0 órdenes. Ahora puedes descargar o importar las órdenes reales del día.');
+}
+
+function completarPendientesUltimoDia(){
+  if(historial.length === 0){
+    alert('No hay ningún día cerrado en el historial.');
+    return;
+  }
+  if(diaEnCompletar){
+    alert('⚠️ Ya estás completando pendientes del día '+diaEnCompletar.fecha+'. Termina eso primero (cerrando ese cierre) o vacía para cancelarlo antes de empezar con otro.');
+    return;
+  }
+  var idx = historial.length - 1;
+  var ultimo = historial[idx];
+  if(ultimo.sincronizadoDesdeNube && (!ultimo.detalle || ultimo.detalle.length === 0)){
+    alert('⚠️ El día '+ultimo.fecha+' se cerró en OTRO equipo y aquí solo llegó el resumen — no se puede completar desde acá. Hazlo desde el mismo equipo donde se cerró.');
+    return;
+  }
+  var pendientesDelDia = (ultimo.detalle || []).filter(function(p){ return p.estado === 'pendiente'; });
+  if(pendientesDelDia.length === 0){
+    alert('El día '+ultimo.fecha+' no tiene ninguna orden pendiente — ya quedó completo.');
+    return;
+  }
+  if(paquetes.length > 0){
+    var seguir = confirm('Tienes '+paquetes.length+' órdenes cargadas ahora mismo. Si completas las '+pendientesDelDia.length+' pendientes del día '+ultimo.fecha+', se van a MEZCLAR con las de hoy.\n\n¿Continuar?');
+    if(!seguir) return;
+  } else {
+    var confirmar = confirm('Esto trae solo las '+pendientesDelDia.length+' órdenes que quedaron PENDIENTES del día '+ultimo.fecha+' (las '+ultimo.entregados+' ya entregadas y '+ultimo.devueltos+' devueltas de ese día NO se tocan, ya quedan contabilizadas).\n\nCuando termines, el botón de Cierre va a decir "Completar cierre del '+ultimo.fecha+'" en vez de cerrar un día nuevo.\n\n¿Continuar?');
+    if(!confirmar) return;
+  }
+  paquetes = paquetes.concat(JSON.parse(JSON.stringify(pendientesDelDia)));
+  diaEnCompletar = { fecha: ultimo.fecha };
+  guardarStorage();
+  actualizarResumen();
+  renderPaquetes();
+  actualizarCierre();
+  // (No se reenvía a "Ordenes" por la misma razón — no pisar el trabajo en curso de otro día.)
+  alert('✅ '+pendientesDelDia.length+' pendientes del día '+ultimo.fecha+' cargadas localmente. Márcalas y luego usa el botón de Cierre para completar ese día (no va a crear un día nuevo).');
 }
 
 function reabrirUltimoDia(){
@@ -2627,7 +2784,15 @@ function reabrirUltimoDia(){
     alert('No hay ningún día cerrado en el historial.');
     return;
   }
+  if(diaEnCompletar){
+    alert('⚠️ Ya estás completando pendientes del día '+diaEnCompletar.fecha+'. Termina eso primero (o vacía para cancelarlo) antes de reabrir otro día — si no, la información se va a cargar dos veces.');
+    return;
+  }
   var ultimo = historial[historial.length - 1];
+  if(ultimo.sincronizadoDesdeNube && (!ultimo.detalle || ultimo.detalle.length === 0)){
+    alert('⚠️ El día '+ultimo.fecha+' se cerró en OTRO equipo y aquí solo llegó el resumen (sin el detalle de cada paquete) — no se puede reabrir desde acá.\n\nPara corregirlo, hazlo desde el mismo equipo donde se cerró originalmente.');
+    return;
+  }
   if(paquetes.length > 0){
     var seguir = confirm('Tienes '+paquetes.length+' órdenes en curso sin cerrar todavía. Si reabres el día '+ultimo.fecha+', sus órdenes se van a MEZCLAR con las de hoy.\n\n¿Quieres continuar de todas formas?');
     if(!seguir) return;
@@ -2643,7 +2808,12 @@ function reabrirUltimoDia(){
   renderPaquetes();
   renderHistorial();
   actualizarCierre();
-  alert('✅ Día '+ultimo.fecha+' reabierto. Corrige lo que necesites y vuelve a cerrarlo en Cierre.\n\nOjo: si ya se había enviado el resumen a Google Sheets o por WhatsApp, avisa que ese envío queda desactualizado.');
+  // Reenvía las órdenes reabiertas a Google Sheets, para que CUALQUIER equipo que
+  // sincronice vea el día reabierto en vez de pensar que sigue cerrado (Sheets vacío).
+  // (No se reenvía a la hoja "Ordenes" — esa es la cola de trabajo del día EN CURSO;
+  // tocarla podría pisar lo que Cristian esté trabajando ahora mismo en otro día.
+  // El Dashboard se actualiza igual a través de "Cierres" cuando se vuelva a cerrar.)
+  alert('✅ Día '+ultimo.fecha+' reabierto localmente. Corrige lo que necesites y vuelve a cerrarlo en Cierre.\n\nOjo: esto no avisa a otros equipos hasta que se cierre de nuevo — si alguien más necesita ver esto, avísale directamente.');
 }
 
 function renderHistorial(){
