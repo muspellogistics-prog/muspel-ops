@@ -178,6 +178,9 @@ let gastosPersonales = [];
 function formatoPesos(n){
   return '$' + Math.round(n).toLocaleString('es-CL');
 }
+function normalizarMes(texto){
+  return String(texto||'').trim().toLowerCase().replace(/\s+/g,' ');
+}
 function mesActualTexto(){
   const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   const hoy = new Date();
@@ -244,7 +247,7 @@ async function cargarDatos(){
 }
 
 function pintarPersonal(mesTexto){
-  const delMes = gastosPersonales.filter(g => g.mes === mesTexto);
+  const delMes = gastosPersonales.filter(g => normalizarMes(g.mes) === normalizarMes(mesTexto));
   const total = delMes.reduce((a,g)=>a+g.monto,0);
   document.getElementById('pers-total').textContent = formatoPesos(total);
 
@@ -345,7 +348,7 @@ function toggleMes(clase, headerRow){
 function pintarFinanzas(mesTexto){
   const delMes = cierres.filter(c => perteneceAlMes(c.fecha, mesTexto));
   const ingresoMes = delMes.reduce((a,c)=>a+c.ingresos,0);
-  const costosDelMes = costos.filter(c => c.mes === mesTexto);
+  const costosDelMes = costos.filter(c => normalizarMes(c.mes) === normalizarMes(mesTexto));
   const costosMes = costosDelMes.reduce((a,c)=>a+c.monto,0);
   const flujo = ingresoMes - costosMes;
 
@@ -388,9 +391,9 @@ function pintarRentabilidad(mesTexto){
   const delMes = cierres.filter(c => perteneceAlMes(c.fecha, mesTexto));
   const ingresoMes = delMes.reduce((a,c)=>a+c.ingresos,0);
   const ordMes = delMes.reduce((a,c)=>a+c.entregadosOrdenes,0);
-  const fijosDelMes = costos.filter(c => c.mes === mesTexto && c.fijo === 'Sí');
+  const fijosDelMes = costos.filter(c => normalizarMes(c.mes) === normalizarMes(mesTexto) && c.fijo === 'Sí');
   const costosFijos = fijosDelMes.reduce((a,c)=>a+c.monto,0);
-  const costosTotalesMes = costos.filter(c => c.mes === mesTexto).reduce((a,c)=>a+c.monto,0);
+  const costosTotalesMes = costos.filter(c => normalizarMes(c.mes) === normalizarMes(mesTexto)).reduce((a,c)=>a+c.monto,0);
 
   const costoOrden = ordMes>0 ? costosTotalesMes/ordMes : 0;
   const margenOrden = ordMes>0 ? (ingresoMes-costosTotalesMes)/ordMes : 0;
@@ -410,7 +413,7 @@ function calcularProyeccion(){
   const ordenes = Number(document.getElementById('in-ordenes').value)||0;
   const valor = Number(document.getElementById('in-valor').value)||0;
   const ingreso = ordenes * valor;
-  const fijosDelMes = costos.filter(c => c.mes === mesTexto && c.fijo === 'Sí').reduce((a,c)=>a+c.monto,0);
+  const fijosDelMes = costos.filter(c => normalizarMes(c.mes) === normalizarMes(mesTexto) && c.fijo === 'Sí').reduce((a,c)=>a+c.monto,0);
   const flujo = ingreso - fijosDelMes;
 
   document.getElementById('proy-ingreso').textContent = formatoPesos(ingreso);
