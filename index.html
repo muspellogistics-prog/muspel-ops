@@ -573,8 +573,9 @@ function perteneceAMesActual(fechaStr){
 function historialUnicoPorFecha(){
   var porFecha = {};
   historial.forEach(function(h){
-    if(!porFecha[h.fecha] || (h.ts||0) > (porFecha[h.fecha].ts||0)){
-      porFecha[h.fecha] = h;
+    var clave = formatoFechaLegible(h.fecha); // normaliza, así "30-07-2026" y la versión ISO de Sheets se tratan como la misma fecha
+    if(!porFecha[clave] || (h.ts||0) > (porFecha[clave].ts||0)){
+      porFecha[clave] = h;
     }
   });
   return Object.values(porFecha).sort(function(a,b){ return (a.ts||0)-(b.ts||0); });
@@ -2570,7 +2571,7 @@ function descargarCierresDesdeSheets(callback){
     // filas con la misma fecha — nos quedamos solo con la más nueva (mayor ts) de cada fecha.
     var masRecientePorFecha = {};
     rows.slice(1).forEach(function(row){
-      var fechaCierre = String(row[0]||'').trim();
+      var fechaCierre = formatoFechaLegible(String(row[0]||'').trim());
       if(!fechaCierre) return;
       var tsRow = row[12] || 0;
       if(!masRecientePorFecha[fechaCierre] || tsRow > masRecientePorFecha[fechaCierre].ts){
@@ -2579,7 +2580,7 @@ function descargarCierresDesdeSheets(callback){
     });
 
     var porFecha = {};
-    historial.forEach(function(h, i){ porFecha[h.fecha] = i; });
+    historial.forEach(function(h, i){ porFecha[formatoFechaLegible(h.fecha)] = i; });
     var agregados = 0;
     Object.keys(masRecientePorFecha).forEach(function(fechaCierre){
       var row = masRecientePorFecha[fechaCierre].row;
@@ -2691,7 +2692,7 @@ function completarDetalleDesdeSheets(callback){
     // encabezado: fecha,codigo,folio,nombre,dir,comuna,tipo,estado,motivo
     var porFecha = {};
     rows.slice(1).forEach(function(row){
-      var f = String(row[0]||'').trim();
+      var f = formatoFechaLegible(String(row[0]||'').trim());
       if(!f) return;
       if(!porFecha[f]) porFecha[f] = [];
       porFecha[f].push({
@@ -2701,8 +2702,9 @@ function completarDetalleDesdeSheets(callback){
     });
     var completados = 0;
     diasSinDetalle.forEach(function(h){
-      if(porFecha[h.fecha]){
-        h.detalle = porFecha[h.fecha];
+      var clave = formatoFechaLegible(h.fecha);
+      if(porFecha[clave]){
+        h.detalle = porFecha[clave];
         completados++;
       }
     });
