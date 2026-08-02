@@ -567,9 +567,22 @@ function perteneceAMesActual(fechaStr){
 }
 
 // Efectividad acumulada del mes en curso (historial cerrado + día de hoy en progreso)
+// Si por algún motivo quedaron 2+ registros del historial para la MISMA fecha (ej. dos
+// cierres casi simultáneos desde distintos equipos), esto se queda solo con el más
+// reciente de cada fecha — para no sumar doble en el Dashboard ni mostrar duplicados.
+function historialUnicoPorFecha(){
+  var porFecha = {};
+  historial.forEach(function(h){
+    if(!porFecha[h.fecha] || (h.ts||0) > (porFecha[h.fecha].ts||0)){
+      porFecha[h.fecha] = h;
+    }
+  });
+  return Object.values(porFecha).sort(function(a,b){ return (a.ts||0)-(b.ts||0); });
+}
+
 function efectividadMesActual(){
   var totalEnt=0, totalRec=0;
-  historial.filter(function(h){ return perteneceAMesActual(h.fecha); }).forEach(function(h){
+  historialUnicoPorFecha().filter(function(h){ return perteneceAMesActual(h.fecha); }).forEach(function(h){
     totalEnt += (h.entregadosOrdenes!=null ? h.entregadosOrdenes : h.entregados);
     totalRec += (h.totalOrdenes!=null ? h.totalOrdenes : h.total);
   });
@@ -2626,7 +2639,7 @@ function formatoFechaLegible(fechaStr){
 }
 
 function actualizarDashboard(){
-  var historialDelMes = historial.filter(function(h){ return perteneceAMesActual(h.fecha); });
+  var historialDelMes = historialUnicoPorFecha().filter(function(h){ return perteneceAMesActual(h.fecha); });
   var totalEntOrd=0, totalRecOrd=0, totalDev=0, totalRecBultos=0, dias=historialDelMes.length;
   historialDelMes.forEach(function(h){
     totalEntOrd += (h.entregadosOrdenes!=null ? h.entregadosOrdenes : h.entregados);
@@ -2700,7 +2713,7 @@ function completarDetalleDesdeSheets(callback){
 
 function exportarReporteMensualAhora(){
   if(historial.length===0){alert('No hay datos en el historial todavía.');return;}
-  var historialDelMes = historial.filter(function(h){ return perteneceAMesActual(h.fecha); });
+  var historialDelMes = historialUnicoPorFecha().filter(function(h){ return perteneceAMesActual(h.fecha); });
   if(historialDelMes.length===0){alert('No hay días cerrados del mes actual todavía.');return;}
   var wb=XLSX.utils.book_new();
   // Hoja resumen
@@ -2863,7 +2876,7 @@ function renderHistorial(){
   if(historial.length===0){lista.innerHTML='';vacio.style.display='block';return;}
   vacio.style.display='none';
   var html='';
-  [].concat(historial).reverse().forEach(function(h){
+  [].concat(historialUnicoPorFecha()).reverse().forEach(function(h){
     html+='<div class="hist-item">';
     html+='<div><div class="hist-fecha">'+formatoFechaLegible(h.fecha)+'</div>';
     html+='<div class="hist-stats">'+h.total+' paq · ✅'+h.entregados+' · ↩️'+h.devueltos+' · '+h.efectividad+'%</div></div>';
