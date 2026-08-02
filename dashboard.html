@@ -181,6 +181,17 @@ function formatoPesos(n){
 function normalizarMes(texto){
   return String(texto||'').trim().toLowerCase().replace(/\s+/g,' ');
 }
+const MESES_NOMBRES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+function mesComoTexto(valor){
+  // Si Sheets guardó el "Mes" como fecha (ej. "2026-07-01T04:00:00.000Z" en vez de "julio 2026"),
+  // esto lo reconoce y lo convierte de vuelta a texto tipo "julio 2026".
+  const s = String(valor||'').trim();
+  if(/^\d{4}-\d{2}-\d{2}T/.test(s)){
+    const d = new Date(s);
+    return MESES_NOMBRES[d.getUTCMonth()] + ' ' + d.getUTCFullYear();
+  }
+  return s;
+}
 function mesActualTexto(){
   const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   const hoy = new Date();
@@ -226,11 +237,11 @@ async function cargarDatos(){
       efectividad: Number(row[8])||0, ingresos: Number(row[11])||0, ts: row[12]||0
     }));
     costos = (rCostos||[]).slice(1).map(row => ({
-      fecha: row[0], mes: row[1], categoria: row[2], descripcion: row[3],
+      fecha: row[0], mes: mesComoTexto(row[1]), categoria: row[2], descripcion: row[3],
       monto: Number(row[4])||0, fijo: row[5]
     }));
     gastosPersonales = (rPersonal||[]).slice(1).map(row => ({
-      fecha: row[0], mes: row[1], categoria: row[2], descripcion: row[3], monto: Number(row[4])||0
+      fecha: row[0], mes: mesComoTexto(row[1]), categoria: row[2], descripcion: row[3], monto: Number(row[4])||0
     }));
     document.getElementById('sync-badge').textContent = '☁️ Sincronizado (toca para actualizar)';
     document.getElementById('loading').style.display = 'none';
