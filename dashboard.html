@@ -285,15 +285,16 @@ function pintarOperacion(mesTexto){
 
   let html = '';
   let mesEnCurso = null;
-  let subPaq=0, subOrd=0, subDev=0;
+  let subPaq=0, subOrd=0, subOrdEnt=0, subDev=0;
   let primerGrupo = true;
 
   function cerrarSubtotal(){
     if(mesEnCurso){
       const clase = 'mesfila-' + mesEnCurso.replace(/\s+/g,'-');
+      const efMes = subOrd>0 ? Math.round(subOrdEnt/subOrd*100) : 0;
       html += `<tr class="${clase}" style="background:#eaf2fb;font-weight:800;">
         <td>Total ${mesEnCurso}</td><td class="num">${subPaq}</td><td class="num">${subOrd}</td>
-        <td class="num">—</td><td class="num">${subDev}</td></tr>`;
+        <td class="num">${efMes}%</td><td class="num">${subDev}</td></tr>`;
     }
   }
 
@@ -307,10 +308,10 @@ function pintarOperacion(mesTexto){
         <td colspan="5" style="padding:7px 10px;font-weight:700;text-transform:capitalize;">
         <span class="flecha-mes">${abierto ? '▼' : '▶'}</span> ${nombreMes}</td></tr>`;
       mesEnCurso = nombreMes;
-      subPaq=0; subOrd=0; subDev=0;
+      subPaq=0; subOrd=0; subOrdEnt=0; subDev=0;
       primerGrupo = false;
     }
-    subPaq += c.total; subOrd += c.totalOrdenes; subDev += (c.devueltos+c.daniados);
+    subPaq += c.total; subOrd += c.totalOrdenes; subOrdEnt += c.entregadosOrdenes; subDev += (c.devueltos+c.daniados);
     const clase = 'mesfila-' + mesEnCurso.replace(/\s+/g,'-');
     html += `<tr class="${clase}">
       <td>${formatoFechaLegible(c.fecha)}</td><td class="num">${c.total}</td><td class="num">${c.totalOrdenes}</td>
