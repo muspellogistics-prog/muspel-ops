@@ -455,6 +455,23 @@
     <div id="d-dias-lista"></div>
   </div>
   <div class="card">
+    <div class="card-title">🧾 Detalle para facturar (paquetes vs. órdenes)</div>
+    <div style="font-size:0.72rem;color:#64748b;margin-bottom:8px;">Los paquetes son lo entregado físicamente; las órdenes son lo que se paga (un multibulto cuenta como 1 sola).</div>
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+        <thead>
+          <tr style="background:var(--azul);color:#fff;">
+            <th style="padding:6px 8px;text-align:left;">Día</th>
+            <th style="padding:6px 8px;text-align:right;">Paquetes entregados</th>
+            <th style="padding:6px 8px;text-align:right;">Órdenes entregadas</th>
+            <th style="padding:6px 8px;text-align:right;">Valor a cobrar</th>
+          </tr>
+        </thead>
+        <tbody id="d-tabla-facturar"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card">
     <div class="card-title">📥 Exportar reporte mensual</div>
     <button class="btn btn-primary" onclick="exportarReporteMensual()">Descargar Excel del mes</button>
   </div>
@@ -2609,9 +2626,14 @@ function descargarCierresDesdeSheets(callback){
         agregados++;
       } else {
         var existente = historial[porFecha[fechaCierre]];
-        // Solo actualizamos si nuestra copia también vino de la nube (no pisamos un cierre
-        // hecho de verdad en ESTE equipo) y si la de Sheets es más nueva.
-        if(existente.sincronizadoDesdeNube && tsNube > (existente.ts||0)){
+        // Sheets es la fuente de verdad para los NÚMEROS (por si se corrigió algo ahí,
+        // como pasó con el 30-07 y el 01-08). Si Sheets tiene una versión más nueva,
+        // se actualizan los números, pero se CONSERVA el detalle local si existe
+        // (para no perder el detalle real por paquete que solo vive en este equipo).
+        if(tsNube > (existente.ts||0)){
+          var detalleAConservar = (existente.detalle && existente.detalle.length>0) ? existente.detalle : nuevoRegistro.detalle;
+          nuevoRegistro.detalle = detalleAConservar;
+          nuevoRegistro.sincronizadoDesdeNube = !(detalleAConservar && detalleAConservar.length>0);
           historial[porFecha[fechaCierre]] = nuevoRegistro;
           agregados++;
         }
@@ -2669,9 +2691,10 @@ function actualizarDashboard(){
   document.getElementById('d-tasa-dev').textContent=tasaDev+'% del total';
   // ultimos dias
   var lista=document.getElementById('d-dias-lista');
-  if(historial.length===0){lista.innerHTML='<div class="alerta alerta-info">Aún no hay días cerrados.</div>';return;}
+  var historialCompleto = historialUnicoPorFecha();
+  if(historialCompleto.length===0){lista.innerHTML='<div class="alerta alerta-info">Aún no hay días cerrados.</div>';return;}
   var html='';
-  var ultimos=[].concat(historial).reverse().slice(0,7);
+  var ultimos=[].concat(historialCompleto).reverse().slice(0,7);
   ultimos.forEach(function(h){
     html+='<div class="semana-row">';
     html+='<div><strong>'+formatoFechaLegible(h.fecha)+'</strong><div style="font-size:0.7rem;color:#64748b;">'+h.total+' paq · '+h.efectividad+'% ef</div></div>';
@@ -2679,6 +2702,33 @@ function actualizarDashboard(){
     html+='</div>';
   });
   lista.innerHTML=html;
+
+  // Tabla de facturación: paquetes vs. órdenes vs. valor a cobrar, TODOS los días
+  // (no solo el mes actual) — para ver la racha completa entre meses al facturar.
+  var tbodyFactura = document.getElementById('d-tabla-facturar');
+  if(tbodyFactura){
+    var filas='';
+    var totalPaq=0, totalOrd=0, totalCobrar=0;
+    [].concat(historialCompleto).forEach(function(h){
+      var ordEnt = h.entregadosOrdenes!=null ? h.entregadosOrdenes : h.entregados;
+      totalPaq += h.entregados;
+      totalOrd += ordEnt;
+      totalCobrar += h.ingresos;
+      filas += '<tr style="border-bottom:1px solid #eee;">'+
+        '<td style="padding:6px 8px;">'+formatoFechaLegible(h.fecha)+'</td>'+
+        '<td style="padding:6px 8px;text-align:right;">'+h.entregados+'</td>'+
+        '<td style="padding:6px 8px;text-align:right;">'+ordEnt+'</td>'+
+        '<td style="padding:6px 8px;text-align:right;color:var(--verde);font-weight:600;">$'+h.ingresos.toLocaleString('es-CL')+'</td>'+
+        '</tr>';
+    });
+    filas += '<tr style="background:#f4f6fa;font-weight:800;">'+
+      '<td style="padding:7px 8px;">Total</td>'+
+      '<td style="padding:7px 8px;text-align:right;">'+totalPaq+'</td>'+
+      '<td style="padding:7px 8px;text-align:right;">'+totalOrd+'</td>'+
+      '<td style="padding:7px 8px;text-align:right;color:var(--verde);">$'+totalCobrar.toLocaleString('es-CL')+'</td>'+
+      '</tr>';
+    tbodyFactura.innerHTML = filas;
+  }
 }
 
 // Trae el detalle completo por paquete desde Sheets, para los días que en este equipo
