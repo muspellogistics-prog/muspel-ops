@@ -2579,6 +2579,13 @@ function cerrarDia(){
 // con el historial local, sin duplicar. Así el Dashboard muestra el acumulado real del
 // mes sin importar en qué teléfono/compu se haya cerrado cada día.
 function descargarCierresDesdeSheets(callback){
+  // Primero, colapsa cualquier duplicado que haya quedado guardado localmente de antes
+  // (por ejemplo, de cuando 2 equipos cerraron casi al mismo tiempo) — se queda con el
+  // de mayor ts de cada fecha, y el resto se elimina del array por completo.
+  historial = historialUnicoPorFecha();
+  guardarStorage();
+  renderHistorial();
+
   fetch(SHEETS_URL + '?tipo=cierres').then(function(r){ return r.json(); }).then(function(rows){
     if(!rows || rows.length <= 1){ if(callback) callback(0); return; }
     // encabezado: fecha,total,entregados,devueltos,daniados,pendientes,totalOrdenes,
@@ -2626,14 +2633,16 @@ function descargarCierresDesdeSheets(callback){
         agregados++;
       } else {
         var existente = historial[porFecha[fechaCierre]];
-        // Sheets es la fuente de verdad para los NÚMEROS (por si se corrigió algo ahí,
-        // como pasó con el 30-07 y el 01-08). Si Sheets tiene una versión más nueva,
-        // se actualizan los números, pero se CONSERVA el detalle local si existe
-        // (para no perder el detalle real por paquete que solo vive en este equipo).
-        if(tsNube > (existente.ts||0)){
+        // Sheets es SIEMPRE la fuente de verdad para los números (la persona la revisa y
+        // corrige a mano ahí si hace falta) — no importa cuál timestamp sea más nuevo.
+        // Se conserva el detalle local si existe, para no perder el detalle real por paquete.
+        var mismoDato = existente.total===nuevoRegistro.total && existente.entregados===nuevoRegistro.entregados &&
+          existente.devueltos===nuevoRegistro.devueltos && existente.ingresos===nuevoRegistro.ingresos;
+        if(!mismoDato){
           var detalleAConservar = (existente.detalle && existente.detalle.length>0) ? existente.detalle : nuevoRegistro.detalle;
           nuevoRegistro.detalle = detalleAConservar;
           nuevoRegistro.sincronizadoDesdeNube = !(detalleAConservar && detalleAConservar.length>0);
+          nuevoRegistro.ts = Math.max(tsNube, existente.ts||0); // conserva el ts más alto para no desordenar la lista
           historial[porFecha[fechaCierre]] = nuevoRegistro;
           agregados++;
         }
