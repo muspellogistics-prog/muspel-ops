@@ -69,6 +69,7 @@
     <div class="tab" data-tab="finanzas">💰 Finanzas</div>
     <div class="tab" data-tab="rentabilidad">📈 Rentabilidad</div>
     <div class="tab" data-tab="proyeccion">🎯 Proyección</div>
+    <div class="tab" data-tab="personal">🏠 Personal</div>
   </div>
 </div>
 
@@ -107,6 +108,11 @@
       <div class="card"><div class="card-label">Flujo de caja del mes</div><div class="card-value" id="fin-flujo">—</div></div>
     </div>
     <div class="panel">
+      <div class="titulo-seccion" style="margin-top:0;">💵 Cuánto facturar — por mes, por separado</div>
+      <div class="panel-nota">Ingreso neto real de cada mes (según Cierres), y el total a facturar a ALAS con IVA. Cada mes queda aparte, no acumulado.</div>
+      <table><thead><tr><th>Mes</th><th class="num">Órdenes entregadas</th><th class="num">Ingreso Neto</th><th class="num">Total a facturar (+IVA)</th></tr></thead><tbody id="tabla-facturacion"></tbody></table>
+    </div>
+    <div class="panel">
       <div class="titulo-seccion" style="margin-top:0;">Detalle de costos del mes</div>
       <table><thead><tr><th>Categoría</th><th>Descripción</th><th>Tipo</th><th class="num">Monto</th></tr></thead><tbody id="tabla-costos"></tbody></table>
     </div>
@@ -142,6 +148,24 @@
     </div>
   </div>
 
+  <!-- PERSONAL -->
+  <div class="seccion" id="tab-personal">
+    <div style="background:#fff3d6;border-left:4px solid #b8860b;border-radius:8px;padding:12px 14px;font-size:0.82rem;color:#7c4a03;margin-bottom:16px;line-height:1.5;">
+      🏠 Esto es aparte de Muspel — solo para ordenar la plata de la casa (Katherine y Cristian).
+    </div>
+    <div class="grid">
+      <div class="card" style="border-top:3px solid #b8860b;"><div class="card-label">Gasto total del mes</div><div class="card-value" id="pers-total" style="color:#b8860b;">—</div></div>
+    </div>
+    <div class="panel">
+      <div class="titulo-seccion" style="margin-top:0;color:#7c4a03;">Por categoría — mes en curso</div>
+      <table><thead><tr style="background:#b8860b;"><th>Categoría</th><th class="num">Total</th></tr></thead><tbody id="tabla-personal-cat"></tbody></table>
+    </div>
+    <div class="panel">
+      <div class="titulo-seccion" style="margin-top:0;color:#7c4a03;">Detalle</div>
+      <table><thead><tr style="background:#b8860b;"><th>Fecha</th><th>Categoría</th><th>Descripción</th><th class="num">Monto</th></tr></thead><tbody id="tabla-personal-detalle"></tbody></table>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -149,6 +173,7 @@ const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbx6aAlb99tMoR2leEQep
 
 let cierres = [];
 let costos = [];
+let gastosPersonales = [];
 
 function formatoPesos(n){
   return '$' + Math.round(n).toLocaleString('es-CL');
@@ -186,9 +211,10 @@ async function cargarDatos(){
   document.getElementById('sync-badge').textContent = '🔄 Sincronizando...';
 
   try{
-    const [rCierres, rCostos] = await Promise.all([
+    const [rCierres, rCostos, rPersonal] = await Promise.all([
       fetch(SHEETS_URL + '?tipo=cierres').then(r=>r.json()),
-      fetch(SHEETS_URL + '?tipo=costos').then(r=>r.json())
+      fetch(SHEETS_URL + '?tipo=costos').then(r=>r.json()),
+      fetch(SHEETS_URL + '?tipo=gastos_personales').then(r=>r.json())
     ]);
     cierres = (rCierres||[]).slice(1).map(row => ({
       fecha: row[0], total: Number(row[1])||0, entregados: Number(row[2])||0,
@@ -200,6 +226,9 @@ async function cargarDatos(){
       fecha: row[0], mes: row[1], categoria: row[2], descripcion: row[3],
       monto: Number(row[4])||0, fijo: row[5]
     }));
+    gastosPersonales = (rPersonal||[]).slice(1).map(row => ({
+      fecha: row[0], mes: row[1], categoria: row[2], descripcion: row[3], monto: Number(row[4])||0
+    }));
     document.getElementById('sync-badge').textContent = '☁️ Sincronizado (toca para actualizar)';
     document.getElementById('loading').style.display = 'none';
   } catch(e){
@@ -210,7 +239,24 @@ async function cargarDatos(){
   pintarOperacion(mesTexto);
   pintarFinanzas(mesTexto);
   pintarRentabilidad(mesTexto);
+  pintarPersonal(mesTexto);
   calcularProyeccion();
+}
+
+function pintarPersonal(mesTexto){
+  const delMes = gastosPersonales.filter(g => g.mes === mesTexto);
+  const total = delMes.reduce((a,g)=>a+g.monto,0);
+  document.getElementById('pers-total').textContent = formatoPesos(total);
+
+  const categorias = ['Mercadería','Cigarros','Chicles','Mascotas','Leña','Imprevistos','Ahorro','Vestimenta','Otros'];
+  document.getElementById('tabla-personal-cat').innerHTML = categorias.map(cat => {
+    const totalCat = delMes.filter(g=>g.categoria===cat).reduce((a,g)=>a+g.monto,0);
+    return `<tr><td>${cat}</td><td class="num">${formatoPesos(totalCat)}</td></tr>`;
+  }).join('');
+
+  document.getElementById('tabla-personal-detalle').innerHTML = delMes.map(g => `
+    <tr><td>${formatoFechaLegible(g.fecha)}</td><td>${g.categoria}</td><td>${g.descripcion}</td><td class="num">${formatoPesos(g.monto)}</td></tr>
+  `).join('') || '<tr><td colspan="4" style="text-align:center;color:#94a3b8;">Sin gastos registrados este mes</td></tr>';
 }
 
 function pintarOperacion(mesTexto){
@@ -231,34 +277,68 @@ function pintarOperacion(mesTexto){
   const tbody = document.getElementById('tabla-dias');
   const ordenados = [].concat(cierres).reverse();
   const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-  let mesActualEnTabla = null;
+
+  function nombreMesDe(fechaRaw){
+    const p = formatoFechaLegible(fechaRaw).split('-');
+    return p.length===3 ? (meses[parseInt(p[1],10)-1] + ' ' + p[2]) : 'Sin fecha';
+  }
+
   let html = '';
+  let mesEnCurso = null;
   let subPaq=0, subOrd=0, subDev=0;
+  let primerGrupo = true;
 
   function cerrarSubtotal(){
-    if(mesActualEnTabla){
-      html += `<tr style="background:#eaf2fb;font-weight:800;">
-        <td>Total ${mesActualEnTabla}</td><td class="num">${subPaq}</td><td class="num">${subOrd}</td>
+    if(mesEnCurso){
+      const clase = 'mesfila-' + mesEnCurso.replace(/\s+/g,'-');
+      html += `<tr class="${clase}" style="background:#eaf2fb;font-weight:800;">
+        <td>Total ${mesEnCurso}</td><td class="num">${subPaq}</td><td class="num">${subOrd}</td>
         <td class="num">—</td><td class="num">${subDev}</td></tr>`;
     }
   }
 
   ordenados.forEach(c => {
-    const legible = formatoFechaLegible(c.fecha);
-    const partes = legible.split('-');
-    const nombreMes = partes.length===3 ? (meses[parseInt(partes[1],10)-1] + ' ' + partes[2]) : 'Sin fecha';
-    if(nombreMes !== mesActualEnTabla){
+    const nombreMes = nombreMesDe(c.fecha);
+    if(nombreMes !== mesEnCurso){
       cerrarSubtotal();
-      html += `<tr style="background:var(--azul);color:#fff;"><td colspan="5" style="padding:7px 10px;font-weight:700;text-transform:capitalize;">${nombreMes}</td></tr>`;
-      mesActualEnTabla = nombreMes;
+      const abierto = primerGrupo;
+      const claseNueva = 'mesfila-' + nombreMes.replace(/\s+/g,'-');
+      html += `<tr style="background:var(--azul);color:#fff;cursor:pointer;" onclick="toggleMes('${claseNueva}', this)">
+        <td colspan="5" style="padding:7px 10px;font-weight:700;text-transform:capitalize;">
+        <span class="flecha-mes">${abierto ? '▼' : '▶'}</span> ${nombreMes}</td></tr>`;
+      mesEnCurso = nombreMes;
       subPaq=0; subOrd=0; subDev=0;
+      primerGrupo = false;
     }
     subPaq += c.total; subOrd += c.totalOrdenes; subDev += (c.devueltos+c.daniados);
-    html += `<tr><td>${legible}</td><td class="num">${c.total}</td><td class="num">${c.totalOrdenes}</td>
+    const clase = 'mesfila-' + mesEnCurso.replace(/\s+/g,'-');
+    html += `<tr class="${clase}">
+      <td>${formatoFechaLegible(c.fecha)}</td><td class="num">${c.total}</td><td class="num">${c.totalOrdenes}</td>
       <td class="num">${c.efectividad}%</td><td class="num">${c.devueltos+c.daniados}</td></tr>`;
   });
   cerrarSubtotal();
   tbody.innerHTML = html;
+
+  // Colapsa todos los meses excepto el más reciente (el primero de la lista)
+  const gruposMes = [...new Set(ordenados.map(c => nombreMesDe(c.fecha)))];
+  gruposMes.forEach((m, idx) => {
+    if(idx > 0){
+      const clase = 'mesfila-' + m.replace(/\s+/g,'-');
+      document.querySelectorAll('.'+clase).forEach(tr => { if(!tr.style.background) tr.style.display = 'none'; });
+    }
+  });
+}
+
+function toggleMes(clase, headerRow){
+  const filas = document.querySelectorAll('.'+clase);
+  const flecha = headerRow.querySelector('.flecha-mes');
+  let abrir = false;
+  filas.forEach(tr => {
+    if(tr.style.background) return; // no tocar la fila de subtotal, esa siempre se ve
+    abrir = (tr.style.display === 'none');
+    tr.style.display = abrir ? '' : 'none';
+  });
+  if(flecha) flecha.textContent = abrir ? '▼' : '▶';
 }
 
 function pintarFinanzas(mesTexto){
@@ -279,6 +359,28 @@ function pintarFinanzas(mesTexto){
     <td>${c.fijo==='Sí' ? '<span class="badge-fijo">Fijo</span>' : '<span class="badge-var">Variable</span>'}</td>
     <td class="num">${formatoPesos(c.monto)}</td></tr>
   `).join('') || '<tr><td colspan="4" style="text-align:center;color:#94a3b8;">Sin costos registrados este mes</td></tr>';
+
+  // Facturación por mes, cada uno por separado (no acumulado), ordenado del más reciente al más antiguo
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const porMes = {};
+  cierres.forEach(c => {
+    const p = formatoFechaLegible(c.fecha).split('-');
+    if(p.length !== 3) return;
+    const nombreMes = meses[parseInt(p[1],10)-1] + ' ' + p[2];
+    if(!porMes[nombreMes]) porMes[nombreMes] = { ingreso:0, ordenes:0, orden:parseInt(p[2])*100+parseInt(p[1],10) };
+    porMes[nombreMes].ingreso += c.ingresos;
+    porMes[nombreMes].ordenes += c.entregadosOrdenes;
+  });
+  const IVA = 0.19;
+  const filasFactura = Object.keys(porMes)
+    .sort((a,b) => porMes[b].orden - porMes[a].orden)
+    .map(m => {
+      const d = porMes[m];
+      const conIva = Math.round(d.ingreso * (1+IVA));
+      return `<tr><td style="text-transform:capitalize;">${m}</td><td class="num">${d.ordenes}</td>
+        <td class="num">${formatoPesos(d.ingreso)}</td><td class="num verde-txt">${formatoPesos(conIva)}</td></tr>`;
+    }).join('');
+  document.getElementById('tabla-facturacion').innerHTML = filasFactura || '<tr><td colspan="4" style="text-align:center;color:#94a3b8;">Sin días cerrados todavía</td></tr>';
 }
 
 function pintarRentabilidad(mesTexto){
@@ -327,7 +429,7 @@ document.querySelectorAll('.tab').forEach(tab => {
 });
 
 cargarDatos();
-setInterval(cargarDatos, 60000); // se refresca solo cada minuto
+setInterval(cargarDatos, 30000); // se refresca solo cada 30 segundos
 </script>
 
 </body>
