@@ -62,7 +62,7 @@
       <div class="header-logo">MUSPEL <span>CONTROL DE GESTIÓN</span></div>
       <div class="header-sub" id="header-fecha">Cargando...</div>
     </div>
-    <div class="estado-sync" id="sync-badge">⏳ Cargando...</div>
+    <div class="estado-sync" id="sync-badge" onclick="cargarDatos()" style="cursor:pointer;" title="Tocar para sincronizar ahora">⏳ Cargando...</div>
   </div>
   <div class="tabs">
     <div class="tab active" data-tab="operacion">📊 Operación</div>
@@ -158,10 +158,22 @@ function mesActualTexto(){
   const hoy = new Date();
   return meses[hoy.getMonth()] + ' ' + hoy.getFullYear();
 }
+function formatoFechaLegible(fechaStr){
+  if(!fechaStr) return '';
+  const s = String(fechaStr).trim();
+  if(/^\d{4}-\d{2}-\d{2}T/.test(s)){
+    const d = new Date(s);
+    const dia = String(d.getUTCDate()).padStart(2,'0');
+    const mes = String(d.getUTCMonth()+1).padStart(2,'0');
+    const anio = d.getUTCFullYear();
+    return dia+'-'+mes+'-'+anio;
+  }
+  return s;
+}
 function perteneceAlMes(fechaTexto, mesTexto){
-  // fechaTexto viene como DD-MM-AAAA; mesTexto como "agosto 2026"
-  if(!fechaTexto) return false;
-  const partes = String(fechaTexto).split('-');
+  // fechaTexto viene como DD-MM-AAAA o como fecha ISO de Sheets; se normaliza primero
+  const legible = formatoFechaLegible(fechaTexto);
+  const partes = legible.split('-');
   if(partes.length !== 3) return false;
   const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   const nombreMes = meses[parseInt(partes[1],10)-1];
@@ -171,6 +183,7 @@ function perteneceAlMes(fechaTexto, mesTexto){
 async function cargarDatos(){
   const mesTexto = mesActualTexto();
   document.getElementById('header-fecha').textContent = 'Mes en curso: ' + mesTexto;
+  document.getElementById('sync-badge').textContent = '🔄 Sincronizando...';
 
   try{
     const [rCierres, rCostos] = await Promise.all([
@@ -187,10 +200,10 @@ async function cargarDatos(){
       fecha: row[0], mes: row[1], categoria: row[2], descripcion: row[3],
       monto: Number(row[4])||0, fijo: row[5]
     }));
-    document.getElementById('sync-badge').textContent = '☁️ Sincronizado';
+    document.getElementById('sync-badge').textContent = '☁️ Sincronizado (toca para actualizar)';
     document.getElementById('loading').style.display = 'none';
   } catch(e){
-    document.getElementById('sync-badge').textContent = '⚠️ Sin conexión';
+    document.getElementById('sync-badge').textContent = '⚠️ Sin conexión (toca para reintentar)';
     document.getElementById('loading').textContent = 'No se pudo conectar con Google Sheets. Revisa tu internet.';
   }
 
@@ -217,7 +230,7 @@ function pintarOperacion(mesTexto){
 
   const tbody = document.getElementById('tabla-dias');
   tbody.innerHTML = [].concat(cierres).reverse().slice(0,10).map(c => `
-    <tr><td>${c.fecha}</td><td class="num">${c.total}</td><td class="num">${c.totalOrdenes}</td>
+    <tr><td>${formatoFechaLegible(c.fecha)}</td><td class="num">${c.total}</td><td class="num">${c.totalOrdenes}</td>
     <td class="num">${c.efectividad}%</td><td class="num">${c.devueltos+c.daniados}</td></tr>
   `).join('');
 }
