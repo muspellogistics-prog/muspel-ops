@@ -229,10 +229,36 @@ function pintarOperacion(mesTexto){
   document.getElementById('op-inc-mes').textContent = incMes;
 
   const tbody = document.getElementById('tabla-dias');
-  tbody.innerHTML = [].concat(cierres).reverse().slice(0,10).map(c => `
-    <tr><td>${formatoFechaLegible(c.fecha)}</td><td class="num">${c.total}</td><td class="num">${c.totalOrdenes}</td>
-    <td class="num">${c.efectividad}%</td><td class="num">${c.devueltos+c.daniados}</td></tr>
-  `).join('');
+  const ordenados = [].concat(cierres).reverse();
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  let mesActualEnTabla = null;
+  let html = '';
+  let subPaq=0, subOrd=0, subDev=0;
+
+  function cerrarSubtotal(){
+    if(mesActualEnTabla){
+      html += `<tr style="background:#eaf2fb;font-weight:800;">
+        <td>Total ${mesActualEnTabla}</td><td class="num">${subPaq}</td><td class="num">${subOrd}</td>
+        <td class="num">—</td><td class="num">${subDev}</td></tr>`;
+    }
+  }
+
+  ordenados.forEach(c => {
+    const legible = formatoFechaLegible(c.fecha);
+    const partes = legible.split('-');
+    const nombreMes = partes.length===3 ? (meses[parseInt(partes[1],10)-1] + ' ' + partes[2]) : 'Sin fecha';
+    if(nombreMes !== mesActualEnTabla){
+      cerrarSubtotal();
+      html += `<tr style="background:var(--azul);color:#fff;"><td colspan="5" style="padding:7px 10px;font-weight:700;text-transform:capitalize;">${nombreMes}</td></tr>`;
+      mesActualEnTabla = nombreMes;
+      subPaq=0; subOrd=0; subDev=0;
+    }
+    subPaq += c.total; subOrd += c.totalOrdenes; subDev += (c.devueltos+c.daniados);
+    html += `<tr><td>${legible}</td><td class="num">${c.total}</td><td class="num">${c.totalOrdenes}</td>
+      <td class="num">${c.efectividad}%</td><td class="num">${c.devueltos+c.daniados}</td></tr>`;
+  });
+  cerrarSubtotal();
+  tbody.innerHTML = html;
 }
 
 function pintarFinanzas(mesTexto){
