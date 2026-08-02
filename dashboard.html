@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>MUSPEL · Control de Gestión</title>
+<style>
+  :root {
+    --azul:#1a3a5c; --azul2:#2563a8; --verde:#1a7a4a; --rojo:#b91c1c;
+    --naranja:#c2410c; --gris:#64748b; --borde:#dde3ed; --blanco:#ffffff;
+    --fondo:#f4f6fa; --sombra:0 2px 8px rgba(26,58,92,0.10);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--fondo);color:#1e293b;min-height:100vh;}
+  .header{background:var(--azul);color:#fff;padding:18px 20px;position:sticky;top:0;z-index:50;box-shadow:0 2px 8px rgba(0,0,0,0.18);}
+  .header-top{display:flex;justify-content:space-between;align-items:flex-start;}
+  .header-logo{font-size:1.3rem;font-weight:800;letter-spacing:0.5px;}
+  .header-logo span{color:#7ec8f4;font-weight:400;}
+  .header-sub{font-size:0.78rem;color:#a8c4e0;margin-top:2px;}
+  .estado-sync{font-size:0.72rem;padding:5px 10px;border-radius:16px;background:rgba(255,255,255,0.12);white-space:nowrap;}
+  .tabs{display:flex;gap:4px;margin-top:14px;overflow-x:auto;scrollbar-width:none;}
+  .tabs::-webkit-scrollbar{display:none;}
+  .tab{padding:8px 14px;border-radius:8px 8px 0 0;font-size:0.82rem;font-weight:600;color:#a8c4e0;cursor:pointer;white-space:nowrap;}
+  .tab.active{background:var(--fondo);color:var(--azul);}
+  .contenido{max-width:1100px;margin:0 auto;padding:18px 16px 60px;}
+  .seccion{display:none;}
+  .seccion.active{display:block;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:16px;}
+  .card{background:#fff;border-radius:12px;padding:16px 18px;box-shadow:var(--sombra);}
+  .card-label{font-size:0.74rem;color:var(--gris);font-weight:700;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:6px;}
+  .card-value{font-size:1.7rem;font-weight:800;color:var(--azul);line-height:1.15;}
+  .card-value.verde{color:var(--verde);}
+  .card-value.rojo{color:var(--rojo);}
+  .card-value.naranja{color:var(--naranja);}
+  .card-sub{font-size:0.72rem;color:var(--gris);margin-top:4px;}
+  .titulo-seccion{font-size:1.05rem;font-weight:800;color:var(--azul);margin:22px 0 10px;display:flex;align-items:center;gap:8px;}
+  .panel{background:#fff;border-radius:12px;padding:18px;box-shadow:var(--sombra);margin-bottom:16px;}
+  .panel-nota{font-size:0.78rem;color:var(--gris);margin-bottom:12px;line-height:1.5;}
+  table{width:100%;border-collapse:collapse;font-size:0.84rem;}
+  th{background:var(--azul);color:#fff;text-align:left;padding:8px 10px;font-size:0.76rem;text-transform:uppercase;letter-spacing:0.3px;}
+  td{padding:8px 10px;border-bottom:1px solid var(--borde);}
+  tr:last-child td{font-weight:800;background:var(--fondo);}
+  .num{text-align:right;}
+  .verde-txt{color:var(--verde);font-weight:700;}
+  .rojo-txt{color:var(--rojo);font-weight:700;}
+  .input-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
+  .input-row label{font-size:0.82rem;font-weight:600;color:#334155;min-width:220px;}
+  .input-row input{border:1.5px solid var(--borde);border-radius:8px;padding:7px 10px;font-size:0.88rem;width:130px;}
+  .banner-info{background:#eaf2fb;border-left:4px solid var(--azul2);border-radius:8px;padding:12px 14px;font-size:0.82rem;color:#1e3a5f;margin-bottom:16px;line-height:1.5;}
+  .banner-alerta{background:#fff4e0;border-left:4px solid var(--naranja);border-radius:8px;padding:12px 14px;font-size:0.82rem;color:#7c2d12;margin-bottom:16px;line-height:1.5;}
+  .badge-fijo{display:inline-block;font-size:0.68rem;font-weight:700;padding:2px 8px;border-radius:10px;background:#dbeafe;color:#1e40af;}
+  .badge-var{display:inline-block;font-size:0.68rem;font-weight:700;padding:2px 8px;border-radius:10px;background:#f1f5f9;color:#475569;}
+  .loading{text-align:center;padding:40px;color:var(--gris);}
+  @media (max-width:600px){ .card-value{font-size:1.4rem;} }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-top">
+    <div>
+      <div class="header-logo">MUSPEL <span>CONTROL DE GESTIÓN</span></div>
+      <div class="header-sub" id="header-fecha">Cargando...</div>
+    </div>
+    <div class="estado-sync" id="sync-badge">⏳ Cargando...</div>
+  </div>
+  <div class="tabs">
+    <div class="tab active" data-tab="operacion">📊 Operación</div>
+    <div class="tab" data-tab="finanzas">💰 Finanzas</div>
+    <div class="tab" data-tab="rentabilidad">📈 Rentabilidad</div>
+    <div class="tab" data-tab="proyeccion">🎯 Proyección</div>
+  </div>
+</div>
+
+<div class="contenido">
+
+  <div id="loading" class="loading">Cargando datos desde Google Sheets...</div>
+
+  <!-- OPERACIÓN -->
+  <div class="seccion" id="tab-operacion">
+    <div class="banner-info">Indicadores operacionales: cuántas órdenes se entregan y con qué efectividad, hoy y en el mes en curso.</div>
+    <div class="titulo-seccion">Hoy / Último día cerrado</div>
+    <div class="grid">
+      <div class="card"><div class="card-label">Órdenes entregadas</div><div class="card-value" id="op-ord-dia">—</div></div>
+      <div class="card"><div class="card-label">Efectividad del día</div><div class="card-value verde" id="op-ef-dia">—</div></div>
+      <div class="card"><div class="card-label">Devueltas</div><div class="card-value rojo" id="op-dev-dia">—</div></div>
+    </div>
+    <div class="titulo-seccion">Mes en curso</div>
+    <div class="grid">
+      <div class="card"><div class="card-label">Órdenes entregadas del mes</div><div class="card-value" id="op-ord-mes">—</div></div>
+      <div class="card"><div class="card-label">Efectividad acumulada</div><div class="card-value verde" id="op-ef-mes">—</div></div>
+      <div class="card"><div class="card-label">Incidencias del mes</div><div class="card-value naranja" id="op-inc-mes">—</div></div>
+    </div>
+    <div class="panel">
+      <div class="titulo-seccion" style="margin-top:0;">Últimos días operados</div>
+      <table><thead><tr><th>Fecha</th><th class="num">Paquetes</th><th class="num">Órdenes</th><th class="num">Efectividad</th><th class="num">Devueltas</th></tr></thead><tbody id="tabla-dias"></tbody></table>
+    </div>
+  </div>
+
+  <!-- FINANZAS -->
+  <div class="seccion" id="tab-finanzas">
+    <div class="banner-info">Se calcula con lo que ya está en Google Sheets (Cierres) más lo que se registre en la hoja "Costos".</div>
+    <div class="titulo-seccion">Mes en curso</div>
+    <div class="grid">
+      <div class="card"><div class="card-label">Ingreso neto del mes</div><div class="card-value verde" id="fin-ingreso">—</div></div>
+      <div class="card"><div class="card-label">Costos del mes</div><div class="card-value rojo" id="fin-costos">—</div></div>
+      <div class="card"><div class="card-label">Flujo de caja del mes</div><div class="card-value" id="fin-flujo">—</div></div>
+    </div>
+    <div class="panel">
+      <div class="titulo-seccion" style="margin-top:0;">Detalle de costos del mes</div>
+      <table><thead><tr><th>Categoría</th><th>Descripción</th><th>Tipo</th><th class="num">Monto</th></tr></thead><tbody id="tabla-costos"></tbody></table>
+    </div>
+  </div>
+
+  <!-- RENTABILIDAD -->
+  <div class="seccion" id="tab-rentabilidad">
+    <div class="banner-info">Costo y margen por orden entregada, y cuántas órdenes al mes se necesitan para cubrir los costos fijos (punto de equilibrio).</div>
+    <div class="grid">
+      <div class="card"><div class="card-label">Costo por orden</div><div class="card-value" id="rent-costo-orden">—</div></div>
+      <div class="card"><div class="card-label">Margen por orden</div><div class="card-value" id="rent-margen-orden">—</div></div>
+      <div class="card"><div class="card-label">Punto de equilibrio</div><div class="card-value" id="rent-pe">—</div><div class="card-sub">órdenes / mes</div></div>
+    </div>
+    <div class="panel">
+      <div class="titulo-seccion" style="margin-top:0;">Costos fijos considerados</div>
+      <table><thead><tr><th>Concepto</th><th class="num">Monto mensual</th></tr></thead><tbody id="tabla-fijos"></tbody></table>
+    </div>
+  </div>
+
+  <!-- PROYECCIÓN -->
+  <div class="seccion" id="tab-proyeccion">
+    <div class="banner-alerta">ALAS reasignó Osorno Principal al operador anterior a último momento y dejó a Muspel solo con Ramal. Como compensación, aseguraron un mínimo de órdenes este mes. Ajusta los supuestos abajo para ver el escenario.</div>
+    <div class="panel">
+      <div class="titulo-seccion" style="margin-top:0;">Supuestos (ajustables)</div>
+      <div class="input-row"><label>Órdenes mínimas aseguradas por ALAS</label><input type="number" id="in-ordenes" value="800"></div>
+      <div class="input-row"><label>Valor supuesto por orden ($)</label><input type="number" id="in-valor" value="2300"></div>
+      <button onclick="calcularProyeccion()" style="background:var(--azul2);color:#fff;border:none;padding:9px 16px;border-radius:8px;font-weight:700;cursor:pointer;margin-top:6px;">Recalcular</button>
+    </div>
+    <div class="grid">
+      <div class="card"><div class="card-label">Ingreso proyectado</div><div class="card-value verde" id="proy-ingreso">—</div></div>
+      <div class="card"><div class="card-label">Costos fijos del mes</div><div class="card-value rojo" id="proy-costos">—</div></div>
+      <div class="card"><div class="card-label">Flujo proyectado</div><div class="card-value" id="proy-flujo">—</div></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbx6aAlb99tMoR2leEQep0V7k3fBFh2JxvpjWXdwKuY1n4NUptpO6stNSc4gFU0xEalG/exec';
+
+let cierres = [];
+let costos = [];
+
+function formatoPesos(n){
+  return '$' + Math.round(n).toLocaleString('es-CL');
+}
+function mesActualTexto(){
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const hoy = new Date();
+  return meses[hoy.getMonth()] + ' ' + hoy.getFullYear();
+}
+function perteneceAlMes(fechaTexto, mesTexto){
+  // fechaTexto viene como DD-MM-AAAA; mesTexto como "agosto 2026"
+  if(!fechaTexto) return false;
+  const partes = String(fechaTexto).split('-');
+  if(partes.length !== 3) return false;
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const nombreMes = meses[parseInt(partes[1],10)-1];
+  return (nombreMes + ' ' + partes[2]) === mesTexto;
+}
+
+async function cargarDatos(){
+  const mesTexto = mesActualTexto();
+  document.getElementById('header-fecha').textContent = 'Mes en curso: ' + mesTexto;
+
+  try{
+    const [rCierres, rCostos] = await Promise.all([
+      fetch(SHEETS_URL + '?tipo=cierres').then(r=>r.json()),
+      fetch(SHEETS_URL + '?tipo=costos').then(r=>r.json())
+    ]);
+    cierres = (rCierres||[]).slice(1).map(row => ({
+      fecha: row[0], total: Number(row[1])||0, entregados: Number(row[2])||0,
+      devueltos: Number(row[3])||0, daniados: Number(row[4])||0, pendientes: Number(row[5])||0,
+      totalOrdenes: Number(row[6])||0, entregadosOrdenes: Number(row[7])||0,
+      efectividad: Number(row[8])||0, ingresos: Number(row[11])||0, ts: row[12]||0
+    }));
+    costos = (rCostos||[]).slice(1).map(row => ({
+      fecha: row[0], mes: row[1], categoria: row[2], descripcion: row[3],
+      monto: Number(row[4])||0, fijo: row[5]
+    }));
+    document.getElementById('sync-badge').textContent = '☁️ Sincronizado';
+    document.getElementById('loading').style.display = 'none';
+  } catch(e){
+    document.getElementById('sync-badge').textContent = '⚠️ Sin conexión';
+    document.getElementById('loading').textContent = 'No se pudo conectar con Google Sheets. Revisa tu internet.';
+  }
+
+  pintarOperacion(mesTexto);
+  pintarFinanzas(mesTexto);
+  pintarRentabilidad(mesTexto);
+  calcularProyeccion();
+}
+
+function pintarOperacion(mesTexto){
+  if(cierres.length === 0) return;
+  const ultimo = cierres[cierres.length-1];
+  document.getElementById('op-ord-dia').textContent = ultimo.entregadosOrdenes;
+  document.getElementById('op-ef-dia').textContent = ultimo.efectividad + '%';
+  document.getElementById('op-dev-dia').textContent = ultimo.devueltos + ultimo.daniados;
+
+  const delMes = cierres.filter(c => perteneceAlMes(c.fecha, mesTexto));
+  const ordMes = delMes.reduce((a,c)=>a+c.entregadosOrdenes,0);
+  const totalOrdMes = delMes.reduce((a,c)=>a+c.totalOrdenes,0);
+  const incMes = delMes.reduce((a,c)=>a+c.devueltos+c.daniados,0);
+  document.getElementById('op-ord-mes').textContent = ordMes;
+  document.getElementById('op-ef-mes').textContent = totalOrdMes>0 ? Math.round(ordMes/totalOrdMes*100)+'%' : '—';
+  document.getElementById('op-inc-mes').textContent = incMes;
+
+  const tbody = document.getElementById('tabla-dias');
+  tbody.innerHTML = [].concat(cierres).reverse().slice(0,10).map(c => `
+    <tr><td>${c.fecha}</td><td class="num">${c.total}</td><td class="num">${c.totalOrdenes}</td>
+    <td class="num">${c.efectividad}%</td><td class="num">${c.devueltos+c.daniados}</td></tr>
+  `).join('');
+}
+
+function pintarFinanzas(mesTexto){
+  const delMes = cierres.filter(c => perteneceAlMes(c.fecha, mesTexto));
+  const ingresoMes = delMes.reduce((a,c)=>a+c.ingresos,0);
+  const costosDelMes = costos.filter(c => c.mes === mesTexto);
+  const costosMes = costosDelMes.reduce((a,c)=>a+c.monto,0);
+  const flujo = ingresoMes - costosMes;
+
+  document.getElementById('fin-ingreso').textContent = formatoPesos(ingresoMes);
+  document.getElementById('fin-costos').textContent = formatoPesos(costosMes);
+  const flujoEl = document.getElementById('fin-flujo');
+  flujoEl.textContent = formatoPesos(flujo);
+  flujoEl.className = 'card-value ' + (flujo >= 0 ? 'verde' : 'rojo');
+
+  document.getElementById('tabla-costos').innerHTML = costosDelMes.map(c => `
+    <tr><td>${c.categoria}</td><td>${c.descripcion}</td>
+    <td>${c.fijo==='Sí' ? '<span class="badge-fijo">Fijo</span>' : '<span class="badge-var">Variable</span>'}</td>
+    <td class="num">${formatoPesos(c.monto)}</td></tr>
+  `).join('') || '<tr><td colspan="4" style="text-align:center;color:#94a3b8;">Sin costos registrados este mes</td></tr>';
+}
+
+function pintarRentabilidad(mesTexto){
+  const delMes = cierres.filter(c => perteneceAlMes(c.fecha, mesTexto));
+  const ingresoMes = delMes.reduce((a,c)=>a+c.ingresos,0);
+  const ordMes = delMes.reduce((a,c)=>a+c.entregadosOrdenes,0);
+  const fijosDelMes = costos.filter(c => c.mes === mesTexto && c.fijo === 'Sí');
+  const costosFijos = fijosDelMes.reduce((a,c)=>a+c.monto,0);
+  const costosTotalesMes = costos.filter(c => c.mes === mesTexto).reduce((a,c)=>a+c.monto,0);
+
+  const costoOrden = ordMes>0 ? costosTotalesMes/ordMes : 0;
+  const margenOrden = ordMes>0 ? (ingresoMes-costosTotalesMes)/ordMes : 0;
+  const pe = margenOrden>0 ? Math.round(costosFijos/margenOrden) : 0;
+
+  document.getElementById('rent-costo-orden').textContent = formatoPesos(costoOrden);
+  document.getElementById('rent-margen-orden').textContent = formatoPesos(margenOrden);
+  document.getElementById('rent-pe').textContent = pe>0 ? pe : '—';
+
+  document.getElementById('tabla-fijos').innerHTML = fijosDelMes.map(c => `
+    <tr><td>${c.descripcion}</td><td class="num">${formatoPesos(c.monto)}</td></tr>
+  `).join('') || '<tr><td colspan="2" style="text-align:center;color:#94a3b8;">Sin costos fijos registrados este mes</td></tr>';
+}
+
+function calcularProyeccion(){
+  const mesTexto = mesActualTexto();
+  const ordenes = Number(document.getElementById('in-ordenes').value)||0;
+  const valor = Number(document.getElementById('in-valor').value)||0;
+  const ingreso = ordenes * valor;
+  const fijosDelMes = costos.filter(c => c.mes === mesTexto && c.fijo === 'Sí').reduce((a,c)=>a+c.monto,0);
+  const flujo = ingreso - fijosDelMes;
+
+  document.getElementById('proy-ingreso').textContent = formatoPesos(ingreso);
+  document.getElementById('proy-costos').textContent = formatoPesos(fijosDelMes);
+  const flujoEl = document.getElementById('proy-flujo');
+  flujoEl.textContent = formatoPesos(flujo);
+  flujoEl.className = 'card-value ' + (flujo >= 0 ? 'verde' : 'rojo');
+}
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.seccion').forEach(s=>s.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-'+tab.dataset.tab).classList.add('active');
+  });
+});
+
+cargarDatos();
+setInterval(cargarDatos, 60000); // se refresca solo cada minuto
+</script>
+
+</body>
+</html>
