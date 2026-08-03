@@ -1240,12 +1240,16 @@ function abrirModal(id){
   }
   // Respaldo: si por folio no se detectó multibulto, cruzar también por misma dirección + mismo teléfono
   // (cubre casos donde ALAS usa folios totalmente distintos para el mismo cliente)
+  // EXCEPCIÓN WOM: en pedidos WOM (chips/sobres), varias entregas distintas pueden compartir
+  // cliente y dirección (ej. condominio) con folio y teléfono propios cada una — NO son multibulto.
+  // Por eso este respaldo por dirección+teléfono no aplica cuando la marca (b2b) es WOM.
+  var esWom = String(p.b2b||'').trim().toUpperCase().indexOf('WOM') !== -1;
   var porDireccion = false;
-  if(grupo.length <= 1 && p.dir && p.tel){
+  if(grupo.length <= 1 && p.dir && p.tel && !esWom){
     var dirNorm = String(p.dir).trim().toLowerCase();
     var telNorm = String(p.tel).trim();
     var candidatos = paquetes.filter(function(x){
-      return x.codigo !== p.codigo && String(x.dir||'').trim().toLowerCase() === dirNorm && String(x.tel||'').trim() === telNorm && dirNorm && telNorm;
+      return x.codigo !== p.codigo && String(x.dir||'').trim().toLowerCase() === dirNorm && String(x.tel||'').trim() === telNorm && dirNorm && telNorm && String(x.b2b||'').trim().toUpperCase().indexOf('WOM') === -1;
     });
     if(candidatos.length > 0){
       grupo = [p].concat(candidatos);
@@ -1312,12 +1316,15 @@ function calcularGrupoMultibulto(p){
   if(p.folio && p.folio.trim()){
     grupo = paquetes.filter(function(x){ return getFolioBase(x.folio) === getFolioBase(p.folio); });
   }
-  if(grupo.length <= 1 && p.dir && p.tel){
+  // EXCEPCIÓN WOM: entregas distintas de WOM pueden compartir dirección+teléfono
+  // (ej. varios chips a un mismo condominio) sin ser el mismo pedido — no agrupar por respaldo.
+  var esWom = String(p.b2b||'').trim().toUpperCase().indexOf('WOM') !== -1;
+  if(grupo.length <= 1 && p.dir && p.tel && !esWom){
     var dirNorm = String(p.dir).trim().toLowerCase();
     var telNorm = String(p.tel).trim();
     if(dirNorm && telNorm){
       grupo = paquetes.filter(function(x){
-        return String(x.dir||'').trim().toLowerCase() === dirNorm && String(x.tel||'').trim() === telNorm;
+        return String(x.dir||'').trim().toLowerCase() === dirNorm && String(x.tel||'').trim() === telNorm && String(x.b2b||'').trim().toUpperCase().indexOf('WOM') === -1;
       });
     }
   }
