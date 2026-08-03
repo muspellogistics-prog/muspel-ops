@@ -528,23 +528,67 @@ function valorPorEntregaNeto(efPct){
 }
 
 // ════════════════════════════════════════
+// AGRUPAR PAQUETES EN ÓRDENES (función central)
+// Primero agrupa por folio base. Como respaldo, agrupa por misma dirección + mismo
+// teléfono (cubre casos donde ALAS usa folios totalmente distintos para el mismo cliente).
+// EXCEPCIÓN WOM: en pedidos WOM (chips/sobres), compartir dirección+teléfono NO significa
+// que sea el mismo pedido (ej. varias entregas a un mismo condominio) — no se agrupan.
+// Todas las demás funciones (contarOrdenes, contarOrdenesPorEstado, resumen de multibultos)
+// usan esta misma función para que el conteo sea consistente en toda la app.
+// ════════════════════════════════════════
+function esWomPaquete(p){
+  return String((p&&p.b2b)||'').trim().toUpperCase().indexOf('WOM') !== -1;
+}
+function agruparOrdenes(arr){
+  var porFolio = {};
+  arr.forEach(function(p){
+    var fb = getFolioBase(p.folio);
+    if(fb){
+      if(!porFolio[fb]) porFolio[fb] = [];
+      porFolio[fb].push(p);
+    }
+  });
+  var asignado = {};
+  var grupos = [];
+  arr.forEach(function(p){
+    if(asignado[p.id]) return;
+    var fb = getFolioBase(p.folio);
+    if(fb && porFolio[fb] && porFolio[fb].length > 1){
+      porFolio[fb].forEach(function(x){ asignado[x.id] = true; });
+      grupos.push(porFolio[fb]);
+      return;
+    }
+    if(!esWomPaquete(p) && p.dir && p.tel){
+      var dirNorm = String(p.dir).trim().toLowerCase();
+      var telNorm = String(p.tel).trim();
+      if(dirNorm && telNorm){
+        var pares = arr.filter(function(x){
+          return !asignado[x.id] && String(x.dir||'').trim().toLowerCase()===dirNorm && String(x.tel||'').trim()===telNorm && !esWomPaquete(x);
+        });
+        if(pares.length > 1){
+          pares.forEach(function(x){ asignado[x.id] = true; });
+          grupos.push(pares);
+          return;
+        }
+      }
+    }
+    asignado[p.id] = true;
+    grupos.push([p]);
+  });
+  return grupos;
+}
+
+// ════════════════════════════════════════
 // CONTEO POR ORDEN (no por bulto)
 // ALAS paga por ORDEN entregada. Un multibulto (mismo folio, varios bultos)
 // cuenta como 1 sola orden. Una orden solo cuenta "entregada" si TODOS sus
 // bultos quedaron con estado 'entregado'.
 // ════════════════════════════════════════
 function contarOrdenes(arr){
-  var grupos = {};
-  arr.forEach(function(p){
-    var key = getFolioBase(p.folio) || ('__solo_'+p.id);
-    if(!grupos[key]) grupos[key] = [];
-    grupos[key].push(p);
-  });
-  var total = 0, entregados = 0;
-  Object.keys(grupos).forEach(function(key){
-    total++;
-    var todosEntregados = grupos[key].every(function(p){return p.estado==='entregado';});
-    if(todosEntregados) entregados++;
+  var grupos = agruparOrdenes(arr);
+  var total = grupos.length, entregados = 0;
+  grupos.forEach(function(g){
+    if(g.every(function(p){return p.estado==='entregado';})) entregados++;
   });
   return {total:total, entregados:entregados};
 }
@@ -553,16 +597,10 @@ function contarOrdenes(arr){
 // (entregada / devuelta / dañada / pendiente), asumiendo que todos los
 // bultos de una misma orden se entregan/devuelven juntos.
 function contarOrdenesPorEstado(arr){
-  var grupos = {};
-  arr.forEach(function(p){
-    var key = getFolioBase(p.folio) || ('__solo_'+p.id);
-    if(!grupos[key]) grupos[key] = [];
-    grupos[key].push(p);
-  });
+  var grupos = agruparOrdenes(arr);
   var total=0, entregadas=0, devueltas=0, daniadas=0, pendientes=0;
-  Object.keys(grupos).forEach(function(key){
+  grupos.forEach(function(items){
     total++;
-    var items = grupos[key];
     if(items.every(function(p){return p.estado==='entregado';})) entregadas++;
     else if(items.every(function(p){return p.estado==='devuelto';})) devueltas++;
     else if(items.every(function(p){return p.estado==='daniado';})) daniadas++;
@@ -1428,12 +1466,7 @@ function actualizarResumen(){
 
   // Panel Paquetes / Órdenes / Multibultos
   var ordStatsResumen = contarOrdenes(paquetes);
-  var gruposFolio = {};
-  paquetes.forEach(function(p){
-    var key = getFolioBase(p.folio) || ('__solo_'+p.id);
-    gruposFolio[key] = (gruposFolio[key]||0) + 1;
-  });
-  var totalMultibultos = Object.keys(gruposFolio).filter(function(k){ return gruposFolio[k] > 1; }).length;
+  var totalMultibultos = agruparOrdenes(paquetes).filter(function(g){ return g.length > 1; }).length;
   var elTP = document.getElementById('s-total-paquetes');
   var elTO = document.getElementById('s-total-ordenes');
   var elTM = document.getElementById('s-total-multibultos');
@@ -2446,10 +2479,13 @@ function exportarExcelDia(){
   var _efExp=efectividadMesActual();
   var _valExp=valorPorEntregaNeto(_efExp);
   var _grupos={};
-  paquetes.forEach(function(p){
-    var key=getFolioBase(p.folio) || ('__solo_'+p.id);
-    if(!_grupos[key]) _grupos[key]=[];
-    _grupos[key].push(p);
+  agruparOrdenes(paquetes).forEach(function(g){
+    var key=getFolioBase(g[0].folio) || ('__solo_'+g[0].id);
+    _grupos[key]=g;
+  });
+  var _keyDe={};
+  Object.keys(_grupos).forEach(function(k){
+    _grupos[k].forEach(function(p){ _keyDe[p.id]=k; });
   });
   var _ordenCompleta={};
   Object.keys(_grupos).forEach(function(k){
@@ -2458,7 +2494,7 @@ function exportarExcelDia(){
   var _yaContado={};
   var ws_data=[['Código','Folio','Nombre','Teléfono','Dirección','Comuna','Tipo','Estado','Motivo','Orden Completa','Ingreso Neto (por orden)','Efectividad Mes %']];
   paquetes.forEach(function(p){
-    var key=getFolioBase(p.folio) || ('__solo_'+p.id);
+    var key=_keyDe[p.id];
     var completa=_ordenCompleta[key];
     var ingresoFila=0;
     if(completa && !_yaContado[key]){ ingresoFila=_valExp; _yaContado[key]=true; }
@@ -2797,19 +2833,16 @@ function exportarReporteMensualAhora(){
   var detalle=[['Fecha','Código','Folio','Nombre','Dirección','Comuna','Tipo','Estado','Motivo','Orden Completa','Ingreso Neto (por orden)']];
   historialDelMes.forEach(function(h){
     var _valH=(h.valorPorEntrega!=null?h.valorPorEntrega:TARIFA_BASE);
-    var _gruposH={};
-    h.detalle.forEach(function(p){
-      var key=getFolioBase(p.folio) || ('__solo_'+p.id);
-      if(!_gruposH[key]) _gruposH[key]=[];
-      _gruposH[key].push(p);
-    });
+    var _keyDeH={};
     var _completaH={};
-    Object.keys(_gruposH).forEach(function(k){
-      _completaH[k]=_gruposH[k].every(function(p){return p.estado==='entregado';});
+    agruparOrdenes(h.detalle).forEach(function(g){
+      var key=getFolioBase(g[0].folio) || ('__solo_'+g[0].id);
+      g.forEach(function(p){ _keyDeH[p.id]=key; });
+      _completaH[key]=g.every(function(p){return p.estado==='entregado';});
     });
     var _yaContadoH={};
     h.detalle.forEach(function(p){
-      var key=getFolioBase(p.folio) || ('__solo_'+p.id);
+      var key=_keyDeH[p.id];
       var completa=_completaH[key];
       var ingresoFila=0;
       if(completa && !_yaContadoH[key]){ ingresoFila=_valH; _yaContadoH[key]=true; }
@@ -2959,20 +2992,17 @@ function exportarDiaHistorial(idx){
   var h=historial[historial.length-1-idx];
   if(!h) return;
   var _valHist=(h.valorPorEntrega!=null?h.valorPorEntrega:TARIFA_BASE);
-  var _gruposH={};
-  h.detalle.forEach(function(p){
-    var key=getFolioBase(p.folio) || ('__solo_'+p.id);
-    if(!_gruposH[key]) _gruposH[key]=[];
-    _gruposH[key].push(p);
-  });
+  var _keyDeH={};
   var _completaH={};
-  Object.keys(_gruposH).forEach(function(k){
-    _completaH[k]=_gruposH[k].every(function(p){return p.estado==='entregado';});
+  agruparOrdenes(h.detalle).forEach(function(g){
+    var key=getFolioBase(g[0].folio) || ('__solo_'+g[0].id);
+    g.forEach(function(p){ _keyDeH[p.id]=key; });
+    _completaH[key]=g.every(function(p){return p.estado==='entregado';});
   });
   var _yaContadoH={};
   var ws_data=[['Codigo','Folio','Nombre','Telefono','Direccion','Comuna','Tipo','Estado','Motivo','Orden Completa','Ingreso Neto (por orden)']];
   h.detalle.forEach(function(p){
-    var key=getFolioBase(p.folio) || ('__solo_'+p.id);
+    var key=_keyDeH[p.id];
     var completa=_completaH[key];
     var ingresoFila=0;
     if(completa && !_yaContadoH[key]){ ingresoFila=_valHist; _yaContadoH[key]=true; }
