@@ -262,9 +262,9 @@ function pintarPersonal(mesTexto){
   const total = delMes.reduce((a,g)=>a+g.monto,0);
   document.getElementById('pers-total').textContent = formatoPesos(total);
 
-  const categorias = ['Mercadería','Cigarros','Chicles','Mascotas','Leña','Imprevistos','Ahorro','Vestimenta','Otros'];
+  const categorias = ['Mercadería','Cigarros','Chicles','Mascotas','Leña','Combustible (Kia)','Peajes','TAG','Autopista','Instituto','Imprevistos','Ahorro','Vestimenta','Otros'];
   document.getElementById('tabla-personal-cat').innerHTML = categorias.map(cat => {
-    const totalCat = delMes.filter(g=>g.categoria===cat).reduce((a,g)=>a+g.monto,0);
+    const totalCat = delMes.filter(g=>normalizarMes(g.categoria)===normalizarMes(cat)).reduce((a,g)=>a+g.monto,0);
     return `<tr><td>${cat}</td><td class="num">${formatoPesos(totalCat)}</td></tr>`;
   }).join('');
 
@@ -412,7 +412,17 @@ function pintarRentabilidad(mesTexto){
 
   document.getElementById('rent-costo-orden').textContent = formatoPesos(costoOrden);
   document.getElementById('rent-margen-orden').textContent = formatoPesos(margenOrden);
-  document.getElementById('rent-pe').textContent = pe>0 ? pe : '—';
+  const peEl = document.getElementById('rent-pe');
+  if(ordMes === 0){
+    peEl.textContent = '—';
+    peEl.style.fontSize = '';
+  } else if(margenOrden > 0){
+    peEl.textContent = pe;
+    peEl.style.fontSize = '';
+  } else {
+    peEl.textContent = 'No aplica';
+    peEl.style.fontSize = '1.1rem';
+  }
 
   document.getElementById('tabla-fijos').innerHTML = fijosDelMes.map(c => `
     <tr><td>${c.descripcion}</td><td class="num">${formatoPesos(c.monto)}</td></tr>
