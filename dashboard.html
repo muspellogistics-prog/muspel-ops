@@ -113,6 +113,11 @@
       <table><thead><tr><th>Mes</th><th class="num">Órdenes entregadas</th><th class="num">Ingreso Neto</th><th class="num">Total a facturar (+IVA)</th></tr></thead><tbody id="tabla-facturacion"></tbody></table>
     </div>
     <div class="panel">
+      <div class="titulo-seccion" style="margin-top:0;">🏦 Flujo de Caja Real — cuándo se mueve la plata de verdad</div>
+      <div class="panel-nota">No es lo mismo que "Cuánto facturar" de arriba (eso es el mes de la orden). Acá se ve CUÁNDO entra y sale la plata realmente: los costos usan la fecha real de pago (columna "Fecha" en Costos), y el ingreso se corre 2 meses (ALAS factura 1 mes después y paga al mes siguiente de esa factura).</div>
+      <table><thead><tr><th>Mes</th><th class="num">Entra</th><th class="num">Sale</th><th class="num">Flujo del mes</th><th class="num">Saldo acumulado</th></tr></thead><tbody id="tabla-flujo-real"></tbody></table>
+    </div>
+    <div class="panel">
       <div class="titulo-seccion" style="margin-top:0;">Detalle de costos del mes</div>
       <table><thead><tr><th>Categoría</th><th>Descripción</th><th>Tipo</th><th class="num">Monto</th></tr></thead><tbody id="tabla-costos"></tbody></table>
     </div>
@@ -252,6 +257,7 @@ async function cargarDatos(){
 
   pintarOperacion(mesTexto);
   pintarFinanzas(mesTexto);
+  pintarFlujoReal();
   pintarRentabilidad(mesTexto);
   pintarPersonal(mesTexto);
   calcularProyeccion();
@@ -354,6 +360,54 @@ function toggleMes(clase, headerRow){
     tr.style.display = abrir ? '' : 'none';
   });
   if(flecha) flecha.textContent = abrir ? '▼' : '▶';
+}
+
+// Devuelve "julio 2026" a partir de una fecha (DD-MM-AAAA o ISO), sumándole un desfase de meses.
+// Sirve para calcular "¿en qué mes se paga esto realmente?" a partir de la fecha del hecho.
+function mesConDesfase(fechaRaw, desfaseMeses){
+  const legible = formatoFechaLegible(fechaRaw);
+  const partes = legible.split('-');
+  if(partes.length !== 3) return null;
+  const d = new Date(Date.UTC(parseInt(partes[2],10), parseInt(partes[1],10)-1 + desfaseMeses, 1));
+  return MESES_NOMBRES[d.getUTCMonth()] + ' ' + d.getUTCFullYear();
+}
+function ordenMes(mesTexto){
+  const partes = mesTexto.split(' ');
+  const idx = MESES_NOMBRES.indexOf(partes[0]);
+  return parseInt(partes[1],10)*100 + idx;
+}
+
+function pintarFlujoReal(){
+  // Sale: costos, agrupados por la fecha REAL de pago (columna "Fecha" en Costos, sin desfase)
+  const salePorMes = {};
+  costos.forEach(c => {
+    if(!c.fecha) return; // sin fecha de pago cargada todavía, no se puede ubicar en el tiempo
+    const m = mesConDesfase(c.fecha, 0);
+    if(!m) return;
+    salePorMes[m] = (salePorMes[m]||0) + c.monto;
+  });
+  // Entra: cierres (órdenes entregadas), con +2 meses (ALAS factura +1 mes y paga +1 mes después de eso)
+  const entraPorMes = {};
+  cierres.forEach(c => {
+    const m = mesConDesfase(c.fecha, 2);
+    if(!m) return;
+    entraPorMes[m] = (entraPorMes[m]||0) + c.ingresos;
+  });
+
+  const todosMeses = [...new Set([...Object.keys(salePorMes), ...Object.keys(entraPorMes)])].sort((a,b)=>ordenMes(a)-ordenMes(b));
+  let saldoAcum = 0;
+  const filas = todosMeses.map(m => {
+    const entra = entraPorMes[m]||0;
+    const sale = salePorMes[m]||0;
+    const flujo = entra - sale;
+    saldoAcum += flujo;
+    return `<tr><td style="text-transform:capitalize;">${m}</td>
+      <td class="num verde-txt">${formatoPesos(entra)}</td>
+      <td class="num rojo-txt">${formatoPesos(sale)}</td>
+      <td class="num" style="font-weight:700;color:${flujo>=0?'var(--verde)':'var(--rojo)'};">${formatoPesos(flujo)}</td>
+      <td class="num" style="font-weight:800;color:${saldoAcum>=0?'var(--verde)':'var(--rojo)'};">${formatoPesos(saldoAcum)}</td></tr>`;
+  }).join('');
+  document.getElementById('tabla-flujo-real').innerHTML = filas || '<tr><td colspan="5" style="text-align:center;color:#94a3b8;">Sin datos suficientes todavía</td></tr>';
 }
 
 function pintarFinanzas(mesTexto){
