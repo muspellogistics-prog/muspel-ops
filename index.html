@@ -285,6 +285,8 @@
     <div class="card-title">☁️ Sincronización con Google Sheets</div>
     <div id="sync-status-box" style="font-size:0.8rem;color:#64748b;">Verificando...</div>
     <button class="btn btn-outline" style="margin-top:8px;" onclick="sincronizarTodo()">🔄 Sincronizar ahora</button>
+    <button class="btn btn-outline" style="margin-top:8px;" onclick="reenviarHistorialCompleto()">🛟 Reenviar historial completo a Sheets</button>
+    <div style="font-size:0.72rem;color:#94a3b8;margin-top:4px;">Usa esto si un día cerrado no aparece en DetalleHistorico. Reenvía todos los días que este equipo tiene guardados localmente.</div>
   </div>
 </div>
 
@@ -893,6 +895,27 @@ function sincronizarTodo(){
   descargarOrdenesDesdeSheets(function(){
     setTimeout(actualizarIndicadorSync, 500);
   });
+}
+
+// ════════════════════════════════════════
+// RECUPERACIÓN: reenvía TODO el historial que este equipo tiene guardado localmente
+// (cierre_dia + detalle_dia de cada día) a Google Sheets. Sirve para recuperar días que
+// se perdieron por la falla anterior (el HTML daba por exitoso un envío que en realidad
+// había fallado en Apps Script). Solo recupera lo que este mismo dispositivo/navegador
+// tiene guardado — si un día se cerró desde OTRO equipo y ahí tampoco llegó a Sheets,
+// hay que correr esto desde ESE equipo.
+// ════════════════════════════════════════
+function reenviarHistorialCompleto(){
+  if(historial.length === 0){ alert('Este equipo no tiene historial local guardado.'); return; }
+  if(!confirm('Esto va a reenviar el detalle de los '+historial.length+' día(s) que este equipo tiene guardados localmente a la hoja DetalleHistorico. Puede demorar unos segundos. ¿Continuar?')) return;
+  // Solo se reenvía "detalle_dia": es idempotente (reemplaza por fecha, no duplica).
+  // "cierre_dia" NO se reenvía acá porque solo agrega filas nuevas (no reemplaza) —
+  // si ya está guardado bien en la hoja "Cierres" (que es lo normal, esa parte no falló),
+  // reenviarlo crearía filas duplicadas y el Dashboard contaría el mismo día dos veces.
+  historial.forEach(function(h){
+    enviarASheets('detalle_dia', { fecha:h.fecha, paquetes:h.detalle||[] });
+  });
+  alert('✅ '+historial.length+' día(s) puestos en la cola de envío a DetalleHistorico. Revisa el indicador de sincronización abajo hasta que diga "☁️ Sincronizado".\n\n¿La hoja Cierres también tiene datos incompletos o duplicados? Avísame y lo revisamos aparte.');
 }
 
 // Trae automáticamente los cambios de estado de otros teléfonos/computadores
