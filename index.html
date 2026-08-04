@@ -250,9 +250,9 @@
   </div>
   <div class="stats-grid">
     <div class="stat azul" onclick="abrirResumenDetalle('todos')" style="cursor:pointer;"><div class="stat-n" id="s-recibidos">0</div><div class="stat-label">Paquetes recibidos</div></div>
-    <div class="stat verde" onclick="abrirResumenDetalle('entregado')" style="cursor:pointer;"><div class="stat-n" id="s-entregados">0</div><div class="stat-label">Paquetes entregados</div></div>
+    <div class="stat verde" onclick="abrirResumenDetalle('entregado')" style="cursor:pointer;"><div class="stat-n" id="s-entregados">0</div><div class="stat-label">Paquetes entregados</div><div style="font-size:0.68rem;color:#94a3b8;margin-top:2px;" id="s-entregados-ordenes"></div></div>
     <div class="stat rojo" onclick="abrirResumenDetalle('devuelto')" style="cursor:pointer;"><div class="stat-n" id="s-devueltos">0</div><div class="stat-label">Paquetes devueltos</div></div>
-    <div class="stat naranja" onclick="abrirResumenDetalle('pendiente')" style="cursor:pointer;"><div class="stat-n" id="s-pendientes">0</div><div class="stat-label">Paquetes pendientes</div></div>
+    <div class="stat naranja" onclick="abrirResumenDetalle('pendiente')" style="cursor:pointer;"><div class="stat-n" id="s-pendientes">0</div><div class="stat-label">Órdenes pendientes</div><div style="font-size:0.68rem;color:#94a3b8;margin-top:2px;" id="s-pendientes-paquetes"></div></div>
   </div>
   <div class="prog-wrap">
     <div class="prog-label">
@@ -1534,6 +1534,7 @@ function actualizarResumen(){
 
   // Panel Paquetes / Órdenes / Multibultos
   var ordStatsResumen = contarOrdenes(paquetes);
+  var ordStatsPorEstado = contarOrdenesPorEstado(paquetes);
   var totalMultibultos = agruparOrdenes(paquetes).filter(function(g){ return g.length > 1; }).length;
   var elTP = document.getElementById('s-total-paquetes');
   var elTO = document.getElementById('s-total-ordenes');
@@ -1544,8 +1545,12 @@ function actualizarResumen(){
   var ef = total > 0 ? Math.round(ent/total*100) : 0;
   document.getElementById('s-recibidos').textContent = total;
   document.getElementById('s-entregados').textContent = ent;
+  var elEO = document.getElementById('s-entregados-ordenes');
+  if(elEO) elEO.textContent = ordStatsPorEstado.entregadas + (ordStatsPorEstado.entregadas===1?' orden entregada':' órdenes entregadas');
   document.getElementById('s-devueltos').textContent = dev;
-  document.getElementById('s-pendientes').textContent = pend;
+  document.getElementById('s-pendientes').textContent = ordStatsPorEstado.pendientes;
+  var elPP = document.getElementById('s-pendientes-paquetes');
+  if(elPP) elPP.textContent = pend + (pend===1?' paquete por entregar':' paquetes por entregar');
   document.getElementById('s-principal').textContent = prin;
   document.getElementById('s-ramal').textContent = ram;
   var _efMesR = efectividadMesActual();
