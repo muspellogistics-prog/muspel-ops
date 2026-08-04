@@ -333,8 +333,8 @@
       <div class="form-group">
         <label class="form-label">Tipo</label>
         <select class="form-select" id="m-tipo">
-          <option>Principal</option>
           <option>Ramal</option>
+          <option>Principal</option>
         </select>
       </div>
     </div>
@@ -694,7 +694,7 @@ function actualizarIndicadorSync(){
       if(box) box.innerHTML = '⚠️ '+atascado.length+' cambio(s) llevan varios intentos fallidos al subir a Google Sheets (tipo: '+atascado.map(function(it){return it.tipo;}).join(', ')+'). Revisa tu conexión; si persiste, puede haber un problema en el Apps Script.';
     }else{
       ind.innerHTML = '<span class="sync-badge pend">⏳ '+SYNC_PENDIENTE.length+' por enviar</span>';
-      if(box) box.innerHTML = '⏳ Hay '+SYNC_PENDIENTE.length+' cambios esperando subir a Google Sheets. Se enviarán solos cuando haya internet, o toca "Sincronizar ahora".';
+      if(box) box.innerHTML = '⏳ Hay '+SYNC_PENDIENTE.length+' cambios esperando subir a Google Sheets (tipo: '+SYNC_PENDIENTE.map(function(it){return it.tipo;}).join(', ')+'). Se enviarán solos cuando haya internet, o toca "Sincronizar ahora".';
     }
   }
 }
@@ -1162,10 +1162,13 @@ function descargarDeSheets(){
   });
 }
 
-// consulta la nube cada 15 segundos para traer cambios de otros dispositivos
-setInterval(descargarDeSheets, 15000);
-// y también al cargar la página
-descargarDeSheets();
+// ELIMINADO (04-08-2026): descargarDeSheets() leía el log permanente "Eventos"
+// (que nunca se borra) y revivía cualquier "paquete_nuevo" de CUALQUIER fecha pasada
+// que no estuviera cargado localmente — por eso pedidos ya cerrados y cobrados hace
+// días (ej. los agregados manuales del 03-08) seguían reapareciendo cada 15 segundos
+// sin importar cuántas veces se limpiara Ordenes o el local. La reemplaza por completo
+// descargarOrdenesDesdeSheets(), que lee la hoja "Ordenes" (el día EN CURSO real),
+// no el historial permanente de eventos.
 
 // ════════════════════════════════════════
 // MODAL DETALLE RESUMEN
@@ -1404,6 +1407,9 @@ function abrirModal(id){
     acciones.innerHTML =
       '<button class="btn btn-outline" style="flex:1;margin-bottom:0;" onclick="marcarDesdeModal(\'pendiente\')">↺ Revertir a pendiente</button>';
   }
+  // Eliminar orden: SOLO visible en modo Comercial (no en el celular de Cristian en
+  // terreno) — es una acción irreversible, mejor que quede en manos de quien administra.
+  acciones.innerHTML += '<button class="btn btn-rojo solo-comercial" style="flex:1;margin-bottom:0;background:#7f1d1d;" onclick="eliminarPaqueteDesdeModal()">🗑️ Eliminar</button>';
 
   document.getElementById('modal-overlay').classList.add('open');
 }
@@ -1470,6 +1476,42 @@ function marcarDesdeModal(estado){
   if(rutaOrdenadas.length > 0 && estado === 'entregado'){
     recalcularRutaDesdeUbicacionActual();
   }
+}
+
+// ════════════════════════════════════════
+// ELIMINAR ORDEN
+// Para sacar del día en curso un pedido que no corresponde (ej. un resabio de un día
+// anterior, o un agregado manual por error). Borra local Y en Sheets (hoja Ordenes),
+// sin importar el estado en el que esté.
+// ════════════════════════════════════════
+function eliminarPaqueteDesdeModal(){
+  if(!modalOrdenId) return;
+  var p = paquetes.find(function(x){return x.id===modalOrdenId;});
+  if(!p) return;
+  var grupo = calcularGrupoMultibulto(p);
+  var estadoTxt = {entregado:'✅ ENTREGADO', devuelto:'↩️ Devuelto', daniado:'⚠️ Dañado', pendiente:'⏳ Pendiente'};
+  var advertenciaEstado = '';
+  if(p.estado === 'entregado'){
+    advertenciaEstado = '\n\n⚠️ OJO: este pedido está marcado ENTREGADO. Si lo eliminas, se pierde ese registro y el ingreso asociado ya no se contará. Solo elimínalo si es un resabio de otro día (ya cobrado antes) — NO si es una entrega real de hoy.';
+  } else if(p.estado === 'pendiente'){
+    advertenciaEstado = '\n\n⚠️ OJO: este pedido está PENDIENTE de entregar. Si lo eliminas, Cristian ya no lo va a ver en su ruta y el paquete físico se queda sin registrar la entrega.';
+  }
+  var detalle = 'Nombre: '+p.nombre+'\nCódigo: '+p.codigo+'\nEstado actual: '+(estadoTxt[p.estado]||p.estado)+
+    (grupo.length > 1 ? '\nEsta orden tiene '+grupo.length+' paquetes — se eliminarán TODOS juntos.' : '');
+  var palabra = prompt('Vas a ELIMINAR este pedido de forma permanente:\n\n'+detalle+advertenciaEstado+
+    '\n\nPara confirmar, escribe ELIMINAR (en mayúsculas) y presiona Aceptar. Cualquier otra cosa cancela.');
+  if(palabra !== 'ELIMINAR') return;
+  grupo.forEach(function(item){
+    enviarASheets('paquete_eliminado', {codigo:item.codigo});
+  });
+  var idsAEliminar = {};
+  grupo.forEach(function(item){ idsAEliminar[item.id] = true; });
+  paquetes = paquetes.filter(function(x){ return !idsAEliminar[x.id]; });
+  guardarStorage();
+  actualizarResumen();
+  renderPaquetes();
+  document.getElementById('modal-overlay').classList.remove('open');
+  modalOrdenId = null;
 }
 
 // ════════════════════════════════════════
@@ -1566,6 +1608,16 @@ function actualizarResumen(){
 function importarExcel(input){
   var file = input.files[0];
   if(!file) return;
+  // CORREGIDO: si este equipo tenía pedidos locales sueltos de un día que no se cerró
+  // AQUÍ (ej. se cerró desde el celular de Cristian, pero este navegador nunca se
+  // enteró), antes se sumaban en silencio a la ruta nueva importada — mezclando 2 días
+  // en el Resumen. Ahora se avisa y se limpia antes de seguir.
+  if(paquetes.length > 0 && !diaEnCompletar){
+    var seguir = confirm('⚠️ Este equipo ya tiene '+paquetes.length+' pedido(s) cargados localmente (probablemente de un día anterior que se cerró desde otro celular/computador).\n\nSi continúas, se van a BORRAR esos '+paquetes.length+' pedidos locales antes de importar el archivo nuevo, para no mezclarlos con la ruta de hoy.\n\n¿Continuar?');
+    if(!seguir){ input.value=''; return; }
+    paquetes = [];
+    guardarStorage();
+  }
   var status = document.getElementById('import-status');
   status.textContent = 'Procesando...';
   var reader = new FileReader();
@@ -1748,10 +1800,24 @@ function agregarManual(){
 }
 
 function limpiarDia(){
-  if(!confirm('¿Seguro que quieres eliminar todas las órdenes del día actual?')) return;
+  // CORREGIDO: antes esto solo borraba localmente y nunca avisaba a Google Sheets,
+  // así que la hoja "Ordenes" se quedaba con los pedidos viejos aunque la app ya
+  // mostrara 0 — confundiendo a cualquiera que esperara que "Limpiar día" limpiara todo.
+  // Ahora limpia los dos lados, pero por eso la advertencia es más fuerte: esto afecta
+  // también lo que ven TODOS los equipos conectados (ej. el celular de Cristian).
+  //
+  // TAMBIÉN vacía la cola de sincronización pendiente de ESTE equipo — si había algún
+  // envío viejo atascado (ej. un "paquete_nuevo" de hace días que nunca se pudo mandar
+  // por algún problema anterior), sin esto seguiría reintentando en segundo plano y
+  // podría volver a insertar el pedido en Sheets cada vez que lograra conectarse,
+  // haciendo que "reaparezca solo" después de cada sincronización.
+  if(!confirm('⚠️ Esto va a eliminar TODAS las órdenes del día actual — en este equipo Y en Google Sheets (hoja Ordenes), así que también desaparecen del celular de Cristian u otros equipos conectados. También se vacía cualquier envío pendiente atascado de este equipo.\n\n¿Seguro que quieres continuar?')) return;
   paquetes=[];
   guardarStorage();
+  SYNC_PENDIENTE=[];
+  guardarColaSync();
   actualizarResumen();
+  enviarASheets('limpiar_ordenes', {});
 }
 
 // ════════════════════════════════════════
@@ -2562,12 +2628,15 @@ function actualizarCierre(){
   var valorEntrega=valorPorEntregaNeto(efMesActual);
   var ingresoNeto=ordStatsCierre.entregadas*valorEntrega;
   var ingresoConIva=Math.round(ingresoNeto*(1+IVA_TASA));
+  // Equivalencia en paquetes (bultos), para las filas donde una orden puede tener más de 1 paquete
+  var paqEntregadosCierre = paquetes.filter(function(p){return p.estado==='entregado';}).length;
+  var paqPendientesCierre = paquetes.filter(function(p){return p.estado==='pendiente';}).length;
   document.getElementById('resumen-cierre-box').innerHTML=
     '<div class="resumen-cierre-row"><span>Órdenes recibidas</span><strong>'+ordStatsCierre.total+'</strong></div>'+
-    '<div class="resumen-cierre-row"><span>Órdenes entregadas</span><strong style="color:var(--verde)">'+ordStatsCierre.entregadas+'</strong></div>'+
+    '<div class="resumen-cierre-row"><span>Órdenes entregadas</span><strong style="color:var(--verde)">'+ordStatsCierre.entregadas+'<span style="font-size:0.68rem;color:#94a3b8;font-weight:400;"> ('+paqEntregadosCierre+' paquete'+(paqEntregadosCierre===1?'':'s')+')</span></strong></div>'+
     '<div class="resumen-cierre-row"><span>Devueltas</span><strong style="color:var(--rojo)">'+ordStatsCierre.devueltas+'</strong></div>'+
     '<div class="resumen-cierre-row"><span>Dañadas</span><strong style="color:var(--naranja)">'+ordStatsCierre.daniadas+'</strong></div>'+
-    '<div class="resumen-cierre-row"><span>Pendientes</span><strong style="color:var(--naranja)">'+ordStatsCierre.pendientes+'</strong></div>'+
+    '<div class="resumen-cierre-row"><span>Pendientes</span><strong style="color:var(--naranja)">'+ordStatsCierre.pendientes+'<span style="font-size:0.68rem;color:#94a3b8;font-weight:400;"> ('+paqPendientesCierre+' paquete'+(paqPendientesCierre===1?'':'s')+' por entregar)</span></strong></div>'+
     '<div class="resumen-cierre-row"><span>Efectividad del día</span><strong>'+ef+'%</strong></div>'+
     '<div class="resumen-cierre-row"><span>Efectividad acum. del mes</span><strong>'+efMesActual+'%</strong></div>'+
     '<div class="resumen-cierre-row solo-comercial"><span>Valor por entrega (neto)</span><strong>'+formatoPesos(valorEntrega)+'</strong></div>'+
