@@ -204,7 +204,7 @@
       <span class="modal-campo-label">📝 Motivo</span>
       <span class="modal-campo-valor" id="modal-motivo">—</span>
     </div>
-    <div id="modal-repetido" style="display:none;margin-top:8px;padding:8px 12px;background:#fee2e2;border-radius:8px;font-size:0.78rem;color:var(--rojo);font-weight:600;">⚠️ Esta orden ya existía en un día anterior — verificar con Alas</div>
+    <div id="modal-repetido" style="display:none;margin-top:8px;padding:8px 12px;background:#fee2e2;border-radius:8px;font-size:0.78rem;color:var(--rojo);font-weight:600;"></div>
     <div class="modal-acciones" id="modal-acciones"></div>
   </div>
 </div>
@@ -619,6 +619,21 @@ function perteneceAMesActual(fechaStr){
   var anio = parseInt(partes[2], 10);
   var hoy = new Date();
   return mes === (hoy.getMonth()+1) && anio === hoy.getFullYear();
+}
+
+// ════════════════════════════════════════
+// INTENTOS DE ENTREGA (máx. 3 por mes según ALAS)
+// Busca en el historial del mes en curso todos los registros previos con este código.
+// Devuelve la lista de intentos anteriores (fecha + estado), del más antiguo al más nuevo.
+// ════════════════════════════════════════
+function calcularIntentos(codigo){
+  var registros = [];
+  historial.forEach(function(h){
+    if(!perteneceAMesActual(h.fecha)) return;
+    var item = h.detalle.find(function(p){ return p.codigo === codigo; });
+    if(item) registros.push({fecha: h.fecha, estado: item.estado});
+  });
+  return registros;
 }
 
 // Efectividad acumulada del mes en curso (historial cerrado + día de hoy en progreso)
@@ -1316,7 +1331,15 @@ function abrirModal(id){
   document.getElementById('modal-tel').textContent = p.tel || '—';
   document.getElementById('modal-tipo').textContent = p.tipo || 'Principal';
   document.getElementById('modal-estado').textContent = estadoTextos[p.estado] || p.estado;
-  document.getElementById('modal-repetido').style.display = p.repetidoDeHistorial ? 'block' : 'none';
+  var modalRepetidoEl = document.getElementById('modal-repetido');
+  if(p.repetidoDeHistorial){
+    modalRepetidoEl.textContent = p.intentosAgotados
+      ? '🚫 INTENTO '+p.intentos+'/3 — ya agotó los 3 intentos del mes, revisar con Alas'
+      : '⚠️ INTENTO '+(p.intentos||1)+'/3 — esta orden ya existía en un día anterior, verificar con Alas';
+    modalRepetidoEl.style.display = 'block';
+  }else{
+    modalRepetidoEl.style.display = 'none';
+  }
   var motivoRow = document.getElementById('modal-motivo-row');
   if((p.estado==='devuelto' || p.estado==='daniado') && p.motivo){
     document.getElementById('modal-motivo').textContent = p.motivo;
@@ -1570,13 +1593,19 @@ function importarExcel(input){
         // revisa duplicado real (de una importación anterior), no dentro de este mismo archivo
         if(codigosPreExistentes[codigo]){dup++;continue;}
         // revisa si ese código ya fue entregado/procesado en días anteriores (historial)
-        var enHistorial = null;
-        for(var hIdx=historial.length-1; hIdx>=0 && !enHistorial; hIdx--){
-          enHistorial = historial[hIdx].detalle.find(function(p){return p.codigo===codigo;});
-          if(enHistorial) enHistorial._fechaHist = historial[hIdx].fecha;
-        }
-        if(enHistorial){
-          alertas.push(codigo+' (ya estaba "'+enHistorial.estado+'" el '+enHistorial._fechaHist+')');
+        var registrosPrevios = calcularIntentos(codigo);
+        var intentosFallidos = registrosPrevios.filter(function(r){return r.estado==='devuelto'||r.estado==='daniado';}).length;
+        var yaEntregadoAntes = registrosPrevios.some(function(r){return r.estado==='entregado';});
+        var intentoActual = intentosFallidos + 1;
+        if(registrosPrevios.length>0){
+          var ultimo = registrosPrevios[registrosPrevios.length-1];
+          if(yaEntregadoAntes){
+            alertas.push(codigo+' — ⚠️ YA FIGURA ENTREGADO el '+ultimo.fecha+', revisar antes de reintentar');
+          }else if(intentoActual>3){
+            alertas.push(codigo+' — 🚫 intento '+intentoActual+'/3, YA AGOTÓ los 3 intentos del mes, revisar con ALAS');
+          }else{
+            alertas.push(codigo+' — intento '+intentoActual+'/3 (antes: '+registrosPrevios.map(function(r){return r.estado+' el '+r.fecha;}).join(', ')+')');
+          }
         }
         var nuevoPaquete = {
           id:Date.now()+r, codigo:codigo,
@@ -1590,7 +1619,9 @@ function importarExcel(input){
           tipo:row[idx.tipo]?String(row[idx.tipo]).trim():tipoPorDefecto,
           b2b:row[idx.b2b]?String(row[idx.b2b]).trim():'',
           estado:'pendiente', ts:Date.now(),
-          repetidoDeHistorial: enHistorial ? true : false
+          repetidoDeHistorial: registrosPrevios.length>0,
+          intentos: intentoActual,
+          intentosAgotados: intentoActual>3
         };
         paquetes.push(nuevoPaquete);
         nuevos++;
@@ -1632,6 +1663,20 @@ function agregarManual(){
   var codigo = document.getElementById('m-codigo').value.trim();
   if(!codigo){alert('Ingresa el código de la orden.');return;}
   if(paquetes.find(function(p){return p.codigo===codigo;})){alert('Ya existe una orden con ese código.');return;}
+  // Revisa si este código ya tuvo intentos este mes (igual que al importar Excel)
+  var registrosPrevios = calcularIntentos(codigo);
+  var intentosFallidos = registrosPrevios.filter(function(r){return r.estado==='devuelto'||r.estado==='daniado';}).length;
+  var yaEntregadoAntes = registrosPrevios.some(function(r){return r.estado==='entregado';});
+  var intentoActual = intentosFallidos + 1;
+  if(registrosPrevios.length>0){
+    var detalle = registrosPrevios.map(function(r){return r.estado+' el '+r.fecha;}).join(', ');
+    var msg = 'Este código ya aparece este mes: '+detalle+'.\n';
+    if(yaEntregadoAntes) msg += '⚠️ Ya figura ENTREGADO antes — revisa que no sea un error antes de continuar.\n';
+    else if(intentoActual>3) msg += '🚫 Este sería el intento '+intentoActual+'/3 — ya se agotaron los 3 intentos del mes, revisar con ALAS.\n';
+    else msg += 'Este sería el intento '+intentoActual+'/3.\n';
+    msg += '¿Agregar de todas formas?';
+    if(!confirm(msg)) return;
+  }
   var nuevoPaquete = {
     id:Date.now(), codigo:codigo,
     folio:'', nombre:document.getElementById('m-nombre').value.trim()||'Sin nombre',
@@ -1639,7 +1684,10 @@ function agregarManual(){
     dir:document.getElementById('m-dir').value.trim(),
     comuna:document.getElementById('m-comuna').value.trim(),
     region:'', tipo:document.getElementById('m-tipo').value,
-    b2b:'', estado:'pendiente', ts:Date.now()
+    b2b:'', estado:'pendiente', ts:Date.now(),
+    repetidoDeHistorial: registrosPrevios.length>0,
+    intentos: intentoActual,
+    intentosAgotados: intentoActual>3
   };
   paquetes.push(nuevoPaquete);
   guardarStorage();
@@ -2177,7 +2225,10 @@ function renderPaquetes(){
         html+='<div class="paquete-item '+p.estado+'" id="pi-'+p.id+'" onclick="abrirModal('+p.id+')" style="cursor:pointer;'+(esMultibulto?'border-left:3px solid #f59e0b;':'')+(p.estado!=='pendiente'?'':'')+'">'; 
         html+='<div class="paquete-info">';
         if(p.repetidoDeHistorial){
-          html+='<div style="font-size:0.68rem;font-weight:700;color:var(--rojo);">⚠️ YA EXISTÍA EN UN DÍA ANTERIOR — revisar con Alas</div>';
+          var txtIntento = p.intentosAgotados
+            ? '🚫 INTENTO '+p.intentos+'/3 — YA AGOTÓ los intentos del mes, revisar con Alas'
+            : '⚠️ INTENTO '+(p.intentos||1)+'/3 — ya existía en un día anterior';
+          html+='<div style="font-size:0.68rem;font-weight:700;color:var(--rojo);">'+txtIntento+'</div>';
         }
         html+='<div class="paquete-nombre">'+p.nombre+'</div>';
         html+='<div class="paquete-dir">'+dirMostrar+(p.tel?' · '+p.tel:'')+'</div>';
