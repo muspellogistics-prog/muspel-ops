@@ -683,8 +683,17 @@ function actualizarIndicadorSync(){
     ind.innerHTML = '<span class="sync-badge ok">☁️ Sincronizado</span>';
     if(box) box.innerHTML = '✅ Todo está sincronizado con Google Sheets. Cristian y tú ven la misma información.';
   } else {
-    ind.innerHTML = '<span class="sync-badge pend">⏳ '+SYNC_PENDIENTE.length+' por enviar</span>';
-    if(box) box.innerHTML = '⏳ Hay '+SYNC_PENDIENTE.length+' cambios esperando subir a Google Sheets. Se enviarán solos cuando haya internet, o toca "Sincronizar ahora".';
+    // Si algo lleva 3+ intentos fallidos seguidos, ya no es "esperando internet" —
+    // probablemente el servidor está rechazando el envío. Se avisa distinto para
+    // que no quede reintentando en silencio para siempre.
+    var atascado = SYNC_PENDIENTE.filter(function(it){ return (it.intentos||0) >= 3; });
+    if(atascado.length > 0){
+      ind.innerHTML = '<span class="sync-badge pend" style="background:#fee2e2;color:var(--rojo);">⚠️ '+atascado.length+' con error</span>';
+      if(box) box.innerHTML = '⚠️ '+atascado.length+' cambio(s) llevan varios intentos fallidos al subir a Google Sheets (tipo: '+atascado.map(function(it){return it.tipo;}).join(', ')+'). Revisa tu conexión; si persiste, puede haber un problema en el Apps Script.';
+    }else{
+      ind.innerHTML = '<span class="sync-badge pend">⏳ '+SYNC_PENDIENTE.length+' por enviar</span>';
+      if(box) box.innerHTML = '⏳ Hay '+SYNC_PENDIENTE.length+' cambios esperando subir a Google Sheets. Se enviarán solos cuando haya internet, o toca "Sincronizar ahora".';
+    }
   }
 }
 
@@ -734,12 +743,18 @@ function subirOrdenesEnLotes(listaOrdenes, onProgreso, onFin){
           fecha: fecha
         }
       })
-    }).then(function(){
+    }).then(function(r){ return r.json(); }).then(function(resp){
+      if(resp && resp.status === 'error'){
+        // El servidor recibió la petición pero el script falló al procesarla — no lo
+        // damos por subido, reintentamos este mismo lote en vez de seguir con el siguiente.
+        setTimeout(subirSiguienteLote, 2000);
+        return;
+      }
       loteActual++;
       if(onProgreso) onProgreso(loteActual, totalLotes);
       setTimeout(subirSiguienteLote, 300); // pausa entre lotes para no saturar
     }).catch(function(){
-      // reintenta este lote en 2 segundos si falla
+      // reintenta este lote en 2 segundos si falla (ej: sin internet, o respuesta no-JSON)
       setTimeout(subirSiguienteLote, 2000);
     });
   }
@@ -850,7 +865,14 @@ function procesarColaSync(){
     method:'POST',
     headers:{'Content-Type':'text/plain;charset=utf-8'},
     body: JSON.stringify({tipo:item.tipo, contenido:item.contenido})
-  }).then(function(r){
+  }).then(function(r){ return r.json(); }).then(function(resp){
+    if(resp && resp.status === 'error'){
+      // CORREGIDO: antes esto se daba por exitoso apenas la red respondía, sin revisar
+      // si Apps Script realmente guardó los datos. Si el script tiraba un error (ej. al
+      // escribir DetalleHistorico), el envío se marcaba como hecho igual y se perdía en
+      // silencio. Ahora, si el servidor avisa error, se trata como fallo y se reintenta.
+      throw new Error(resp.message || 'Error en el servidor');
+    }
     SYNC_PENDIENTE.shift();
     guardarColaSync();
     sincronizando = false;
@@ -859,7 +881,7 @@ function procesarColaSync(){
     item.intentos = (item.intentos||0)+1;
     guardarColaSync();
     sincronizando = false;
-    // reintenta en 8 segundos si falla (ej: sin internet)
+    // reintenta en 8 segundos si falla (ej: sin internet, o el servidor devolvió error)
     setTimeout(procesarColaSync, 8000);
   });
 }
