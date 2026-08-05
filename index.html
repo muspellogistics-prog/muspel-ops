@@ -1035,6 +1035,14 @@ function descargarDeSheets(){
       if(!codigo || codigo === 'Código') return; // sin código o es la fila de encabezado: se ignora
 
       var existente = paquetes.find(function(p){ return p.codigo === codigo; });
+      // Si este código ya quedó guardado en un día CERRADO (historial), no hay que
+      // resucitarlo como "nuevo pendiente" cada vez que se lee el log de Eventos —
+      // eso causaba que paquetes agregados a mano (que sí generan evento "paquete_nuevo")
+      // reaparecieran en bucle para siempre, sin importar que ya estuvieran cerrados.
+      var yaCerradoEnHistorial = historial.some(function(h){
+        return (h.detalle||[]).some(function(d){ return d.codigo === codigo; });
+      });
+      if(yaCerradoEnHistorial) return;
 
       if(tipoEvento === 'paquete_nuevo'){
         if(!existente){
