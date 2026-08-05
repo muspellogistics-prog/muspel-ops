@@ -824,8 +824,15 @@ function sincronizarTodo(){
 // cada 30 segundos, para que el Resumen/Dashboard se mantengan al día solos.
 setInterval(function(){
   descargarOrdenesDesdeSheets();
-  descargarCierresDesdeSheets();
+  descargarCierresDesdeSheets(function(){ completarDetalleDesdeSheets(); });
 }, 30000);
+
+// Al abrir la app, además de traer los cierres, se completa el DETALLE por paquete de
+// cada día cerrado (no solo el resumen) — esto es necesario para que la verificación
+// "¿este código ya está en un día cerrado?" (que evita que se resuciten paquetes viejos
+// desde el registro de Eventos) tenga con qué comparar. Sin esto, el detalle solo se
+// llenaba al exportar un reporte, y la verificación nunca encontraba nada.
+descargarCierresDesdeSheets(function(){ completarDetalleDesdeSheets(); });
 
 // reintenta automáticamente cada 20 segundos si quedan pendientes
 setInterval(function(){
