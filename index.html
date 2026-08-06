@@ -204,7 +204,7 @@
       <span class="modal-campo-label">📝 Motivo</span>
       <span class="modal-campo-valor" id="modal-motivo">—</span>
     </div>
-    <div id="modal-repetido" style="display:none;margin-top:8px;padding:8px 12px;background:#fee2e2;border-radius:8px;font-size:0.78rem;color:var(--rojo);font-weight:600;">⚠️ Esta orden ya existía en un día anterior — verificar con Alas</div>
+    <div id="modal-repetido" style="display:none;margin-top:8px;padding:8px 12px;background:#fee2e2;border-radius:8px;font-size:0.78rem;color:var(--rojo);font-weight:600;"></div>
     <div class="modal-acciones" id="modal-acciones"></div>
   </div>
 </div>
@@ -281,10 +281,18 @@
       <button id="btn-black" class="btn btn-primary" onclick="toggleModoEspecial('black')" style="flex:1;margin-bottom:0;">🖤 Black Weekend</button>
     </div>
   </div>
+  <div class="card solo-comercial">
+    <div class="card-title">🗑️ Eliminar pedido por código</div>
+    <div style="font-size:0.72rem;color:#94a3b8;margin-bottom:6px;">Úsalo si al tocar la tarjeta de un pedido no pasa nada. Escribe el código exacto (tal como aparece en la tarjeta) y elimina directo, sin abrir el modal.</div>
+    <input type="text" class="form-input" id="del-codigo" placeholder="Código del pedido (ej. CHA-47051-1784811050203)" style="margin-bottom:8px;">
+    <button class="btn btn-rojo" style="background:#7f1d1d;" onclick="eliminarPorCodigo()">🗑️ Eliminar este código</button>
+  </div>
   <div class="card">
     <div class="card-title">☁️ Sincronización con Google Sheets</div>
     <div id="sync-status-box" style="font-size:0.8rem;color:#64748b;">Verificando...</div>
     <button class="btn btn-outline" style="margin-top:8px;" onclick="sincronizarTodo()">🔄 Sincronizar ahora</button>
+    <button class="btn btn-outline" style="margin-top:8px;" onclick="reenviarHistorialCompleto()">🛟 Reenviar historial completo a Sheets</button>
+    <div style="font-size:0.72rem;color:#94a3b8;margin-top:4px;">Usa esto si un día cerrado no aparece en DetalleHistorico. Reenvía todos los días que este equipo tiene guardados localmente.</div>
   </div>
 </div>
 
@@ -331,8 +339,8 @@
       <div class="form-group">
         <label class="form-label">Tipo</label>
         <select class="form-select" id="m-tipo">
-          <option>Principal</option>
           <option>Ramal</option>
+          <option>Principal</option>
         </select>
       </div>
     </div>
@@ -528,23 +536,67 @@ function valorPorEntregaNeto(efPct){
 }
 
 // ════════════════════════════════════════
+// AGRUPAR PAQUETES EN ÓRDENES (función central)
+// Primero agrupa por folio base. Como respaldo, agrupa por misma dirección + mismo
+// teléfono (cubre casos donde ALAS usa folios totalmente distintos para el mismo cliente).
+// EXCEPCIÓN WOM: en pedidos WOM (chips/sobres), compartir dirección+teléfono NO significa
+// que sea el mismo pedido (ej. varias entregas a un mismo condominio) — no se agrupan.
+// Todas las demás funciones (contarOrdenes, contarOrdenesPorEstado, resumen de multibultos)
+// usan esta misma función para que el conteo sea consistente en toda la app.
+// ════════════════════════════════════════
+function esWomPaquete(p){
+  return String((p&&p.b2b)||'').trim().toUpperCase().indexOf('WOM') !== -1;
+}
+function agruparOrdenes(arr){
+  var porFolio = {};
+  arr.forEach(function(p){
+    var fb = getFolioBase(p.folio);
+    if(fb){
+      if(!porFolio[fb]) porFolio[fb] = [];
+      porFolio[fb].push(p);
+    }
+  });
+  var asignado = {};
+  var grupos = [];
+  arr.forEach(function(p){
+    if(asignado[p.id]) return;
+    var fb = getFolioBase(p.folio);
+    if(fb && porFolio[fb] && porFolio[fb].length > 1){
+      porFolio[fb].forEach(function(x){ asignado[x.id] = true; });
+      grupos.push(porFolio[fb]);
+      return;
+    }
+    if(!esWomPaquete(p) && p.dir && p.tel){
+      var dirNorm = String(p.dir).trim().toLowerCase();
+      var telNorm = String(p.tel).trim();
+      if(dirNorm && telNorm){
+        var pares = arr.filter(function(x){
+          return !asignado[x.id] && String(x.dir||'').trim().toLowerCase()===dirNorm && String(x.tel||'').trim()===telNorm && !esWomPaquete(x);
+        });
+        if(pares.length > 1){
+          pares.forEach(function(x){ asignado[x.id] = true; });
+          grupos.push(pares);
+          return;
+        }
+      }
+    }
+    asignado[p.id] = true;
+    grupos.push([p]);
+  });
+  return grupos;
+}
+
+// ════════════════════════════════════════
 // CONTEO POR ORDEN (no por bulto)
 // ALAS paga por ORDEN entregada. Un multibulto (mismo folio, varios bultos)
 // cuenta como 1 sola orden. Una orden solo cuenta "entregada" si TODOS sus
 // bultos quedaron con estado 'entregado'.
 // ════════════════════════════════════════
 function contarOrdenes(arr){
-  var grupos = {};
-  arr.forEach(function(p){
-    var key = getFolioBase(p.folio) || ('__solo_'+p.id);
-    if(!grupos[key]) grupos[key] = [];
-    grupos[key].push(p);
-  });
-  var total = 0, entregados = 0;
-  Object.keys(grupos).forEach(function(key){
-    total++;
-    var todosEntregados = grupos[key].every(function(p){return p.estado==='entregado';});
-    if(todosEntregados) entregados++;
+  var grupos = agruparOrdenes(arr);
+  var total = grupos.length, entregados = 0;
+  grupos.forEach(function(g){
+    if(g.every(function(p){return p.estado==='entregado';})) entregados++;
   });
   return {total:total, entregados:entregados};
 }
@@ -553,16 +605,10 @@ function contarOrdenes(arr){
 // (entregada / devuelta / dañada / pendiente), asumiendo que todos los
 // bultos de una misma orden se entregan/devuelven juntos.
 function contarOrdenesPorEstado(arr){
-  var grupos = {};
-  arr.forEach(function(p){
-    var key = getFolioBase(p.folio) || ('__solo_'+p.id);
-    if(!grupos[key]) grupos[key] = [];
-    grupos[key].push(p);
-  });
+  var grupos = agruparOrdenes(arr);
   var total=0, entregadas=0, devueltas=0, daniadas=0, pendientes=0;
-  Object.keys(grupos).forEach(function(key){
+  grupos.forEach(function(items){
     total++;
-    var items = grupos[key];
     if(items.every(function(p){return p.estado==='entregado';})) entregadas++;
     else if(items.every(function(p){return p.estado==='devuelto';})) devueltas++;
     else if(items.every(function(p){return p.estado==='daniado';})) daniadas++;
@@ -581,6 +627,21 @@ function perteneceAMesActual(fechaStr){
   var anio = parseInt(partes[2], 10);
   var hoy = new Date();
   return mes === (hoy.getMonth()+1) && anio === hoy.getFullYear();
+}
+
+// ════════════════════════════════════════
+// INTENTOS DE ENTREGA (máx. 3 por mes según ALAS)
+// Busca en el historial del mes en curso todos los registros previos con este código.
+// Devuelve la lista de intentos anteriores (fecha + estado), del más antiguo al más nuevo.
+// ════════════════════════════════════════
+function calcularIntentos(codigo){
+  var registros = [];
+  historial.forEach(function(h){
+    if(!perteneceAMesActual(h.fecha)) return;
+    var item = h.detalle.find(function(p){ return p.codigo === codigo; });
+    if(item) registros.push({fecha: h.fecha, estado: item.estado});
+  });
+  return registros;
 }
 
 // Efectividad acumulada del mes en curso (historial cerrado + día de hoy en progreso)
@@ -630,8 +691,17 @@ function actualizarIndicadorSync(){
     ind.innerHTML = '<span class="sync-badge ok">☁️ Sincronizado</span>';
     if(box) box.innerHTML = '✅ Todo está sincronizado con Google Sheets. Cristian y tú ven la misma información.';
   } else {
-    ind.innerHTML = '<span class="sync-badge pend">⏳ '+SYNC_PENDIENTE.length+' por enviar</span>';
-    if(box) box.innerHTML = '⏳ Hay '+SYNC_PENDIENTE.length+' cambios esperando subir a Google Sheets. Se enviarán solos cuando haya internet, o toca "Sincronizar ahora".';
+    // Si algo lleva 3+ intentos fallidos seguidos, ya no es "esperando internet" —
+    // probablemente el servidor está rechazando el envío. Se avisa distinto para
+    // que no quede reintentando en silencio para siempre.
+    var atascado = SYNC_PENDIENTE.filter(function(it){ return (it.intentos||0) >= 3; });
+    if(atascado.length > 0){
+      ind.innerHTML = '<span class="sync-badge pend" style="background:#fee2e2;color:var(--rojo);">⚠️ '+atascado.length+' con error</span>';
+      if(box) box.innerHTML = '⚠️ '+atascado.length+' cambio(s) llevan varios intentos fallidos al subir a Google Sheets (tipo: '+atascado.map(function(it){return it.tipo;}).join(', ')+'). Revisa tu conexión; si persiste, puede haber un problema en el Apps Script.';
+    }else{
+      ind.innerHTML = '<span class="sync-badge pend">⏳ '+SYNC_PENDIENTE.length+' por enviar</span>';
+      if(box) box.innerHTML = '⏳ Hay '+SYNC_PENDIENTE.length+' cambios esperando subir a Google Sheets (tipo: '+SYNC_PENDIENTE.map(function(it){return it.tipo;}).join(', ')+'). Se enviarán solos cuando haya internet, o toca "Sincronizar ahora".';
+    }
   }
 }
 
@@ -681,12 +751,18 @@ function subirOrdenesEnLotes(listaOrdenes, onProgreso, onFin){
           fecha: fecha
         }
       })
-    }).then(function(){
+    }).then(function(r){ return r.json(); }).then(function(resp){
+      if(resp && resp.status === 'error'){
+        // El servidor recibió la petición pero el script falló al procesarla — no lo
+        // damos por subido, reintentamos este mismo lote en vez de seguir con el siguiente.
+        setTimeout(subirSiguienteLote, 2000);
+        return;
+      }
       loteActual++;
       if(onProgreso) onProgreso(loteActual, totalLotes);
       setTimeout(subirSiguienteLote, 300); // pausa entre lotes para no saturar
     }).catch(function(){
-      // reintenta este lote en 2 segundos si falla
+      // reintenta este lote en 2 segundos si falla (ej: sin internet, o respuesta no-JSON)
       setTimeout(subirSiguienteLote, 2000);
     });
   }
@@ -797,7 +873,14 @@ function procesarColaSync(){
     method:'POST',
     headers:{'Content-Type':'text/plain;charset=utf-8'},
     body: JSON.stringify({tipo:item.tipo, contenido:item.contenido})
-  }).then(function(r){
+  }).then(function(r){ return r.json(); }).then(function(resp){
+    if(resp && resp.status === 'error'){
+      // CORREGIDO: antes esto se daba por exitoso apenas la red respondía, sin revisar
+      // si Apps Script realmente guardó los datos. Si el script tiraba un error (ej. al
+      // escribir DetalleHistorico), el envío se marcaba como hecho igual y se perdía en
+      // silencio. Ahora, si el servidor avisa error, se trata como fallo y se reintenta.
+      throw new Error(resp.message || 'Error en el servidor');
+    }
     SYNC_PENDIENTE.shift();
     guardarColaSync();
     sincronizando = false;
@@ -806,7 +889,7 @@ function procesarColaSync(){
     item.intentos = (item.intentos||0)+1;
     guardarColaSync();
     sincronizando = false;
-    // reintenta en 8 segundos si falla (ej: sin internet)
+    // reintenta en 8 segundos si falla (ej: sin internet, o el servidor devolvió error)
     setTimeout(procesarColaSync, 8000);
   });
 }
@@ -820,11 +903,32 @@ function sincronizarTodo(){
   });
 }
 
+// ════════════════════════════════════════
+// RECUPERACIÓN: reenvía TODO el historial que este equipo tiene guardado localmente
+// (cierre_dia + detalle_dia de cada día) a Google Sheets. Sirve para recuperar días que
+// se perdieron por la falla anterior (el HTML daba por exitoso un envío que en realidad
+// había fallado en Apps Script). Solo recupera lo que este mismo dispositivo/navegador
+// tiene guardado — si un día se cerró desde OTRO equipo y ahí tampoco llegó a Sheets,
+// hay que correr esto desde ESE equipo.
+// ════════════════════════════════════════
+function reenviarHistorialCompleto(){
+  if(historial.length === 0){ alert('Este equipo no tiene historial local guardado.'); return; }
+  if(!confirm('Esto va a reenviar el detalle de los '+historial.length+' día(s) que este equipo tiene guardados localmente a la hoja DetalleHistorico. Puede demorar unos segundos. ¿Continuar?')) return;
+  // Solo se reenvía "detalle_dia": es idempotente (reemplaza por fecha, no duplica).
+  // "cierre_dia" NO se reenvía acá porque solo agrega filas nuevas (no reemplaza) —
+  // si ya está guardado bien en la hoja "Cierres" (que es lo normal, esa parte no falló),
+  // reenviarlo crearía filas duplicadas y el Dashboard contaría el mismo día dos veces.
+  historial.forEach(function(h){
+    enviarASheets('detalle_dia', { fecha:h.fecha, paquetes:h.detalle||[] });
+  });
+  alert('✅ '+historial.length+' día(s) puestos en la cola de envío a DetalleHistorico. Revisa el indicador de sincronización abajo hasta que diga "☁️ Sincronizado".\n\n¿La hoja Cierres también tiene datos incompletos o duplicados? Avísame y lo revisamos aparte.');
+}
+
 // Trae automáticamente los cambios de estado de otros teléfonos/computadores
 // cada 30 segundos, para que el Resumen/Dashboard se mantengan al día solos.
 setInterval(function(){
   descargarOrdenesDesdeSheets();
-  descargarCierresDesdeSheets(function(){ completarDetalleDesdeSheets(); });
+  descargarCierresDesdeSheets();
 }, 30000);
 
 // reintenta automáticamente cada 20 segundos si quedan pendientes
@@ -838,15 +942,6 @@ setInterval(function(){
 var paquetes = [];
 var historial = [];
 var diaEnCompletar = null; // {fecha, indexHistorial} — si no es null, estamos completando pendientes de un día ya cerrado, no armando uno nuevo
-
-// Al abrir la app, además de traer los cierres, se completa el DETALLE por paquete de
-// cada día cerrado (no solo el resumen) — esto es necesario para que la verificación
-// "¿este código ya está en un día cerrado?" (que evita que se resuciten paquetes viejos
-// desde el registro de Eventos) tenga con qué comparar. Sin esto, el detalle solo se
-// llenaba al exportar un reporte, y la verificación nunca encontraba nada.
-// IMPORTANTE: esta llamada va DESPUÉS de declarar 'historial' arriba — si va antes,
-// truena toda la carga de la página (fue justo el bug que rompió todo el 5 de agosto).
-descargarCierresDesdeSheets(function(){ completarDetalleDesdeSheets(); });
 
 // ════════════════════════════════════════
 // PERFILES: Operativo vs Comercial
@@ -1044,14 +1139,6 @@ function descargarDeSheets(){
       if(!codigo || codigo === 'Código') return; // sin código o es la fila de encabezado: se ignora
 
       var existente = paquetes.find(function(p){ return p.codigo === codigo; });
-      // Si este código ya quedó guardado en un día CERRADO (historial), no hay que
-      // resucitarlo como "nuevo pendiente" cada vez que se lee el log de Eventos —
-      // eso causaba que paquetes agregados a mano (que sí generan evento "paquete_nuevo")
-      // reaparecieran en bucle para siempre, sin importar que ya estuvieran cerrados.
-      var yaCerradoEnHistorial = historial.some(function(h){
-        return (h.detalle||[]).some(function(d){ return d.codigo === codigo; });
-      });
-      if(yaCerradoEnHistorial) return;
 
       if(tipoEvento === 'paquete_nuevo'){
         if(!existente){
@@ -1081,10 +1168,13 @@ function descargarDeSheets(){
   });
 }
 
-// consulta la nube cada 15 segundos para traer cambios de otros dispositivos
-setInterval(descargarDeSheets, 15000);
-// y también al cargar la página
-descargarDeSheets();
+// ELIMINADO (04-08-2026): descargarDeSheets() leía el log permanente "Eventos"
+// (que nunca se borra) y revivía cualquier "paquete_nuevo" de CUALQUIER fecha pasada
+// que no estuviera cargado localmente — por eso pedidos ya cerrados y cobrados hace
+// días (ej. los agregados manuales del 03-08) seguían reapareciendo cada 15 segundos
+// sin importar cuántas veces se limpiara Ordenes o el local. La reemplaza por completo
+// descargarOrdenesDesdeSheets(), que lee la hoja "Ordenes" (el día EN CURSO real),
+// no el historial permanente de eventos.
 
 // ════════════════════════════════════════
 // MODAL DETALLE RESUMEN
@@ -1256,18 +1346,17 @@ function abrirModal(id){
     if(grupo.length > 1) porFolioBase = true;
   }
   // Respaldo: si por folio no se detectó multibulto, cruzar también por misma dirección + mismo teléfono
-  // (cubre casos donde ALAS usa folios totalmente distintos para el mismo cliente).
-  // Si el B2B (marca/vendedor) es distinto, NO se considera ni siquiera sospechoso — son
-  // compras de tiendas distintas que coinciden en cliente (ej. Camila Fernández: Cosmetic y
-  // Multimarcas), igual que el caso ya conocido de WOM con folios y teléfonos distintos.
+  // (cubre casos donde ALAS usa folios totalmente distintos para el mismo cliente)
+  // EXCEPCIÓN WOM: en pedidos WOM (chips/sobres), varias entregas distintas pueden compartir
+  // cliente y dirección (ej. condominio) con folio y teléfono propios cada una — NO son multibulto.
+  // Por eso este respaldo por dirección+teléfono no aplica cuando la marca (b2b) es WOM.
+  var esWom = String(p.b2b||'').trim().toUpperCase().indexOf('WOM') !== -1;
   var porDireccion = false;
-  if(grupo.length <= 1 && p.dir && p.tel){
+  if(grupo.length <= 1 && p.dir && p.tel && !esWom){
     var dirNorm = String(p.dir).trim().toLowerCase();
     var telNorm = String(p.tel).trim();
-    var b2bNorm = String(p.b2b||'').trim().toLowerCase();
     var candidatos = paquetes.filter(function(x){
-      var mismoB2b = !b2bNorm || !String(x.b2b||'').trim().toLowerCase() || String(x.b2b||'').trim().toLowerCase() === b2bNorm;
-      return x.codigo !== p.codigo && String(x.dir||'').trim().toLowerCase() === dirNorm && String(x.tel||'').trim() === telNorm && dirNorm && telNorm && mismoB2b;
+      return x.codigo !== p.codigo && String(x.dir||'').trim().toLowerCase() === dirNorm && String(x.tel||'').trim() === telNorm && dirNorm && telNorm && String(x.b2b||'').trim().toUpperCase().indexOf('WOM') === -1;
     });
     if(candidatos.length > 0){
       grupo = [p].concat(candidatos);
@@ -1296,7 +1385,15 @@ function abrirModal(id){
   document.getElementById('modal-tel').textContent = p.tel || '—';
   document.getElementById('modal-tipo').textContent = p.tipo || 'Principal';
   document.getElementById('modal-estado').textContent = estadoTextos[p.estado] || p.estado;
-  document.getElementById('modal-repetido').style.display = p.repetidoDeHistorial ? 'block' : 'none';
+  var modalRepetidoEl = document.getElementById('modal-repetido');
+  if(p.repetidoDeHistorial){
+    modalRepetidoEl.textContent = p.intentosAgotados
+      ? '🚫 INTENTO '+p.intentos+'/3 — ya agotó los 3 intentos del mes, revisar con Alas'
+      : '⚠️ INTENTO '+(p.intentos||1)+'/3 — esta orden ya existía en un día anterior, verificar con Alas';
+    modalRepetidoEl.style.display = 'block';
+  }else{
+    modalRepetidoEl.style.display = 'none';
+  }
   var motivoRow = document.getElementById('modal-motivo-row');
   if((p.estado==='devuelto' || p.estado==='daniado') && p.motivo){
     document.getElementById('modal-motivo').textContent = p.motivo;
@@ -1316,6 +1413,9 @@ function abrirModal(id){
     acciones.innerHTML =
       '<button class="btn btn-outline" style="flex:1;margin-bottom:0;" onclick="marcarDesdeModal(\'pendiente\')">↺ Revertir a pendiente</button>';
   }
+  // Eliminar orden: SOLO visible en modo Comercial (no en el celular de Cristian en
+  // terreno) — es una acción irreversible, mejor que quede en manos de quien administra.
+  acciones.innerHTML += '<button class="btn btn-rojo solo-comercial" style="flex:1;margin-bottom:0;background:#7f1d1d;" onclick="eliminarPaqueteDesdeModal()">🗑️ Eliminar</button>';
 
   document.getElementById('modal-overlay').classList.add('open');
 }
@@ -1326,16 +1426,25 @@ function cerrarModal(e){
   modalOrdenId = null;
 }
 
-// Calcula el grupo completo (multibulto) al que pertenece un paquete, SOLO por folio base.
-// Ya NO se agrupa automáticamente por dirección+teléfono para marcar entregas juntas —
-// eso causaba falsos positivos cuando 2 clientes distintos comparten dirección/teléfono
-// pero son pedidos de tiendas distintas (ej. Camila Fernández: folios COS267894 y MP380780,
-// mismo cliente, pero 2 compras separadas). El aviso de "misma dirección/teléfono, folio
-// distinto" se sigue mostrando en el detalle del paquete, pero ya no une las entregas.
+// Calcula el grupo completo (multibulto) al que pertenece un paquete: primero por folio
+// base, y si no hay coincidencia, como respaldo por misma dirección + mismo teléfono.
+// Se usa para que marcar UN paquete del grupo marque siempre a TODOS juntos.
 function calcularGrupoMultibulto(p){
   var grupo = [];
   if(p.folio && p.folio.trim()){
     grupo = paquetes.filter(function(x){ return getFolioBase(x.folio) === getFolioBase(p.folio); });
+  }
+  // EXCEPCIÓN WOM: entregas distintas de WOM pueden compartir dirección+teléfono
+  // (ej. varios chips a un mismo condominio) sin ser el mismo pedido — no agrupar por respaldo.
+  var esWom = String(p.b2b||'').trim().toUpperCase().indexOf('WOM') !== -1;
+  if(grupo.length <= 1 && p.dir && p.tel && !esWom){
+    var dirNorm = String(p.dir).trim().toLowerCase();
+    var telNorm = String(p.tel).trim();
+    if(dirNorm && telNorm){
+      grupo = paquetes.filter(function(x){
+        return String(x.dir||'').trim().toLowerCase() === dirNorm && String(x.tel||'').trim() === telNorm && String(x.b2b||'').trim().toUpperCase().indexOf('WOM') === -1;
+      });
+    }
   }
   return grupo.length > 1 ? grupo : [p];
 }
@@ -1373,6 +1482,79 @@ function marcarDesdeModal(estado){
   if(rutaOrdenadas.length > 0 && estado === 'entregado'){
     recalcularRutaDesdeUbicacionActual();
   }
+}
+
+// ════════════════════════════════════════
+// ELIMINAR ORDEN
+// Para sacar del día en curso un pedido que no corresponde (ej. un resabio de un día
+// anterior, o un agregado manual por error). Borra local Y en Sheets (hoja Ordenes),
+// sin importar el estado en el que esté.
+// ════════════════════════════════════════
+function eliminarPaqueteDesdeModal(){
+  if(!modalOrdenId) return;
+  var p = paquetes.find(function(x){return x.id===modalOrdenId;});
+  if(!p) return;
+  var grupo = calcularGrupoMultibulto(p);
+  var estadoTxt = {entregado:'✅ ENTREGADO', devuelto:'↩️ Devuelto', daniado:'⚠️ Dañado', pendiente:'⏳ Pendiente'};
+  var advertenciaEstado = '';
+  if(p.estado === 'entregado'){
+    advertenciaEstado = '\n\n⚠️ OJO: este pedido está marcado ENTREGADO. Si lo eliminas, se pierde ese registro y el ingreso asociado ya no se contará. Solo elimínalo si es un resabio de otro día (ya cobrado antes) — NO si es una entrega real de hoy.';
+  } else if(p.estado === 'pendiente'){
+    advertenciaEstado = '\n\n⚠️ OJO: este pedido está PENDIENTE de entregar. Si lo eliminas, Cristian ya no lo va a ver en su ruta y el paquete físico se queda sin registrar la entrega.';
+  }
+  var detalle = 'Nombre: '+p.nombre+'\nCódigo: '+p.codigo+'\nEstado actual: '+(estadoTxt[p.estado]||p.estado)+
+    (grupo.length > 1 ? '\nEsta orden tiene '+grupo.length+' paquetes — se eliminarán TODOS juntos.' : '');
+  var palabra = prompt('Vas a ELIMINAR este pedido de forma permanente:\n\n'+detalle+advertenciaEstado+
+    '\n\nPara confirmar, escribe ELIMINAR (en mayúsculas) y presiona Aceptar. Cualquier otra cosa cancela.');
+  if(palabra !== 'ELIMINAR') return;
+  grupo.forEach(function(item){
+    enviarASheets('paquete_eliminado', {codigo:item.codigo});
+  });
+  var idsAEliminar = {};
+  grupo.forEach(function(item){ idsAEliminar[item.id] = true; });
+  paquetes = paquetes.filter(function(x){ return !idsAEliminar[x.id]; });
+  guardarStorage();
+  actualizarResumen();
+  renderPaquetes();
+  document.getElementById('modal-overlay').classList.remove('open');
+  modalOrdenId = null;
+}
+
+// ════════════════════════════════════════
+// ELIMINAR POR CÓDIGO (sin modal)
+// Alternativa directa por si tocar la tarjeta de un pedido no abre el modal (puede
+// pasar con pedidos agregados manuales de días viejos, en algunos equipos). Hace
+// exactamente lo mismo que "🗑️ Eliminar" del modal, pero sin depender del click.
+// ════════════════════════════════════════
+function eliminarPorCodigo(){
+  var input = document.getElementById('del-codigo');
+  var codigo = input.value.trim();
+  if(!codigo){ alert('Escribe el código del pedido.'); return; }
+  var candidatos = paquetes.filter(function(x){ return x.codigo === codigo; });
+  if(candidatos.length === 0){
+    alert('No se encontró ningún pedido con el código "'+codigo+'" en este equipo.\n\n(Ojo: tiene que ser exactamente igual, mayúsculas incluidas, tal como aparece en la tarjeta.)');
+    return;
+  }
+  var p = candidatos[0];
+  var grupo = calcularGrupoMultibulto(p);
+  var estadoTxt = {entregado:'✅ ENTREGADO', devuelto:'↩️ Devuelto', daniado:'⚠️ Dañado', pendiente:'⏳ Pendiente'};
+  var detalle = candidatos.map(function(c){ return c.nombre+' — '+(estadoTxt[c.estado]||c.estado); }).join('\n');
+  var palabra = prompt('Vas a ELIMINAR de forma permanente:\n\n'+detalle+
+    (grupo.length>candidatos.length ? '\n\n(Esta orden tiene '+grupo.length+' paquetes en total — se eliminarán TODOS juntos.)' : '')+
+    '\n\nPara confirmar, escribe ELIMINAR (en mayúsculas) y presiona Aceptar. Cualquier otra cosa cancela.');
+  if(palabra !== 'ELIMINAR') return;
+  var aEliminar = grupo.length > 0 ? grupo : candidatos;
+  aEliminar.forEach(function(item){
+    enviarASheets('paquete_eliminado', {codigo:item.codigo});
+  });
+  var idsAEliminar2 = {};
+  aEliminar.forEach(function(item){ idsAEliminar2[item.id] = true; });
+  paquetes = paquetes.filter(function(x){ return !idsAEliminar2[x.id]; });
+  guardarStorage();
+  actualizarResumen();
+  renderPaquetes();
+  input.value = '';
+  alert('✅ Eliminado.');
 }
 
 // ════════════════════════════════════════
@@ -1438,12 +1620,7 @@ function actualizarResumen(){
   // Panel Paquetes / Órdenes / Multibultos
   var ordStatsResumen = contarOrdenes(paquetes);
   var ordStatsPorEstado = contarOrdenesPorEstado(paquetes);
-  var gruposFolio = {};
-  paquetes.forEach(function(p){
-    var key = getFolioBase(p.folio) || ('__solo_'+p.id);
-    gruposFolio[key] = (gruposFolio[key]||0) + 1;
-  });
-  var totalMultibultos = Object.keys(gruposFolio).filter(function(k){ return gruposFolio[k] > 1; }).length;
+  var totalMultibultos = agruparOrdenes(paquetes).filter(function(g){ return g.length > 1; }).length;
   var elTP = document.getElementById('s-total-paquetes');
   var elTO = document.getElementById('s-total-ordenes');
   var elTM = document.getElementById('s-total-multibultos');
@@ -1454,11 +1631,11 @@ function actualizarResumen(){
   document.getElementById('s-recibidos').textContent = total;
   document.getElementById('s-entregados').textContent = ent;
   var elEO = document.getElementById('s-entregados-ordenes');
-  if(elEO) elEO.textContent = '= ' + ordStatsPorEstado.entregadas + ' orden' + (ordStatsPorEstado.entregadas===1?'':'es');
+  if(elEO) elEO.textContent = ordStatsPorEstado.entregadas + (ordStatsPorEstado.entregadas===1?' orden entregada':' órdenes entregadas');
   document.getElementById('s-devueltos').textContent = dev;
   document.getElementById('s-pendientes').textContent = ordStatsPorEstado.pendientes;
   var elPP = document.getElementById('s-pendientes-paquetes');
-  if(elPP) elPP.textContent = pend + ' paquete' + (pend===1?'':'s');
+  if(elPP) elPP.textContent = pend + (pend===1?' paquete por entregar':' paquetes por entregar');
   document.getElementById('s-principal').textContent = prin;
   document.getElementById('s-ramal').textContent = ram;
   var _efMesR = efectividadMesActual();
@@ -1474,6 +1651,16 @@ function actualizarResumen(){
 function importarExcel(input){
   var file = input.files[0];
   if(!file) return;
+  // CORREGIDO: si este equipo tenía pedidos locales sueltos de un día que no se cerró
+  // AQUÍ (ej. se cerró desde el celular de Cristian, pero este navegador nunca se
+  // enteró), antes se sumaban en silencio a la ruta nueva importada — mezclando 2 días
+  // en el Resumen. Ahora se avisa y se limpia antes de seguir.
+  if(paquetes.length > 0 && !diaEnCompletar){
+    var seguir = confirm('⚠️ Este equipo ya tiene '+paquetes.length+' pedido(s) cargados localmente (probablemente de un día anterior que se cerró desde otro celular/computador).\n\nSi continúas, se van a BORRAR esos '+paquetes.length+' pedidos locales antes de importar el archivo nuevo, para no mezclarlos con la ruta de hoy.\n\n¿Continuar?');
+    if(!seguir){ input.value=''; return; }
+    paquetes = [];
+    guardarStorage();
+  }
   var status = document.getElementById('import-status');
   status.textContent = 'Procesando...';
   var reader = new FileReader();
@@ -1551,13 +1738,19 @@ function importarExcel(input){
         // revisa duplicado real (de una importación anterior), no dentro de este mismo archivo
         if(codigosPreExistentes[codigo]){dup++;continue;}
         // revisa si ese código ya fue entregado/procesado en días anteriores (historial)
-        var enHistorial = null;
-        for(var hIdx=historial.length-1; hIdx>=0 && !enHistorial; hIdx--){
-          enHistorial = historial[hIdx].detalle.find(function(p){return p.codigo===codigo;});
-          if(enHistorial) enHistorial._fechaHist = historial[hIdx].fecha;
-        }
-        if(enHistorial){
-          alertas.push(codigo+' (ya estaba "'+enHistorial.estado+'" el '+enHistorial._fechaHist+')');
+        var registrosPrevios = calcularIntentos(codigo);
+        var intentosFallidos = registrosPrevios.filter(function(r){return r.estado==='devuelto'||r.estado==='daniado';}).length;
+        var yaEntregadoAntes = registrosPrevios.some(function(r){return r.estado==='entregado';});
+        var intentoActual = intentosFallidos + 1;
+        if(registrosPrevios.length>0){
+          var ultimo = registrosPrevios[registrosPrevios.length-1];
+          if(yaEntregadoAntes){
+            alertas.push(codigo+' — ⚠️ YA FIGURA ENTREGADO el '+ultimo.fecha+', revisar antes de reintentar');
+          }else if(intentoActual>3){
+            alertas.push(codigo+' — 🚫 intento '+intentoActual+'/3, YA AGOTÓ los 3 intentos del mes, revisar con ALAS');
+          }else{
+            alertas.push(codigo+' — intento '+intentoActual+'/3 (antes: '+registrosPrevios.map(function(r){return r.estado+' el '+r.fecha;}).join(', ')+')');
+          }
         }
         var nuevoPaquete = {
           id:Date.now()+r, codigo:codigo,
@@ -1571,7 +1764,9 @@ function importarExcel(input){
           tipo:row[idx.tipo]?String(row[idx.tipo]).trim():tipoPorDefecto,
           b2b:row[idx.b2b]?String(row[idx.b2b]).trim():'',
           estado:'pendiente', ts:Date.now(),
-          repetidoDeHistorial: enHistorial ? true : false
+          repetidoDeHistorial: registrosPrevios.length>0,
+          intentos: intentoActual,
+          intentosAgotados: intentoActual>3
         };
         paquetes.push(nuevoPaquete);
         nuevos++;
@@ -1613,6 +1808,20 @@ function agregarManual(){
   var codigo = document.getElementById('m-codigo').value.trim();
   if(!codigo){alert('Ingresa el código de la orden.');return;}
   if(paquetes.find(function(p){return p.codigo===codigo;})){alert('Ya existe una orden con ese código.');return;}
+  // Revisa si este código ya tuvo intentos este mes (igual que al importar Excel)
+  var registrosPrevios = calcularIntentos(codigo);
+  var intentosFallidos = registrosPrevios.filter(function(r){return r.estado==='devuelto'||r.estado==='daniado';}).length;
+  var yaEntregadoAntes = registrosPrevios.some(function(r){return r.estado==='entregado';});
+  var intentoActual = intentosFallidos + 1;
+  if(registrosPrevios.length>0){
+    var detalle = registrosPrevios.map(function(r){return r.estado+' el '+r.fecha;}).join(', ');
+    var msg = 'Este código ya aparece este mes: '+detalle+'.\n';
+    if(yaEntregadoAntes) msg += '⚠️ Ya figura ENTREGADO antes — revisa que no sea un error antes de continuar.\n';
+    else if(intentoActual>3) msg += '🚫 Este sería el intento '+intentoActual+'/3 — ya se agotaron los 3 intentos del mes, revisar con ALAS.\n';
+    else msg += 'Este sería el intento '+intentoActual+'/3.\n';
+    msg += '¿Agregar de todas formas?';
+    if(!confirm(msg)) return;
+  }
   var nuevoPaquete = {
     id:Date.now(), codigo:codigo,
     folio:'', nombre:document.getElementById('m-nombre').value.trim()||'Sin nombre',
@@ -1620,7 +1829,10 @@ function agregarManual(){
     dir:document.getElementById('m-dir').value.trim(),
     comuna:document.getElementById('m-comuna').value.trim(),
     region:'', tipo:document.getElementById('m-tipo').value,
-    b2b:'', estado:'pendiente', ts:Date.now()
+    b2b:'', estado:'pendiente', ts:Date.now(),
+    repetidoDeHistorial: registrosPrevios.length>0,
+    intentos: intentoActual,
+    intentosAgotados: intentoActual>3
   };
   paquetes.push(nuevoPaquete);
   guardarStorage();
@@ -1631,10 +1843,24 @@ function agregarManual(){
 }
 
 function limpiarDia(){
-  if(!confirm('¿Seguro que quieres eliminar todas las órdenes del día actual?')) return;
+  // CORREGIDO: antes esto solo borraba localmente y nunca avisaba a Google Sheets,
+  // así que la hoja "Ordenes" se quedaba con los pedidos viejos aunque la app ya
+  // mostrara 0 — confundiendo a cualquiera que esperara que "Limpiar día" limpiara todo.
+  // Ahora limpia los dos lados, pero por eso la advertencia es más fuerte: esto afecta
+  // también lo que ven TODOS los equipos conectados (ej. el celular de Cristian).
+  //
+  // TAMBIÉN vacía la cola de sincronización pendiente de ESTE equipo — si había algún
+  // envío viejo atascado (ej. un "paquete_nuevo" de hace días que nunca se pudo mandar
+  // por algún problema anterior), sin esto seguiría reintentando en segundo plano y
+  // podría volver a insertar el pedido en Sheets cada vez que lograra conectarse,
+  // haciendo que "reaparezca solo" después de cada sincronización.
+  if(!confirm('⚠️ Esto va a eliminar TODAS las órdenes del día actual — en este equipo Y en Google Sheets (hoja Ordenes), así que también desaparecen del celular de Cristian u otros equipos conectados. También se vacía cualquier envío pendiente atascado de este equipo.\n\n¿Seguro que quieres continuar?')) return;
   paquetes=[];
   guardarStorage();
+  SYNC_PENDIENTE=[];
+  guardarColaSync();
   actualizarResumen();
+  enviarASheets('limpiar_ordenes', {});
 }
 
 // ════════════════════════════════════════
@@ -2158,7 +2384,10 @@ function renderPaquetes(){
         html+='<div class="paquete-item '+p.estado+'" id="pi-'+p.id+'" onclick="abrirModal('+p.id+')" style="cursor:pointer;'+(esMultibulto?'border-left:3px solid #f59e0b;':'')+(p.estado!=='pendiente'?'':'')+'">'; 
         html+='<div class="paquete-info">';
         if(p.repetidoDeHistorial){
-          html+='<div style="font-size:0.68rem;font-weight:700;color:var(--rojo);">⚠️ YA EXISTÍA EN UN DÍA ANTERIOR — revisar con Alas</div>';
+          var txtIntento = p.intentosAgotados
+            ? '🚫 INTENTO '+p.intentos+'/3 — YA AGOTÓ los intentos del mes, revisar con Alas'
+            : '⚠️ INTENTO '+(p.intentos||1)+'/3 — ya existía en un día anterior';
+          html+='<div style="font-size:0.68rem;font-weight:700;color:var(--rojo);">'+txtIntento+'</div>';
         }
         html+='<div class="paquete-nombre">'+p.nombre+'</div>';
         html+='<div class="paquete-dir">'+dirMostrar+(p.tel?' · '+p.tel:'')+'</div>';
@@ -2442,12 +2671,15 @@ function actualizarCierre(){
   var valorEntrega=valorPorEntregaNeto(efMesActual);
   var ingresoNeto=ordStatsCierre.entregadas*valorEntrega;
   var ingresoConIva=Math.round(ingresoNeto*(1+IVA_TASA));
+  // Equivalencia en paquetes (bultos), para las filas donde una orden puede tener más de 1 paquete
+  var paqEntregadosCierre = paquetes.filter(function(p){return p.estado==='entregado';}).length;
+  var paqPendientesCierre = paquetes.filter(function(p){return p.estado==='pendiente';}).length;
   document.getElementById('resumen-cierre-box').innerHTML=
     '<div class="resumen-cierre-row"><span>Órdenes recibidas</span><strong>'+ordStatsCierre.total+'</strong></div>'+
-    '<div class="resumen-cierre-row"><span>Órdenes entregadas</span><strong style="color:var(--verde)">'+ordStatsCierre.entregadas+'</strong></div>'+
+    '<div class="resumen-cierre-row"><span>Órdenes entregadas</span><strong style="color:var(--verde)">'+ordStatsCierre.entregadas+'<span style="font-size:0.68rem;color:#94a3b8;font-weight:400;"> ('+paqEntregadosCierre+' paquete'+(paqEntregadosCierre===1?'':'s')+')</span></strong></div>'+
     '<div class="resumen-cierre-row"><span>Devueltas</span><strong style="color:var(--rojo)">'+ordStatsCierre.devueltas+'</strong></div>'+
     '<div class="resumen-cierre-row"><span>Dañadas</span><strong style="color:var(--naranja)">'+ordStatsCierre.daniadas+'</strong></div>'+
-    '<div class="resumen-cierre-row"><span>Pendientes</span><strong style="color:var(--naranja)">'+ordStatsCierre.pendientes+'</strong></div>'+
+    '<div class="resumen-cierre-row"><span>Pendientes</span><strong style="color:var(--naranja)">'+ordStatsCierre.pendientes+'<span style="font-size:0.68rem;color:#94a3b8;font-weight:400;"> ('+paqPendientesCierre+' paquete'+(paqPendientesCierre===1?'':'s')+' por entregar)</span></strong></div>'+
     '<div class="resumen-cierre-row"><span>Efectividad del día</span><strong>'+ef+'%</strong></div>'+
     '<div class="resumen-cierre-row"><span>Efectividad acum. del mes</span><strong>'+efMesActual+'%</strong></div>'+
     '<div class="resumen-cierre-row solo-comercial"><span>Valor por entrega (neto)</span><strong>'+formatoPesos(valorEntrega)+'</strong></div>'+
@@ -2460,10 +2692,13 @@ function exportarExcelDia(){
   var _efExp=efectividadMesActual();
   var _valExp=valorPorEntregaNeto(_efExp);
   var _grupos={};
-  paquetes.forEach(function(p){
-    var key=getFolioBase(p.folio) || ('__solo_'+p.id);
-    if(!_grupos[key]) _grupos[key]=[];
-    _grupos[key].push(p);
+  agruparOrdenes(paquetes).forEach(function(g){
+    var key=getFolioBase(g[0].folio) || ('__solo_'+g[0].id);
+    _grupos[key]=g;
+  });
+  var _keyDe={};
+  Object.keys(_grupos).forEach(function(k){
+    _grupos[k].forEach(function(p){ _keyDe[p.id]=k; });
   });
   var _ordenCompleta={};
   Object.keys(_grupos).forEach(function(k){
@@ -2472,7 +2707,7 @@ function exportarExcelDia(){
   var _yaContado={};
   var ws_data=[['Código','Folio','Nombre','Teléfono','Dirección','Comuna','Tipo','Estado','Motivo','Orden Completa','Ingreso Neto (por orden)','Efectividad Mes %']];
   paquetes.forEach(function(p){
-    var key=getFolioBase(p.folio) || ('__solo_'+p.id);
+    var key=_keyDe[p.id];
     var completa=_ordenCompleta[key];
     var ingresoFila=0;
     if(completa && !_yaContado[key]){ ingresoFila=_valExp; _yaContado[key]=true; }
@@ -2811,19 +3046,16 @@ function exportarReporteMensualAhora(){
   var detalle=[['Fecha','Código','Folio','Nombre','Dirección','Comuna','Tipo','Estado','Motivo','Orden Completa','Ingreso Neto (por orden)']];
   historialDelMes.forEach(function(h){
     var _valH=(h.valorPorEntrega!=null?h.valorPorEntrega:TARIFA_BASE);
-    var _gruposH={};
-    h.detalle.forEach(function(p){
-      var key=getFolioBase(p.folio) || ('__solo_'+p.id);
-      if(!_gruposH[key]) _gruposH[key]=[];
-      _gruposH[key].push(p);
-    });
+    var _keyDeH={};
     var _completaH={};
-    Object.keys(_gruposH).forEach(function(k){
-      _completaH[k]=_gruposH[k].every(function(p){return p.estado==='entregado';});
+    agruparOrdenes(h.detalle).forEach(function(g){
+      var key=getFolioBase(g[0].folio) || ('__solo_'+g[0].id);
+      g.forEach(function(p){ _keyDeH[p.id]=key; });
+      _completaH[key]=g.every(function(p){return p.estado==='entregado';});
     });
     var _yaContadoH={};
     h.detalle.forEach(function(p){
-      var key=getFolioBase(p.folio) || ('__solo_'+p.id);
+      var key=_keyDeH[p.id];
       var completa=_completaH[key];
       var ingresoFila=0;
       if(completa && !_yaContadoH[key]){ ingresoFila=_valH; _yaContadoH[key]=true; }
@@ -2973,20 +3205,17 @@ function exportarDiaHistorial(idx){
   var h=historial[historial.length-1-idx];
   if(!h) return;
   var _valHist=(h.valorPorEntrega!=null?h.valorPorEntrega:TARIFA_BASE);
-  var _gruposH={};
-  h.detalle.forEach(function(p){
-    var key=getFolioBase(p.folio) || ('__solo_'+p.id);
-    if(!_gruposH[key]) _gruposH[key]=[];
-    _gruposH[key].push(p);
-  });
+  var _keyDeH={};
   var _completaH={};
-  Object.keys(_gruposH).forEach(function(k){
-    _completaH[k]=_gruposH[k].every(function(p){return p.estado==='entregado';});
+  agruparOrdenes(h.detalle).forEach(function(g){
+    var key=getFolioBase(g[0].folio) || ('__solo_'+g[0].id);
+    g.forEach(function(p){ _keyDeH[p.id]=key; });
+    _completaH[key]=g.every(function(p){return p.estado==='entregado';});
   });
   var _yaContadoH={};
   var ws_data=[['Codigo','Folio','Nombre','Telefono','Direccion','Comuna','Tipo','Estado','Motivo','Orden Completa','Ingreso Neto (por orden)']];
   h.detalle.forEach(function(p){
-    var key=getFolioBase(p.folio) || ('__solo_'+p.id);
+    var key=_keyDeH[p.id];
     var completa=_completaH[key];
     var ingresoFila=0;
     if(completa && !_yaContadoH[key]){ ingresoFila=_valHist; _yaContadoH[key]=true; }
