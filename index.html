@@ -2751,7 +2751,14 @@ function enviarWhatsApp(){
   window.open('https://wa.me/56952207386?text='+encodeURIComponent(msg));
 }
 
+var _ultimoCierreDiaTs = 0;
 function cerrarDia(){
+  // Evita que varios toques seguidos (ej. mientras la app no responde de inmediato)
+  // disparen el cierre del día más de una vez, duplicando filas en Cierres.
+  var ahoraTs = Date.now();
+  if(ahoraTs - _ultimoCierreDiaTs < 5000) return;
+  _ultimoCierreDiaTs = ahoraTs;
+
   if(paquetes.length===0){alert('No hay órdenes para cerrar.');return;}
 
   if(diaEnCompletar){
@@ -2811,7 +2818,19 @@ function cerrarDia(){
   var pend=paquetes.filter(function(p){return p.estado==='pendiente';}).length;
   var total=paquetes.length;
   var ordStats = contarOrdenes(paquetes);
-  var fecha=new Date().toLocaleDateString('es-CL');
+  // CORREGIDO: antes esto usaba SIEMPRE la fecha real de HOY al momento de cerrar. Si
+  // el reparto se extiende después de medianoche (ej. se cierra a la 1am del día
+  // siguiente), el cierre quedaba mal fechado un día adelantado. Ahora, si son antes
+  // de las 4am, asume que probablemente es la ruta del día anterior y lo pregunta.
+  var ahoraCierre = new Date();
+  var fechaSugerida = ahoraCierre.toLocaleDateString('es-CL');
+  if(ahoraCierre.getHours() < 4){
+    var ayer = new Date(ahoraCierre.getTime() - 24*60*60*1000);
+    fechaSugerida = ayer.toLocaleDateString('es-CL');
+  }
+  var fechaIngresada = prompt('¿Qué fecha corresponde a esta ruta? (formato DD-MM-AAAA)\n\nSi cerraste después de medianoche, seguramente sigue siendo la fecha de AYER, no la de hoy.', fechaSugerida);
+  if(fechaIngresada === null) return; // canceló
+  var fecha = fechaIngresada.trim() || fechaSugerida;
   var _efCierre=efectividadMesActual();
   var _valCierre=valorPorEntregaNeto(_efCierre);
   var registroDia = {
