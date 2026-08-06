@@ -538,9 +538,15 @@ function valorPorEntregaNeto(efPct){
 // ════════════════════════════════════════
 // AGRUPAR PAQUETES EN ÓRDENES (función central)
 // Primero agrupa por folio base. Como respaldo, agrupa por misma dirección + mismo
-// teléfono (cubre casos donde ALAS usa folios totalmente distintos para el mismo cliente).
+// teléfono + MISMA MARCA/B2B (cubre casos donde ALAS usa folios totalmente distintos
+// para el mismo pedido de una misma empresa despachado en varias cajas).
+// Exigir la misma marca evita juntar 2 compras de EMPRESAS DISTINTAS que coinciden en
+// dirección y teléfono (ej. Camila Fernandez pidiendo a la vez en Cosmetic y en
+// Multimarcas — son 2 entregas separadas, no un multibulto, aunque lleguen a la
+// misma casa el mismo día).
 // EXCEPCIÓN WOM: en pedidos WOM (chips/sobres), compartir dirección+teléfono NO significa
-// que sea el mismo pedido (ej. varias entregas a un mismo condominio) — no se agrupan.
+// que sea el mismo pedido (ej. varias entregas a un mismo condominio) — no se agrupan
+// aunque la marca sí coincida (WOM=WOM).
 // Todas las demás funciones (contarOrdenes, contarOrdenesPorEstado, resumen de multibultos)
 // usan esta misma función para que el conteo sea consistente en toda la app.
 // ════════════════════════════════════════
@@ -569,9 +575,10 @@ function agruparOrdenes(arr){
     if(!esWomPaquete(p) && p.dir && p.tel){
       var dirNorm = String(p.dir).trim().toLowerCase();
       var telNorm = String(p.tel).trim();
+      var b2bNorm = String(p.b2b||'').trim().toLowerCase();
       if(dirNorm && telNorm){
         var pares = arr.filter(function(x){
-          return !asignado[x.id] && String(x.dir||'').trim().toLowerCase()===dirNorm && String(x.tel||'').trim()===telNorm && !esWomPaquete(x);
+          return !asignado[x.id] && String(x.dir||'').trim().toLowerCase()===dirNorm && String(x.tel||'').trim()===telNorm && String(x.b2b||'').trim().toLowerCase()===b2bNorm && !esWomPaquete(x);
         });
         if(pares.length > 1){
           pares.forEach(function(x){ asignado[x.id] = true; });
@@ -1350,13 +1357,17 @@ function abrirModal(id){
   // EXCEPCIÓN WOM: en pedidos WOM (chips/sobres), varias entregas distintas pueden compartir
   // cliente y dirección (ej. condominio) con folio y teléfono propios cada una — NO son multibulto.
   // Por eso este respaldo por dirección+teléfono no aplica cuando la marca (b2b) es WOM.
+  // También exige que sea LA MISMA MARCA: 2 empresas distintas coincidiendo en dirección
+  // y teléfono son 2 entregas separadas, no un multibulto (ej. Camila Fernandez pidiendo
+  // a la vez en Cosmetic y en Multimarcas).
   var esWom = String(p.b2b||'').trim().toUpperCase().indexOf('WOM') !== -1;
   var porDireccion = false;
   if(grupo.length <= 1 && p.dir && p.tel && !esWom){
     var dirNorm = String(p.dir).trim().toLowerCase();
     var telNorm = String(p.tel).trim();
+    var b2bNormModal = String(p.b2b||'').trim().toLowerCase();
     var candidatos = paquetes.filter(function(x){
-      return x.codigo !== p.codigo && String(x.dir||'').trim().toLowerCase() === dirNorm && String(x.tel||'').trim() === telNorm && dirNorm && telNorm && String(x.b2b||'').trim().toUpperCase().indexOf('WOM') === -1;
+      return x.codigo !== p.codigo && String(x.dir||'').trim().toLowerCase() === dirNorm && String(x.tel||'').trim() === telNorm && dirNorm && telNorm && String(x.b2b||'').trim().toLowerCase() === b2bNormModal && String(x.b2b||'').trim().toUpperCase().indexOf('WOM') === -1;
     });
     if(candidatos.length > 0){
       grupo = [p].concat(candidatos);
@@ -1440,9 +1451,10 @@ function calcularGrupoMultibulto(p){
   if(grupo.length <= 1 && p.dir && p.tel && !esWom){
     var dirNorm = String(p.dir).trim().toLowerCase();
     var telNorm = String(p.tel).trim();
+    var b2bNormGrupo = String(p.b2b||'').trim().toLowerCase();
     if(dirNorm && telNorm){
       grupo = paquetes.filter(function(x){
-        return String(x.dir||'').trim().toLowerCase() === dirNorm && String(x.tel||'').trim() === telNorm && String(x.b2b||'').trim().toUpperCase().indexOf('WOM') === -1;
+        return String(x.dir||'').trim().toLowerCase() === dirNorm && String(x.tel||'').trim() === telNorm && String(x.b2b||'').trim().toLowerCase() === b2bNormGrupo && String(x.b2b||'').trim().toUpperCase().indexOf('WOM') === -1;
       });
     }
   }
