@@ -827,13 +827,6 @@ setInterval(function(){
   descargarCierresDesdeSheets(function(){ completarDetalleDesdeSheets(); });
 }, 30000);
 
-// Al abrir la app, además de traer los cierres, se completa el DETALLE por paquete de
-// cada día cerrado (no solo el resumen) — esto es necesario para que la verificación
-// "¿este código ya está en un día cerrado?" (que evita que se resuciten paquetes viejos
-// desde el registro de Eventos) tenga con qué comparar. Sin esto, el detalle solo se
-// llenaba al exportar un reporte, y la verificación nunca encontraba nada.
-descargarCierresDesdeSheets(function(){ completarDetalleDesdeSheets(); });
-
 // reintenta automáticamente cada 20 segundos si quedan pendientes
 setInterval(function(){
   if(SYNC_PENDIENTE.length>0) procesarColaSync();
@@ -845,6 +838,15 @@ setInterval(function(){
 var paquetes = [];
 var historial = [];
 var diaEnCompletar = null; // {fecha, indexHistorial} — si no es null, estamos completando pendientes de un día ya cerrado, no armando uno nuevo
+
+// Al abrir la app, además de traer los cierres, se completa el DETALLE por paquete de
+// cada día cerrado (no solo el resumen) — esto es necesario para que la verificación
+// "¿este código ya está en un día cerrado?" (que evita que se resuciten paquetes viejos
+// desde el registro de Eventos) tenga con qué comparar. Sin esto, el detalle solo se
+// llenaba al exportar un reporte, y la verificación nunca encontraba nada.
+// IMPORTANTE: esta llamada va DESPUÉS de declarar 'historial' arriba — si va antes,
+// truena toda la carga de la página (fue justo el bug que rompió todo el 5 de agosto).
+descargarCierresDesdeSheets(function(){ completarDetalleDesdeSheets(); });
 
 // ════════════════════════════════════════
 // PERFILES: Operativo vs Comercial
@@ -3026,7 +3028,6 @@ if(paquetes.length === 0){
       actualizarResumen();
     }
   });
-  
 }
 </script>
 </body>
