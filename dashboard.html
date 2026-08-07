@@ -92,9 +92,15 @@
       <div class="card"><div class="card-label">Efectividad acumulada</div><div class="card-value verde" id="op-ef-mes">—</div></div>
       <div class="card"><div class="card-label">Incidencias del mes</div><div class="card-value naranja" id="op-inc-mes">—</div></div>
     </div>
+    <div class="banner-info">WOM se paga a tarifa fija, sin bono, y no cuenta para calcular el % de efectividad del mes (que define el tramo de bono de ALAS para el resto de las marcas).</div>
+    <div class="grid">
+      <div class="card"><div class="card-label">Efectividad del mes (sin WOM)</div><div class="card-value verde" id="op-ef-mes-nowom">—</div><div class="card-sub" id="op-ef-mes-nowom-sub">—</div></div>
+      <div class="card"><div class="card-label">Órdenes WOM del mes</div><div class="card-value" id="op-ord-wom">—</div></div>
+      <div class="card"><div class="card-label">Ingreso WOM del mes (sin bono)</div><div class="card-value" id="op-ing-wom">—</div></div>
+    </div>
     <div class="panel">
       <div class="titulo-seccion" style="margin-top:0;">Últimos días operados</div>
-      <table><thead><tr><th>Fecha</th><th class="num">Paquetes</th><th class="num">Órdenes</th><th class="num">Efectividad</th><th class="num">Devueltas</th></tr></thead><tbody id="tabla-dias"></tbody></table>
+      <table><thead><tr><th>Fecha</th><th class="num">Paquetes</th><th class="num">Órdenes</th><th class="num">Efectividad</th><th class="num">Devueltas</th><th class="num">Órdenes WOM</th></tr></thead><tbody id="tabla-dias"></tbody></table>
     </div>
   </div>
 
@@ -239,7 +245,13 @@ async function cargarDatos(){
       fecha: row[0], total: Number(row[1])||0, entregados: Number(row[2])||0,
       devueltos: Number(row[3])||0, daniados: Number(row[4])||0, pendientes: Number(row[5])||0,
       totalOrdenes: Number(row[6])||0, entregadosOrdenes: Number(row[7])||0,
-      efectividad: Number(row[8])||0, ingresos: Number(row[11])||0, ts: row[12]||0
+      efectividad: Number(row[8])||0, ingresos: Number(row[11])||0, ts: row[12]||0,
+      // Columnas WOM (agregadas al final de la hoja, no corren las de siempre):
+      // WOM se paga a tarifa fija sin bono y no cuenta para el % de efectividad del mes.
+      totalOrdenesNoWom: row[13]!=null && row[13]!=='' ? Number(row[13]) : Number(row[6])||0,
+      entregadosOrdenesNoWom: row[14]!=null && row[14]!=='' ? Number(row[14]) : Number(row[7])||0,
+      ordenesWom: Number(row[15])||0, entregadosWom: Number(row[16])||0,
+      ingresoNoWom: Number(row[17])||0, ingresoWom: Number(row[18])||0
     }));
     costos = (rCostos||[]).slice(1).map(row => ({
       fecha: row[0], mes: mesComoTexto(row[1]), categoria: row[2], descripcion: row[3],
@@ -294,6 +306,16 @@ function pintarOperacion(mesTexto){
   document.getElementById('op-ef-mes').textContent = totalOrdMes>0 ? Math.round(ordMes/totalOrdMes*100)+'%' : '—';
   document.getElementById('op-inc-mes').textContent = incMes;
 
+  // Desglose WOM del mes: la efectividad "oficial" para el bono es SIN WOM.
+  const ordEntNoWomMes = delMes.reduce((a,c)=>a+c.entregadosOrdenesNoWom,0);
+  const ordTotNoWomMes = delMes.reduce((a,c)=>a+c.totalOrdenesNoWom,0);
+  const ordWomMes = delMes.reduce((a,c)=>a+c.ordenesWom,0);
+  const ingWomMes = delMes.reduce((a,c)=>a+c.ingresoWom,0);
+  document.getElementById('op-ef-mes-nowom').textContent = ordTotNoWomMes>0 ? Math.round(ordEntNoWomMes/ordTotNoWomMes*100)+'%' : '—';
+  document.getElementById('op-ef-mes-nowom-sub').textContent = ordEntNoWomMes+' de '+ordTotNoWomMes+' órdenes (sin contar WOM)';
+  document.getElementById('op-ord-wom').textContent = ordWomMes;
+  document.getElementById('op-ing-wom').textContent = formatoPesos(ingWomMes);
+
   const tbody = document.getElementById('tabla-dias');
   const ordenados = [].concat(cierres).reverse();
   const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
@@ -305,7 +327,7 @@ function pintarOperacion(mesTexto){
 
   let html = '';
   let mesEnCurso = null;
-  let subPaq=0, subOrd=0, subOrdEnt=0, subDev=0;
+  let subPaq=0, subOrd=0, subOrdEnt=0, subDev=0, subOrdWom=0;
   let primerGrupo = true;
 
   function cerrarSubtotal(){
@@ -314,7 +336,7 @@ function pintarOperacion(mesTexto){
       const efMes = subOrd>0 ? Math.round(subOrdEnt/subOrd*100) : 0;
       html += `<tr class="${clase}" style="background:#eaf2fb;font-weight:800;">
         <td>Total ${mesEnCurso}</td><td class="num">${subPaq}</td><td class="num">${subOrd}</td>
-        <td class="num">${efMes}%</td><td class="num">${subDev}</td></tr>`;
+        <td class="num">${efMes}%</td><td class="num">${subDev}</td><td class="num">${subOrdWom}</td></tr>`;
     }
   }
 
@@ -325,17 +347,17 @@ function pintarOperacion(mesTexto){
       const abierto = primerGrupo;
       const claseNueva = 'mesfila-' + nombreMes.replace(/\s+/g,'-');
       html += `<tr style="background:var(--azul);color:#fff;cursor:pointer;" onclick="toggleMes('${claseNueva}', this)">
-        <td colspan="5" style="padding:7px 10px;font-weight:700;text-transform:capitalize;">
+        <td colspan="6" style="padding:7px 10px;font-weight:700;text-transform:capitalize;">
         <span class="flecha-mes">${abierto ? '▼' : '▶'}</span> ${nombreMes}</td></tr>`;
       mesEnCurso = nombreMes;
-      subPaq=0; subOrd=0; subOrdEnt=0; subDev=0;
+      subPaq=0; subOrd=0; subOrdEnt=0; subDev=0; subOrdWom=0;
       primerGrupo = false;
     }
-    subPaq += c.total; subOrd += c.totalOrdenes; subOrdEnt += c.entregadosOrdenes; subDev += (c.devueltos+c.daniados);
+    subPaq += c.total; subOrd += c.totalOrdenes; subOrdEnt += c.entregadosOrdenes; subDev += (c.devueltos+c.daniados); subOrdWom += c.ordenesWom;
     const clase = 'mesfila-' + mesEnCurso.replace(/\s+/g,'-');
     html += `<tr class="${clase}">
       <td>${formatoFechaLegible(c.fecha)}</td><td class="num">${c.total}</td><td class="num">${c.totalOrdenes}</td>
-      <td class="num">${c.efectividad}%</td><td class="num">${c.devueltos+c.daniados}</td></tr>`;
+      <td class="num">${c.efectividad}%</td><td class="num">${c.devueltos+c.daniados}</td><td class="num">${c.ordenesWom||'—'}</td></tr>`;
   });
   cerrarSubtotal();
   tbody.innerHTML = html;
