@@ -608,6 +608,40 @@ function contarOrdenes(arr){
   return {total:total, entregados:entregados};
 }
 
+// Igual que contarOrdenes, pero EXCLUYENDO pedidos WOM — WOM no cuenta para calcular
+// el % de efectividad del mes (que define el tramo de bono de ALAS), aunque WOM sí
+// suma paquetes/ingreso normalmente, solo que a tarifa fija sin bono (ver
+// calcularIngresoOrdenes más abajo).
+function contarOrdenesNoWom(arr){
+  return contarOrdenes(arr.filter(function(p){ return !esWomPaquete(p); }));
+}
+
+// ════════════════════════════════════════
+// INGRESO POR ÓRDENES, con la excepción WOM
+// WOM se paga SIEMPRE a tarifa base ($2.070), sin importar el tramo de efectividad
+// del mes — nunca recibe el bono. El resto de las marcas sí reciben el bono según
+// el % de efectividad acumulado del mes (calculado EXCLUYENDO WOM, ver
+// contarOrdenesNoWom / efectividadMesActual).
+// ════════════════════════════════════════
+function calcularIngresoOrdenes(arr, efMesPct){
+  var grupos = agruparOrdenes(arr);
+  var valorConBono = valorPorEntregaNeto(efMesPct);
+  var entregadasNoWom = 0, entregadasWom = 0;
+  grupos.forEach(function(g){
+    var completa = g.every(function(p){return p.estado==='entregado';});
+    if(!completa) return;
+    if(esWomPaquete(g[0])) entregadasWom++;
+    else entregadasNoWom++;
+  });
+  return {
+    entregadasNoWom: entregadasNoWom,
+    entregadasWom: entregadasWom,
+    valorNoWom: valorConBono,
+    valorWom: TARIFA_BASE,
+    ingresoTotal: (entregadasNoWom*valorConBono) + (entregadasWom*TARIFA_BASE)
+  };
+}
+
 // Igual que contarOrdenes, pero clasifica cada orden en su estado real
 // (entregada / devuelta / dañada / pendiente), asumiendo que todos los
 // bultos de una misma orden se entregan/devuelven juntos.
@@ -669,11 +703,19 @@ function historialUnicoPorFecha(){
 function efectividadMesActual(){
   var totalEnt=0, totalRec=0;
   historialUnicoPorFecha().filter(function(h){ return perteneceAMesActual(h.fecha); }).forEach(function(h){
-    totalEnt += (h.entregadosOrdenes!=null ? h.entregadosOrdenes : h.entregados);
-    totalRec += (h.totalOrdenes!=null ? h.totalOrdenes : h.total);
+    // Si el día se cerró con este código (trae totalOrdenesNoWom), se usa esa cifra ya
+    // sin WOM. Si es un día viejo cerrado antes de esta corrección, no hay forma de
+    // saber cuánto era WOM retroactivamente — se usa la cifra normal como aproximación.
+    if(h.totalOrdenesNoWom != null){
+      totalEnt += h.entregadosOrdenesNoWom;
+      totalRec += h.totalOrdenesNoWom;
+    }else{
+      totalEnt += (h.entregadosOrdenes!=null ? h.entregadosOrdenes : h.entregados);
+      totalRec += (h.totalOrdenes!=null ? h.totalOrdenes : h.total);
+    }
   });
-  var ordHoy = contarOrdenes(paquetes);
-  totalEnt += ordHoy.entregados; totalRec += ordHoy.total;
+  var ordHoyNoWom = contarOrdenesNoWom(paquetes);
+  totalEnt += ordHoyNoWom.entregados; totalRec += ordHoyNoWom.total;
   return totalRec>0?Math.round(totalEnt/totalRec*100):0;
 }
 
@@ -2681,8 +2723,13 @@ function actualizarCierre(){
   var ef=ordStatsCierre.total>0?Math.round(ordStatsCierre.entregadas/ordStatsCierre.total*100):0;
   var efMesActual=efectividadMesActual();
   var valorEntrega=valorPorEntregaNeto(efMesActual);
-  var ingresoNeto=ordStatsCierre.entregadas*valorEntrega;
+  // WOM se paga a tarifa base fija, sin bono, y no cuenta para calcular efMesActual.
+  var _ingresoCierreBox = calcularIngresoOrdenes(paquetes, efMesActual);
+  var ingresoNeto=_ingresoCierreBox.ingresoTotal;
   var ingresoConIva=Math.round(ingresoNeto*(1+IVA_TASA));
+  var filaWom = _ingresoCierreBox.entregadasWom > 0
+    ? '<div class="resumen-cierre-row solo-comercial"><span style="font-size:0.72rem;color:#94a3b8;">— incl. '+_ingresoCierreBox.entregadasWom+' WOM a tarifa base ('+formatoPesos(TARIFA_BASE)+' c/u, sin bono)</span><strong></strong></div>'
+    : '';
   // Equivalencia en paquetes (bultos), para las filas donde una orden puede tener más de 1 paquete
   var paqEntregadosCierre = paquetes.filter(function(p){return p.estado==='entregado';}).length;
   var paqPendientesCierre = paquetes.filter(function(p){return p.estado==='pendiente';}).length;
@@ -2693,8 +2740,9 @@ function actualizarCierre(){
     '<div class="resumen-cierre-row"><span>Dañadas</span><strong style="color:var(--naranja)">'+ordStatsCierre.daniadas+'</strong></div>'+
     '<div class="resumen-cierre-row"><span>Pendientes</span><strong style="color:var(--naranja)">'+ordStatsCierre.pendientes+'<span style="font-size:0.68rem;color:#94a3b8;font-weight:400;"> ('+paqPendientesCierre+' paquete'+(paqPendientesCierre===1?'':'s')+' por entregar)</span></strong></div>'+
     '<div class="resumen-cierre-row"><span>Efectividad del día</span><strong>'+ef+'%</strong></div>'+
-    '<div class="resumen-cierre-row"><span>Efectividad acum. del mes</span><strong>'+efMesActual+'%</strong></div>'+
+    '<div class="resumen-cierre-row"><span>Efectividad acum. del mes</span><strong>'+efMesActual+'%<span style="font-size:0.68rem;color:#94a3b8;font-weight:400;"> (sin contar WOM)</span></strong></div>'+
     '<div class="resumen-cierre-row solo-comercial"><span>Valor por entrega (neto)</span><strong>'+formatoPesos(valorEntrega)+'</strong></div>'+
+    filaWom+
     '<div class="resumen-cierre-row solo-comercial"><span>Ingreso NETO estimado</span><strong style="color:var(--verde)">'+formatoPesos(ingresoNeto)+'</strong></div>'+
     '<div class="resumen-cierre-row solo-comercial"><span>Total a facturar (+IVA)</span><strong style="color:#64748b">'+formatoPesos(ingresoConIva)+'</strong></div>';
 }
@@ -2717,13 +2765,15 @@ function exportarExcelDia(){
     _ordenCompleta[k]=_grupos[k].every(function(p){return p.estado==='entregado';});
   });
   var _yaContado={};
-  var ws_data=[['Código','Folio','Nombre','Teléfono','Dirección','Comuna','Tipo','Estado','Motivo','Orden Completa','Ingreso Neto (por orden)','Efectividad Mes %']];
+  var ws_data=[['Código','Folio','Marca (B2B)','Nombre','Teléfono','Dirección','Comuna','Tipo','Estado','Motivo','Orden Completa','Ingreso Neto (por orden)','Efectividad Mes %']];
   paquetes.forEach(function(p){
     var key=_keyDe[p.id];
     var completa=_ordenCompleta[key];
     var ingresoFila=0;
-    if(completa && !_yaContado[key]){ ingresoFila=_valExp; _yaContado[key]=true; }
-    ws_data.push([p.codigo,p.folio,p.nombre,p.tel,p.dir,p.comuna,p.tipo,p.estado,p.motivo||'',completa?'Sí':'No',ingresoFila,_efExp]);
+    // WOM se paga a tarifa base fija, sin bono, sin importar la efectividad del mes.
+    var valorEstaOrden = esWomPaquete(p) ? TARIFA_BASE : _valExp;
+    if(completa && !_yaContado[key]){ ingresoFila=valorEstaOrden; _yaContado[key]=true; }
+    ws_data.push([p.codigo,p.folio,p.b2b||'',p.nombre,p.tel,p.dir,p.comuna,p.tipo,p.estado,p.motivo||'',completa?'Sí':'No',ingresoFila,_efExp]);
   });
   var wb=XLSX.utils.book_new();
   var ws=XLSX.utils.aoa_to_sheet(ws_data);
@@ -2736,8 +2786,7 @@ function enviarWhatsApp(){
   var ordStatsWa=contarOrdenesPorEstado(paquetes);
   var ef=ordStatsWa.total>0?Math.round(ordStatsWa.entregadas/ordStatsWa.total*100):0;
   var _efWa=efectividadMesActual();
-  var _valWa=valorPorEntregaNeto(_efWa);
-  var _ingNetoWa=ordStatsWa.entregadas*_valWa;
+  var _ingresoWa=calcularIngresoOrdenes(paquetes, _efWa);
   var msg='*MUSPEL OPS — Cierre '+fecha+'*\n\n'+
     '📦 Órdenes recibidas: '+ordStatsWa.total+'\n'+
     '✅ Entregadas: '+ordStatsWa.entregadas+'\n'+
@@ -2746,7 +2795,7 @@ function enviarWhatsApp(){
     '📊 Efectividad día: '+ef+'%\n'+
     '📊 Efectividad mes: '+_efWa+'%';
   if(perfilActual==='comercial'){
-    msg += '\n💰 Ingreso neto est.: '+formatoPesos(_ingNetoWa);
+    msg += '\n💰 Ingreso neto est.: '+formatoPesos(_ingresoWa.ingresoTotal);
   }
   window.open('https://wa.me/56952207386?text='+encodeURIComponent(msg));
 }
@@ -2783,22 +2832,28 @@ function cerrarDia(){
     var pend=detalleActualizado.filter(function(p){return p.estado==='pendiente';}).length;
     var total=detalleActualizado.length;
     var ordStats = contarOrdenes(detalleActualizado);
+    var ordStatsNoWom = contarOrdenesNoWom(detalleActualizado);
     var _efCierre=efectividadMesActual();
     var _valCierre=valorPorEntregaNeto(_efCierre);
+    var _ingresoCierre = calcularIngresoOrdenes(detalleActualizado, _efCierre);
     var registroActualizado = {
       fecha: diaOriginal.fecha, ts: Date.now(),
       total:total, entregados:ent, devueltos:dev, daniados:dan, pendientes:pend,
       totalOrdenes:ordStats.total, entregadosOrdenes:ordStats.entregados,
+      totalOrdenesNoWom:ordStatsNoWom.total, entregadosOrdenesNoWom:ordStatsNoWom.entregados,
       efectividad:total>0?Math.round(ent/total*100):0,
       efectividadMesAlCierre:_efCierre,
       valorPorEntrega:_valCierre,
-      ingresos:ordStats.entregados*_valCierre,
+      ingresos:_ingresoCierre.ingresoTotal,
       detalle:detalleActualizado
     };
     historial[idx] = registroActualizado;
     enviarASheets('cierre_dia', {
       fecha:registroActualizado.fecha, total:total, entregados:ent, devueltos:dev,
       daniados:dan, pendientes:pend, totalOrdenes:ordStats.total, entregadosOrdenes:ordStats.entregados,
+      totalOrdenesNoWom:ordStatsNoWom.total, entregadosOrdenesNoWom:ordStatsNoWom.entregados,
+      ingresoNoWom:_ingresoCierre.entregadasNoWom*_ingresoCierre.valorNoWom,
+      ingresoWom:_ingresoCierre.entregadasWom*_ingresoCierre.valorWom,
       efectividad:registroActualizado.efectividad, efectividadMesAlCierre:registroActualizado.efectividadMesAlCierre,
       valorPorEntrega:registroActualizado.valorPorEntrega, ingresos:registroActualizado.ingresos
     });
@@ -2818,6 +2873,7 @@ function cerrarDia(){
   var pend=paquetes.filter(function(p){return p.estado==='pendiente';}).length;
   var total=paquetes.length;
   var ordStats = contarOrdenes(paquetes);
+  var ordStatsNoWom = contarOrdenesNoWom(paquetes);
   // CORREGIDO: antes esto usaba SIEMPRE la fecha real de HOY al momento de cerrar. Si
   // el reparto se extiende después de medianoche (ej. se cierra a la 1am del día
   // siguiente), el cierre quedaba mal fechado un día adelantado. Ahora, si son antes
@@ -2833,14 +2889,18 @@ function cerrarDia(){
   var fecha = fechaIngresada.trim() || fechaSugerida;
   var _efCierre=efectividadMesActual();
   var _valCierre=valorPorEntregaNeto(_efCierre);
+  // Ingreso real: WOM se paga a tarifa base fija (sin bono), el resto según el tramo
+  // de efectividad del mes (que ya excluye WOM en su cálculo).
+  var _ingresoCierre = calcularIngresoOrdenes(paquetes, _efCierre);
   var registroDia = {
     fecha:fecha, ts:Date.now(),
     total:total, entregados:ent, devueltos:dev, daniados:dan, pendientes:pend,
     totalOrdenes:ordStats.total, entregadosOrdenes:ordStats.entregados,
+    totalOrdenesNoWom:ordStatsNoWom.total, entregadosOrdenesNoWom:ordStatsNoWom.entregados,
     efectividad:total>0?Math.round(ent/total*100):0,
     efectividadMesAlCierre:_efCierre,
     valorPorEntrega:_valCierre,
-    ingresos:ordStats.entregados*_valCierre,
+    ingresos:_ingresoCierre.ingresoTotal,
     detalle:JSON.parse(JSON.stringify(paquetes))
   };
   historial.push(registroDia);
@@ -2848,6 +2908,9 @@ function cerrarDia(){
   enviarASheets('cierre_dia', {
     fecha:fecha, total:total, entregados:ent, devueltos:dev,
     daniados:dan, pendientes:pend, totalOrdenes:ordStats.total, entregadosOrdenes:ordStats.entregados,
+    totalOrdenesNoWom:ordStatsNoWom.total, entregadosOrdenesNoWom:ordStatsNoWom.entregados,
+    ingresoNoWom:_ingresoCierre.entregadasNoWom*_ingresoCierre.valorNoWom,
+    ingresoWom:_ingresoCierre.entregadasWom*_ingresoCierre.valorWom,
     efectividad:registroDia.efectividad, efectividadMesAlCierre:registroDia.efectividadMesAlCierre,
     valorPorEntrega:registroDia.valorPorEntrega, ingresos:registroDia.ingresos
   });
