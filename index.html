@@ -1705,15 +1705,20 @@ function actualizarResumen(){
 function importarExcel(input){
   var file = input.files[0];
   if(!file) return;
-  // CORREGIDO: si este equipo tenía pedidos locales sueltos de un día que no se cerró
-  // AQUÍ (ej. se cerró desde el celular de Cristian, pero este navegador nunca se
-  // enteró), antes se sumaban en silencio a la ruta nueva importada — mezclando 2 días
-  // en el Resumen. Ahora se avisa y se limpia antes de seguir.
+  // CORREGIDO: antes esto solo daba a elegir entre "borrar lo viejo y seguir" o
+  // "cancelar" — pero hay un caso legítimo de querer SUMAR (ej. llega una carga extra
+  // el mismo día, que se adelanta para hoy en vez de mañana). Ahora se preguntan las
+  // dos cosas por separado: primero si es una carga EXTRA del mismo día (se suma tal
+  // cual), y solo si no lo es, se pregunta si hay que reemplazar por ser de otro día.
   if(paquetes.length > 0 && !diaEnCompletar){
-    var seguir = confirm('⚠️ Este equipo ya tiene '+paquetes.length+' pedido(s) cargados localmente (probablemente de un día anterior que se cerró desde otro celular/computador).\n\nSi continúas, se van a BORRAR esos '+paquetes.length+' pedidos locales antes de importar el archivo nuevo, para no mezclarlos con la ruta de hoy.\n\n¿Continuar?');
-    if(!seguir){ input.value=''; return; }
-    paquetes = [];
-    guardarStorage();
+    var esCargaExtra = confirm('Este equipo ya tiene '+paquetes.length+' pedido(s) cargados de hoy.\n\n¿Es una carga EXTRA de HOY MISMO (ej. una ruta adicional que llegó y se adelanta a hoy)?\n\nAceptar = Sumar este archivo a los pedidos que ya hay.\nCancelar = No es una carga extra de hoy (elegir otra opción).');
+    if(!esCargaExtra){
+      var seguir = confirm('⚠️ ¿Estos '+paquetes.length+' pedido(s) son de un día ANTERIOR que no se cerró en este equipo (ej. se cerró desde otro celular)?\n\nSi continúas, se van a BORRAR esos '+paquetes.length+' pedidos locales antes de importar el archivo nuevo, para no mezclar días.\n\nAceptar = Borrar y continuar.\nCancelar = No hacer nada.');
+      if(!seguir){ input.value=''; return; }
+      paquetes = [];
+      guardarStorage();
+    }
+    // si esCargaExtra===true, no se toca nada — el archivo nuevo se suma abajo tal cual
   }
   var status = document.getElementById('import-status');
   status.textContent = 'Procesando...';
