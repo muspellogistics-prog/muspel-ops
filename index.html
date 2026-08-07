@@ -133,6 +133,7 @@
   .modal-titulo{font-size:1rem;font-weight:700;color:var(--azul);margin-bottom:4px;}
   .modal-codigo{font-size:0.72rem;color:#94a3b8;font-family:monospace;margin-bottom:14px;}
   .modal-campo{display:flex;flex-direction:column;margin-bottom:10px;}
+  .modal-campo-acciones-tel{display:flex;gap:8px;margin:-2px 0 14px 0;}
   .modal-campo-label{font-size:0.68rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;}
   .modal-campo-valor{font-size:0.88rem;color:var(--texto);}
   .modal-acciones{display:flex;gap:8px;margin-top:16px;}
@@ -191,6 +192,10 @@
     <div class="modal-campo">
       <span class="modal-campo-label">📞 Teléfono</span>
       <span class="modal-campo-valor" id="modal-tel">—</span>
+    </div>
+    <div class="modal-campo-acciones-tel" id="modal-tel-acciones" style="display:none;">
+      <a id="modal-tel-llamar" href="#" style="flex:1;text-decoration:none;"><button class="btn btn-verde" style="width:100%;margin-bottom:0;">📞 Llamar</button></a>
+      <a id="modal-tel-whatsapp" href="#" target="_blank" style="flex:1;text-decoration:none;"><button class="btn btn-primary" style="width:100%;margin-bottom:0;">💬 WhatsApp</button></a>
     </div>
     <div class="modal-campo">
       <span class="modal-campo-label">🚚 Tipo ruta</span>
@@ -1436,6 +1441,21 @@ function abrirModal(id){
   document.getElementById('modal-dir').textContent = dirMostrar || '(sin dirección)';
   document.getElementById('modal-comuna').textContent = (p.comuna||'').trim() || '—';
   document.getElementById('modal-tel').textContent = p.tel || '—';
+  // Botones de llamar / WhatsApp: solo se muestran si hay teléfono. Normaliza a
+  // formato chileno (+56) para que ambos links funcionen bien, sin importar si el
+  // teléfono venía con o sin el 9 inicial o el +56 (ALAS lo trae en formatos mixtos).
+  var telAcciones = document.getElementById('modal-tel-acciones');
+  var telLimpio = String(p.tel||'').replace(/\D/g,''); // solo dígitos
+  if(telLimpio){
+    if(telLimpio.length===9 && telLimpio.charAt(0)==='9') telLimpio='56'+telLimpio; // 9XXXXXXXX -> 569XXXXXXXX
+    else if(telLimpio.length===8) telLimpio='569'+telLimpio; // XXXXXXXX -> 569XXXXXXXX
+    else if(telLimpio.length===11 && telLimpio.indexOf('56')===0) { /* ya viene con 56, ok */ }
+    document.getElementById('modal-tel-llamar').href = 'tel:+'+telLimpio;
+    document.getElementById('modal-tel-whatsapp').href = 'https://wa.me/'+telLimpio;
+    telAcciones.style.display = 'flex';
+  }else{
+    telAcciones.style.display = 'none';
+  }
   document.getElementById('modal-tipo').textContent = p.tipo || 'Principal';
   document.getElementById('modal-estado').textContent = estadoTextos[p.estado] || p.estado;
   var modalRepetidoEl = document.getElementById('modal-repetido');
@@ -1505,6 +1525,11 @@ function calcularGrupoMultibulto(p){
 
 function marcarDesdeModal(estado){
   if(!modalOrdenId) return;
+  // Misma protección contra doble toque que en marcar() — reusa el mismo registro de
+  // tiempos, con el id del pedido abierto en el modal.
+  var ahoraMarcarModalTs = Date.now();
+  if(_ultimoMarcarTs[modalOrdenId] && (ahoraMarcarModalTs - _ultimoMarcarTs[modalOrdenId] < 3000)) return;
+  _ultimoMarcarTs[modalOrdenId] = ahoraMarcarModalTs;
   var p = paquetes.find(function(x){return x.id===modalOrdenId;});
   if(p){
     var motivo = '';
@@ -2466,7 +2491,15 @@ function renderPaquetes(){
   lista.innerHTML=html;
 }
 
+var _ultimoMarcarTs = {}; // por id de paquete, para no bloquear marcar 2 pedidos distintos seguidos
 function marcar(id, estado){
+  // Evita que un doble toque/doble clic en los íconos rápidos (✅↩️⚠️) dispare el mismo
+  // cambio de estado 2 veces si el usuario toca más rápido de lo que tarda en
+  // desaparecer el botón al re-dibujar la lista.
+  var ahoraMarcarTs = Date.now();
+  if(_ultimoMarcarTs[id] && (ahoraMarcarTs - _ultimoMarcarTs[id] < 3000)) return;
+  _ultimoMarcarTs[id] = ahoraMarcarTs;
+
   var p = paquetes.find(function(x){return x.id===id;});
   if(p){
     var motivo = '';
