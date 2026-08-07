@@ -1445,13 +1445,10 @@ function abrirModal(id){
   // formato chileno (+56) para que ambos links funcionen bien, sin importar si el
   // teléfono venía con o sin el 9 inicial o el +56 (ALAS lo trae en formatos mixtos).
   var telAcciones = document.getElementById('modal-tel-acciones');
-  var telLimpio = String(p.tel||'').replace(/\D/g,''); // solo dígitos
-  if(telLimpio){
-    if(telLimpio.length===9 && telLimpio.charAt(0)==='9') telLimpio='56'+telLimpio; // 9XXXXXXXX -> 569XXXXXXXX
-    else if(telLimpio.length===8) telLimpio='569'+telLimpio; // XXXXXXXX -> 569XXXXXXXX
-    else if(telLimpio.length===11 && telLimpio.indexOf('56')===0) { /* ya viene con 56, ok */ }
-    document.getElementById('modal-tel-llamar').href = 'tel:+'+telLimpio;
-    document.getElementById('modal-tel-whatsapp').href = 'https://wa.me/'+telLimpio;
+  var linkWa = armarLinkWhatsApp(p);
+  if(linkWa){
+    document.getElementById('modal-tel-llamar').href = 'tel:+'+normalizarTelChile(p.tel);
+    document.getElementById('modal-tel-whatsapp').href = linkWa;
     telAcciones.style.display = 'flex';
   }else{
     telAcciones.style.display = 'none';
@@ -2482,6 +2479,10 @@ function renderPaquetes(){
           html+='<button class="btn btn-verde btn-sm" onclick="marcar('+p.id+',\'entregado\')">✅</button>';
           html+='<button class="btn btn-rojo btn-sm" onclick="marcar('+p.id+',\'devuelto\')">↩️</button>';
           html+='<button class="btn btn-naranja btn-sm" onclick="marcar('+p.id+',\'daniado\')">⚠️</button>';
+          var linkWaTarjeta = armarLinkWhatsApp(p);
+          if(linkWaTarjeta){
+            html+='<a href="'+linkWaTarjeta+'" target="_blank"><button class="btn btn-sm" style="background:#25D366;color:#fff;">💬</button></a>';
+          }
           html+='</div>';
         }
         html+='</div>';
@@ -2489,6 +2490,27 @@ function renderPaquetes(){
     });
   });
   lista.innerHTML=html;
+}
+
+// Arma el link de WhatsApp con el teléfono normalizado (formato chileno +56) y el
+// mensaje precargado (primer nombre del cliente + marca de ESTE pedido). Reutilizada
+// tanto en el modal de detalle como en el botón rápido de la tarjeta en ÓRDENES.
+function normalizarTelChile(tel){
+  var telLimpio = String(tel||'').replace(/\D/g,'');
+  if(!telLimpio) return '';
+  if(telLimpio.length===9 && telLimpio.charAt(0)==='9') telLimpio='56'+telLimpio;
+  else if(telLimpio.length===8) telLimpio='569'+telLimpio;
+  return telLimpio;
+}
+function armarLinkWhatsApp(p){
+  var telLimpio = normalizarTelChile(p.tel);
+  if(!telLimpio) return null;
+  var primerNombre = String(p.nombre||'').trim().split(/\s+/)[0] || '';
+  var esNombrePersona = primerNombre && !/^\.$/.test(primerNombre);
+  var saludoNombre = esNombrePersona ? primerNombre : 'estimado/a';
+  var marcaPedido = String(p.b2b||'').trim() || 'su pedido';
+  var mensajeWa = 'Hola, buenas tardes, *'+saludoNombre+'*. Escribo por el pedido de *'+marcaPedido+'*. Vamos de camino. Si es posible, por favor que haya alguien en el domicilio para recibir. ¡Muchas gracias!';
+  return 'https://wa.me/'+telLimpio+'?text='+encodeURIComponent(mensajeWa);
 }
 
 var _ultimoMarcarTs = {}; // por id de paquete, para no bloquear marcar 2 pedidos distintos seguidos
