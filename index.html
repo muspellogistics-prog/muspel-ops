@@ -349,6 +349,12 @@
         </select>
       </div>
     </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Marca (B2B)</label>
+        <input class="form-input" id="m-b2b" placeholder="Ej: WOMnew, Doite, infracommerce">
+      </div>
+    </div>
     <div class="form-group">
       <label class="form-label">Teléfono</label>
       <input class="form-input" id="m-tel" placeholder="+56 9 ...">
@@ -1910,7 +1916,7 @@ function agregarManual(){
     dir:document.getElementById('m-dir').value.trim(),
     comuna:document.getElementById('m-comuna').value.trim(),
     region:'', tipo:document.getElementById('m-tipo').value,
-    b2b:'', estado:'pendiente', ts:Date.now(),
+    b2b:document.getElementById('m-b2b').value.trim(), estado:'pendiente', ts:Date.now(),
     repetidoDeHistorial: registrosPrevios.length>0,
     intentos: intentoActual,
     intentosAgotados: intentoActual>3
@@ -1919,7 +1925,7 @@ function agregarManual(){
   guardarStorage();
   actualizarResumen();
   enviarASheets('paquete_nuevo', nuevoPaquete);
-  ['m-codigo','m-nombre','m-tel','m-dir','m-comuna'].forEach(function(id){document.getElementById(id).value='';});
+  ['m-codigo','m-nombre','m-tel','m-dir','m-comuna','m-b2b'].forEach(function(id){document.getElementById(id).value='';});
   alert('Orden agregada.');
 }
 
