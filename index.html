@@ -686,12 +686,45 @@ function perteneceAMesActual(fechaStr){
 // Busca en el historial del mes en curso todos los registros previos con este código.
 // Devuelve la lista de intentos anteriores (fecha + estado), del más antiguo al más nuevo.
 // ════════════════════════════════════════
+// Respaldo remoto para calcularIntentos: si el historial LOCAL de este equipo no tiene
+// un día (ej. se borró el caché del navegador), esto lo trae directo de Sheets
+// (DetalleHistorico), que es la fuente permanente y no depende de qué equipo se use.
+// Se actualiza antes de importar un archivo o agregar un pedido manual.
+var historialRemotoPorClave = {}; // codigo o folio -> [{fecha, estado}]
+function actualizarHistorialRemotoIntentos(callback){
+  fetch(SHEETS_URL + '?tipo=detalle_historico').then(function(r){ return r.json(); }).then(function(rows){
+    var mapa = {};
+    for(var i=1; i<rows.length; i++){
+      var fila = rows[i];
+      if(!fila || !fila.length) continue;
+      var fechaFila = formatoFechaLegible(String(fila[0]||'').trim());
+      if(!perteneceAMesActual(fechaFila)) continue;
+      var codigo = String(fila[1]||'').trim();
+      var folio = String(fila[2]||'').trim();
+      var estado = String(fila[7]||'').trim();
+      [codigo, folio].forEach(function(clave){
+        if(!clave) return;
+        if(!mapa[clave]) mapa[clave]=[];
+        mapa[clave].push({fecha:fechaFila, estado:estado});
+      });
+    }
+    historialRemotoPorClave = mapa;
+    if(callback) callback();
+  }).catch(function(){ if(callback) callback(); }); // sin internet: sigue con lo que haya local
+}
+
 function calcularIntentos(codigo){
   var registros = [];
   historial.forEach(function(h){
     if(!perteneceAMesActual(h.fecha)) return;
     var item = h.detalle.find(function(p){ return p.codigo === codigo; });
     if(item) registros.push({fecha: h.fecha, estado: item.estado});
+  });
+  // Combina con lo que traiga Sheets, evitando repetir el mismo día+estado 2 veces.
+  var remotos = historialRemotoPorClave[codigo] || [];
+  remotos.forEach(function(r){
+    var yaEsta = registros.some(function(x){ return x.fecha===r.fecha && x.estado===r.estado; });
+    if(!yaEsta) registros.push(r);
   });
   return registros;
 }
@@ -1750,8 +1783,13 @@ function importarExcel(input){
   }
   var status = document.getElementById('import-status');
   status.textContent = 'Procesando...';
-  var reader = new FileReader();
-  reader.onload = function(e){
+  // Primero trae el historial del mes desde Sheets (para detectar intentos aunque este
+  // equipo no lo tenga guardado localmente), y RECIÉN AHÍ lee el archivo — así el aviso
+  // de "intento 2/3" sale bien desde la primera vez que se importa, sin depender de si
+  // este navegador ya vio ese pedido antes.
+  actualizarHistorialRemotoIntentos(function(){
+    var reader = new FileReader();
+    reader.onload = function(e){
     try{
       var wb = XLSX.read(e.target.result, {type:'binary'});
       var ws = wb.Sheets[wb.SheetNames[0]];
@@ -1883,8 +1921,9 @@ function importarExcel(input){
       status.style.color='var(--rojo)';
       status.textContent = '❌ Error al leer el archivo: '+err.message;
     }
-  };
-  reader.readAsBinaryString(file);
+    };
+    reader.readAsBinaryString(file);
+  });
   input.value='';
 }
 
@@ -1895,6 +1934,10 @@ function agregarManual(){
   var codigo = document.getElementById('m-codigo').value.trim();
   if(!codigo){alert('Ingresa el código de la orden.');return;}
   if(paquetes.find(function(p){return p.codigo===codigo;})){alert('Ya existe una orden con ese código.');return;}
+  // Trae el historial del mes desde Sheets antes de revisar intentos, por si este
+  // equipo no tiene guardado localmente el día del intento anterior (ej. se borró el
+  // caché del navegador) — así el aviso de "intento 2/3" sale bien siempre.
+  actualizarHistorialRemotoIntentos(function(){
   // Revisa si este código ya tuvo intentos este mes (igual que al importar Excel)
   var registrosPrevios = calcularIntentos(codigo);
   var intentosFallidos = registrosPrevios.filter(function(r){return r.estado==='devuelto'||r.estado==='daniado';}).length;
@@ -1927,6 +1970,7 @@ function agregarManual(){
   enviarASheets('paquete_nuevo', nuevoPaquete);
   ['m-codigo','m-nombre','m-tel','m-dir','m-comuna','m-b2b'].forEach(function(id){document.getElementById(id).value='';});
   alert('Orden agregada.');
+  });
 }
 
 function limpiarDia(){
@@ -2508,6 +2552,13 @@ function normalizarTelChile(tel){
   else if(telLimpio.length===8) telLimpio='569'+telLimpio;
   return telLimpio;
 }
+function saludoSegunHora(){
+  var ahora = new Date();
+  var minutosDelDia = ahora.getHours()*60 + ahora.getMinutes();
+  if(minutosDelDia < 12*60) return 'buenos días';           // antes de las 12:00
+  if(minutosDelDia < 20*60+30) return 'buenas tardes';       // 12:00 a 20:29
+  return 'buenas noches';                                     // desde las 20:30
+}
 function armarLinkWhatsApp(p){
   var telLimpio = normalizarTelChile(p.tel);
   if(!telLimpio) return null;
@@ -2515,7 +2566,7 @@ function armarLinkWhatsApp(p){
   var esNombrePersona = primerNombre && !/^\.$/.test(primerNombre);
   var saludoNombre = esNombrePersona ? primerNombre : 'estimado/a';
   var marcaPedido = String(p.b2b||'').trim() || 'su pedido';
-  var mensajeWa = 'Hola, buenas tardes, *'+saludoNombre+'*. Escribo por el pedido de *'+marcaPedido+'*. Vamos de camino. Si es posible, por favor que haya alguien en el domicilio para recibir. ¡Muchas gracias!';
+  var mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Escribo por el pedido de *'+marcaPedido+'*. Vamos de camino. Si es posible, por favor que haya alguien en el domicilio para recibir. ¡Muchas gracias!';
   return 'https://wa.me/'+telLimpio+'?text='+encodeURIComponent(mensajeWa);
 }
 
