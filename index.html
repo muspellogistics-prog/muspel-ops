@@ -2566,7 +2566,7 @@ function armarLinkWhatsApp(p){
   var esNombrePersona = primerNombre && !/^\.$/.test(primerNombre);
   var saludoNombre = esNombrePersona ? primerNombre : 'estimado/a';
   var marcaPedido = String(p.b2b||'').trim() || 'su pedido';
-  var mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Escribo por el pedido de *'+marcaPedido+'*. Vamos de camino. Si es posible, por favor que haya alguien en el domicilio para recibir. ¡Muchas gracias!';
+  var mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Le escribimos por su pedido de *'+marcaPedido+'*. Ya vamos en camino. Si es posible, por favor, que haya alguien en el domicilio para recibirlo. ¡Muchas gracias!';
   return 'https://wa.me/'+telLimpio+'?text='+encodeURIComponent(mensajeWa);
 }
 
