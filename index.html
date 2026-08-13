@@ -583,13 +583,13 @@ function agruparOrdenes(arr){
       grupos.push(porFolio[fb]);
       return;
     }
-    if(!esWomPaquete(p) && p.dir && p.tel){
+    if(!esWomPaquete(p) && p.dir && p.tel && !p.sinAgrupar){
       var dirNorm = String(p.dir).trim().toLowerCase();
       var telNorm = String(p.tel).trim();
       var b2bNorm = String(p.b2b||'').trim().toLowerCase();
       if(dirNorm && telNorm){
         var pares = arr.filter(function(x){
-          return !asignado[x.id] && String(x.dir||'').trim().toLowerCase()===dirNorm && String(x.tel||'').trim()===telNorm && String(x.b2b||'').trim().toLowerCase()===b2bNorm && !esWomPaquete(x);
+          return !asignado[x.id] && !x.sinAgrupar && String(x.dir||'').trim().toLowerCase()===dirNorm && String(x.tel||'').trim()===telNorm && String(x.b2b||'').trim().toLowerCase()===b2bNorm && !esWomPaquete(x);
         });
         if(pares.length > 1){
           pares.forEach(function(x){ asignado[x.id] = true; });
@@ -889,7 +889,7 @@ function descargarOrdenesDesdeSheets(onFin){
       if(onFin) onFin(0);
       return;
     }
-    // fila 0 es encabezado: id,codigo,folio,bulto,nombre,tel,dir,comuna,region,tipo,b2b,estado,ts,repetidoDeHistorial
+    // fila 0 es encabezado: id,codigo,folio,bulto,nombre,tel,dir,comuna,region,tipo,b2b,estado,ts,repetidoDeHistorial,intentos,intentosAgotados,sinAgrupar
     var importadas = 0;
     var actualizadas = 0;
     // Cuenta cuántas veces aparece cada código LOCALMENTE (para no confundir multibulto
@@ -903,6 +903,7 @@ function descargarOrdenesDesdeSheets(onFin){
       if(!codigo) return;
       vistosEnSheets[codigo] = (vistosEnSheets[codigo]||0) + 1;
       var yaLocal = localCount[codigo] || 0;
+      var sinAgruparNube = row[16] === true || row[16] === 'true';
 
       if(vistosEnSheets[codigo] <= yaLocal){
         // Esta ocurrencia ya existe localmente (por código y por posición) — solo revisamos
@@ -911,10 +912,15 @@ function descargarOrdenesDesdeSheets(onFin){
         var estadoNube = String(row[11]||'').trim();
         var tsNube = row[12] || 0;
         paquetes.forEach(function(existente){
-          if(existente.codigo === codigo && estadoNube && estadoNube !== existente.estado && tsNube > (existente.ts_estado || existente.ts || 0)){
-            existente.estado = estadoNube;
-            existente.ts_estado = tsNube;
-            actualizadas++;
+          if(existente.codigo === codigo){
+            if(estadoNube && estadoNube !== existente.estado && tsNube > (existente.ts_estado || existente.ts || 0)){
+              existente.estado = estadoNube;
+              existente.ts_estado = tsNube;
+              actualizadas++;
+            }
+            // sinAgrupar es de una sola vía (una vez separado, queda separado) — no
+            // necesita comparar ts, solo propagar si Sheets lo tiene marcado y local no.
+            if(sinAgruparNube && !existente.sinAgrupar) existente.sinAgrupar = true;
           }
         });
         return;
@@ -934,7 +940,10 @@ function descargarOrdenesDesdeSheets(onFin){
         b2b: String(row[10]||'').trim(),
         estado: String(row[11]||'pendiente').trim(),
         ts: row[12] || Date.now(),
-        repetidoDeHistorial: row[13] === true || row[13] === 'true'
+        repetidoDeHistorial: row[13] === true || row[13] === 'true',
+        intentos: row[14]!=null && row[14]!=='' ? Number(row[14]) : 1,
+        intentosAgotados: row[15] === true || row[15] === 'true',
+        sinAgrupar: sinAgruparNube
       });
       importadas++;
     });
@@ -1446,14 +1455,17 @@ function abrirModal(id){
   // También exige que sea LA MISMA MARCA: 2 empresas distintas coincidiendo en dirección
   // y teléfono son 2 entregas separadas, no un multibulto (ej. Camila Fernandez pidiendo
   // a la vez en Cosmetic y en Multimarcas).
+  // EXCLUSIÓN MANUAL: si alguien ya usó "🔀 Separar" en cualquiera de los paquetes
+  // involucrados (ej. 2 compras reales distintas de la misma marca, mismo cliente,
+  // mismo día), esos quedan marcados sinAgrupar y no se vuelven a juntar solos.
   var esWom = String(p.b2b||'').trim().toUpperCase().indexOf('WOM') !== -1;
   var porDireccion = false;
-  if(grupo.length <= 1 && p.dir && p.tel && !esWom){
+  if(grupo.length <= 1 && p.dir && p.tel && !esWom && !p.sinAgrupar){
     var dirNorm = String(p.dir).trim().toLowerCase();
     var telNorm = String(p.tel).trim();
     var b2bNormModal = String(p.b2b||'').trim().toLowerCase();
     var candidatos = paquetes.filter(function(x){
-      return x.codigo !== p.codigo && String(x.dir||'').trim().toLowerCase() === dirNorm && String(x.tel||'').trim() === telNorm && dirNorm && telNorm && String(x.b2b||'').trim().toLowerCase() === b2bNormModal && String(x.b2b||'').trim().toUpperCase().indexOf('WOM') === -1;
+      return x.codigo !== p.codigo && !x.sinAgrupar && String(x.dir||'').trim().toLowerCase() === dirNorm && String(x.tel||'').trim() === telNorm && dirNorm && telNorm && String(x.b2b||'').trim().toLowerCase() === b2bNormModal && String(x.b2b||'').trim().toUpperCase().indexOf('WOM') === -1;
     });
     if(candidatos.length > 0){
       grupo = [p].concat(candidatos);
@@ -1525,6 +1537,14 @@ function abrirModal(id){
   // Eliminar orden: SOLO visible en modo Comercial (no en el celular de Cristian en
   // terreno) — es una acción irreversible, mejor que quede en manos de quien administra.
   acciones.innerHTML += '<button class="btn btn-rojo solo-comercial" style="flex:1;margin-bottom:0;background:#7f1d1d;" onclick="eliminarPaqueteDesdeModal()">🗑️ Eliminar</button>';
+  // Separar: cuando el sistema agrupó por dirección+teléfono+marca (no por folio real),
+  // puede que en realidad sean 2 pedidos distintos que coincidieron (ej. 2 compras del
+  // mismo cliente en la misma marca, mismo día). Visible para cualquiera (Cristian
+  // también puede necesitarla en terreno al notar que no es el mismo pedido) — no borra
+  // nada, solo hace que esos códigos dejen de agruparse solos entre sí.
+  if(porDireccion){
+    acciones.innerHTML += '<button class="btn btn-outline" style="flex:1;margin-bottom:0;" onclick="separarGrupoPorDireccion()">🔀 No son el mismo pedido — separar</button>';
+  }
 
   document.getElementById('modal-overlay').classList.add('open');
 }
@@ -1546,13 +1566,13 @@ function calcularGrupoMultibulto(p){
   // EXCEPCIÓN WOM: entregas distintas de WOM pueden compartir dirección+teléfono
   // (ej. varios chips a un mismo condominio) sin ser el mismo pedido — no agrupar por respaldo.
   var esWom = String(p.b2b||'').trim().toUpperCase().indexOf('WOM') !== -1;
-  if(grupo.length <= 1 && p.dir && p.tel && !esWom){
+  if(grupo.length <= 1 && p.dir && p.tel && !esWom && !p.sinAgrupar){
     var dirNorm = String(p.dir).trim().toLowerCase();
     var telNorm = String(p.tel).trim();
     var b2bNormGrupo = String(p.b2b||'').trim().toLowerCase();
     if(dirNorm && telNorm){
       grupo = paquetes.filter(function(x){
-        return String(x.dir||'').trim().toLowerCase() === dirNorm && String(x.tel||'').trim() === telNorm && String(x.b2b||'').trim().toLowerCase() === b2bNormGrupo && String(x.b2b||'').trim().toUpperCase().indexOf('WOM') === -1;
+        return !x.sinAgrupar && String(x.dir||'').trim().toLowerCase() === dirNorm && String(x.tel||'').trim() === telNorm && String(x.b2b||'').trim().toLowerCase() === b2bNormGrupo && String(x.b2b||'').trim().toUpperCase().indexOf('WOM') === -1;
       });
     }
   }
@@ -1633,6 +1653,34 @@ function eliminarPaqueteDesdeModal(){
   renderPaquetes();
   document.getElementById('modal-overlay').classList.remove('open');
   modalOrdenId = null;
+}
+
+// ════════════════════════════════════════
+// SEPARAR GRUPO POR DIRECCIÓN
+// El respaldo por dirección+teléfono+marca a veces junta 2 pedidos que en realidad son
+// compras DISTINTAS de la misma marca, mismo cliente, mismo día (ej. Jessica Sánchez Low
+// con 2 folios distintos de savillerow). Esto marca esos códigos para que dejen de
+// agruparse solos entre sí — no borra nada, cada uno queda como orden independiente.
+// Se sincroniza a Sheets (columna sinAgrupar), así que se refleja en todos los equipos.
+// ════════════════════════════════════════
+function separarGrupoPorDireccion(){
+  if(!modalOrdenId) return;
+  var p = paquetes.find(function(x){return x.id===modalOrdenId;});
+  if(!p) return;
+  var grupo = calcularGrupoMultibulto(p);
+  if(grupo.length <= 1){ alert('Este pedido ya está solo, no hay nada que separar.'); return; }
+  var nombres = grupo.map(function(x){ return x.nombre+' — '+x.codigo; }).join('\n');
+  if(!confirm('Vas a separar estos '+grupo.length+' pedidos para que la app deje de tratarlos como si fueran el mismo:\n\n'+nombres+'\n\nCada uno se va a poder marcar por separado de ahora en adelante. ¿Continuar?')) return;
+  grupo.forEach(function(item){
+    item.sinAgrupar = true;
+    enviarASheets('paquete_separar', {codigo:item.codigo});
+  });
+  guardarStorage();
+  actualizarResumen();
+  renderPaquetes();
+  document.getElementById('modal-overlay').classList.remove('open');
+  modalOrdenId = null;
+  alert('✅ Separados. Ahora aparecen como órdenes independientes.');
 }
 
 // ════════════════════════════════════════
