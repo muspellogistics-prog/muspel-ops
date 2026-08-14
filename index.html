@@ -2692,8 +2692,13 @@ function getFolioBase(folio){
   if(!folio) return null;
   var f = String(folio).trim();
   // Quita sufijos tipo "-1/2", "-2/2", "-2" al final del folio (multibulto con folios
-  // variantes, ej. "179508" y "179508-2", o "Desco40625-1/2" y "Desco40625-2/2")
-  return f.replace(/-\d+(\/\d+)?$/, '').trim() || f;
+  // variantes, ej. "179508" y "179508-2", o "Desco40625-1/2" y "Desco40625-2/2").
+  // CORREGIDO: el número de bulto real son 1 o 2 dígitos como mucho (nadie manda 100+
+  // bultos del mismo pedido). Antes el recorte no tenía límite de dígitos, así que
+  // folios tipo "SHP-112531" y "SHP-112469" (números de seguimiento largos, no de
+  // bulto) quedaban recortados los dos a "SHP" y la app los confundía con el mismo
+  // pedido, aunque fueran de clientes y direcciones totalmente distintas.
+  return f.replace(/-\d{1,2}(\/\d{1,2})?$/, '').trim() || f;
 }
 
 var qrMultibultoActual = []; // todas las órdenes del mismo folio base
