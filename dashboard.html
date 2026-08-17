@@ -120,7 +120,7 @@
     </div>
     <div class="panel">
       <div class="titulo-seccion" style="margin-top:0;">🏦 Flujo de Caja Real — cuándo se mueve la plata de verdad</div>
-      <div class="panel-nota">No es lo mismo que "Cuánto facturar" de arriba (eso es el mes de la orden). Acá se ve CUÁNDO entra y sale la plata realmente: los costos usan la fecha real de pago (columna "Fecha" en Costos), y el ingreso se corre 2 meses (ALAS factura 1 mes después y paga al mes siguiente de esa factura).</div>
+      <div class="panel-nota">No es lo mismo que "Cuánto facturar" de arriba (eso es el mes de la orden). Acá se ve CUÁNDO entra y sale la plata realmente: los costos usan la fecha real de pago (columna "Fecha" en Costos), y el ingreso se corre 2 meses (ALAS factura 1 mes después y paga al mes siguiente de esa factura). <strong>Excepción:</strong> julio y agosto 2026 se cobran juntos en una sola factura emitida en septiembre. El pago es a 30 días como plazo MÁXIMO — acá se muestra octubre como escenario conservador, pero ALAS podría pagar antes, incluso a fines de septiembre. Ajusta esto apenas tengas la fecha real de pago.</div>
       <table><thead><tr><th>Mes</th><th class="num">Entra</th><th class="num">Sale</th><th class="num">Flujo del mes</th><th class="num">Saldo acumulado</th></tr></thead><tbody id="tabla-flujo-real"></tbody></table>
     </div>
     <div class="panel">
@@ -409,9 +409,24 @@ function pintarFlujoReal(){
     salePorMes[m] = (salePorMes[m]||0) + c.monto;
   });
   // Entra: cierres (órdenes entregadas), con +2 meses (ALAS factura +1 mes y paga +1 mes después de eso)
+  // EXCEPCIÓN POR ATRASO: julio y agosto 2026 no se facturaron en su mes normal. Ambos
+  // se cobran en UNA sola factura emitida en SEPTIEMBRE 2026, y como el pago es a 30
+  // días (Ley 21.131), la plata de los dos meses entra recién en OCTUBRE 2026.
+  // Cuando la facturación se normalice, basta con borrar este bloque de excepciones y
+  // vuelve a regir la regla estándar de +2 meses.
+  const mesesCobroExcepcion = {
+    'julio 2026': 'octubre 2026',
+    'agosto 2026': 'octubre 2026'
+  };
   const entraPorMes = {};
   cierres.forEach(c => {
-    const m = mesConDesfase(c.fecha, 2);
+    const mesOrden = mesConDesfase(c.fecha, 0);
+    let m;
+    if(mesOrden && mesesCobroExcepcion[mesOrden]){
+      m = mesesCobroExcepcion[mesOrden];
+    }else{
+      m = mesConDesfase(c.fecha, 2);
+    }
     if(!m) return;
     entraPorMes[m] = (entraPorMes[m]||0) + c.ingresos;
   });
