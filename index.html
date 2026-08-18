@@ -2535,56 +2535,59 @@ function renderPaquetes(){
   keys.forEach(function(key){
     var g=grupos[key];
     html+='<div class="grupo-titulo">'+g.tipo+' · '+g.comuna+' <span style="color:#94a3b8;font-weight:400;">('+g.items.length+')</span></div>';
-    // detectar multibultos: misma dirección exacta dentro de este grupo
-    var porDireccion = {};
-    g.items.forEach(function(p){
-      var dirKey = (p.dir||'').trim().toLowerCase();
-      if(!dirKey) dirKey = '__sindir__'+p.id; // sin dirección no se agrupa
-      if(!porDireccion[dirKey]) porDireccion[dirKey]=[];
-      porDireccion[dirKey].push(p);
+    // Detectar multibultos DE VERDAD dentro de este grupo: usa la misma función central
+    // que el resto de la app (agruparOrdenes), que ya excluye WOM y respeta "sinAgrupar"
+    // — antes esto agrupaba solo por dirección exacta, sin esas reglas, y mostraba el
+    // banner de "MULTIBULTO" incluso para pedidos WOM que en realidad son entregas
+    // independientes (ej. Erwin Andrés Collao, 2 pedidos WOM en la misma dirección).
+    var gruposReales = agruparOrdenes(g.items);
+    var claveGrupoDePaquete = {};
+    gruposReales.forEach(function(grupo, gi){
+      grupo.forEach(function(p){ claveGrupoDePaquete[p.id] = gi; });
     });
-    Object.keys(porDireccion).forEach(function(dirKey){
-      var itemsDir = porDireccion[dirKey];
-      var esMultibulto = itemsDir.length > 1;
-      if(esMultibulto){
-        html+='<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:6px 10px;margin-bottom:4px;font-size:0.72rem;font-weight:700;color:#92400e;">📦 MULTIBULTO — '+itemsDir.length+' órdenes en esta dirección</div>';
+    var yaMostrado = {};
+    g.items.forEach(function(p){
+      var gi = claveGrupoDePaquete[p.id];
+      var grupo = gruposReales[gi];
+      var esMultibulto = grupo.length > 1;
+      if(esMultibulto && !yaMostrado[gi]){
+        html+='<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:6px 10px;margin-bottom:4px;font-size:0.72rem;font-weight:700;color:#92400e;">📦 MULTIBULTO — '+grupo.length+' bultos del mismo pedido</div>';
+        yaMostrado[gi] = true;
       }
-      itemsDir.forEach(function(p){
-        var badgeClass = p.estado==='entregado'?'badge-verde':p.estado==='devuelto'?'badge-rojo':p.estado==='daniado'?'badge-naranja':'badge-gris';
-        var badgeTxt = p.estado==='entregado'?'Entregado':p.estado==='devuelto'?'Devuelto':p.estado==='daniado'?'Dañado':'Pendiente';
+      var badgeClass = p.estado==='entregado'?'badge-verde':p.estado==='devuelto'?'badge-rojo':p.estado==='daniado'?'badge-naranja':'badge-gris';
+      var badgeTxt = p.estado==='entregado'?'Entregado':p.estado==='devuelto'?'Devuelto':p.estado==='daniado'?'Dañado':'Pendiente';
 
-        // Dirección: si es URL de Google Maps o muy corta, mostrar solo comuna
-        var dir = (p.dir||'').trim();
-        var dirMostrar = dir;
-        if(dir.toLowerCase().indexOf('http') !== -1 || dir.length < 5){
-          dirMostrar = (p.comuna||'').trim() ? '📍 Ver detalle — '+p.comuna.trim() : '(sin dirección — tocar para ver)';
-        }
+      // Dirección: si es URL de Google Maps o muy corta, mostrar solo comuna
+      var dir = (p.dir||'').trim();
+      var dirMostrar = dir;
+      if(dir.toLowerCase().indexOf('http') !== -1 || dir.length < 5){
+        dirMostrar = (p.comuna||'').trim() ? '📍 Ver detalle — '+p.comuna.trim() : '(sin dirección — tocar para ver)';
+      }
 
-        html+='<div class="paquete-item '+p.estado+'" id="pi-'+p.id+'" onclick="abrirModal('+p.id+')" style="cursor:pointer;'+(esMultibulto?'border-left:3px solid #f59e0b;':'')+(p.estado!=='pendiente'?'':'')+'">'; 
-        html+='<div class="paquete-info">';
-        if(p.repetidoDeHistorial){
-          var txtIntento = p.intentosAgotados
-            ? '🚫 INTENTO '+p.intentos+'/3 — YA AGOTÓ los intentos del mes, revisar con Alas'
-            : '⚠️ INTENTO '+(p.intentos||1)+'/3 — ya existía en un día anterior';
-          html+='<div style="font-size:0.68rem;font-weight:700;color:var(--rojo);">'+txtIntento+'</div>';
-        }
-        html+='<div class="paquete-nombre">'+p.nombre+'</div>';
-        html+='<div class="paquete-dir">'+dirMostrar+(p.tel?' · '+p.tel:'')+'</div>';
-        html+='<div class="paquete-codigo">'+p.codigo+' <span class="badge '+badgeClass+'">'+badgeTxt+'</span></div>';
-        html+='</div>';
-        if(p.estado==='pendiente'){
-          html+='<div class="paquete-acciones" onclick="event.stopPropagation()">';
-          html+='<button class="btn btn-verde btn-sm" onclick="marcar('+p.id+',\'entregado\')">✅</button>';
-          html+='<button class="btn btn-rojo btn-sm" onclick="marcar('+p.id+',\'devuelto\')">↩️</button>';
-          html+='<button class="btn btn-naranja btn-sm" onclick="marcar('+p.id+',\'daniado\')">⚠️</button>';
-          var linkWaTarjeta = armarLinkWhatsApp(p);
-          if(linkWaTarjeta){
-            html+='<a href="'+linkWaTarjeta+'" target="_blank"><button class="btn btn-sm" style="background:#25D366;color:#fff;">💬</button></a>';
-          }
-          html+='</div>';
+      html+='<div class="paquete-item '+p.estado+'" id="pi-'+p.id+'" onclick="abrirModal('+p.id+')" style="cursor:pointer;'+(esMultibulto?'border-left:3px solid #f59e0b;':'')+(p.estado!=='pendiente'?'':'')+'">'; 
+      html+='<div class="paquete-info">';
+      if(p.repetidoDeHistorial){
+        var txtIntento = p.intentosAgotados
+          ? '🚫 INTENTO '+p.intentos+'/3 — YA AGOTÓ los intentos del mes, revisar con Alas'
+          : '⚠️ INTENTO '+(p.intentos||1)+'/3 — ya existía en un día anterior';
+        html+='<div style="font-size:0.68rem;font-weight:700;color:var(--rojo);">'+txtIntento+'</div>';
+      }
+      html+='<div class="paquete-nombre">'+p.nombre+'</div>';
+      html+='<div class="paquete-dir">'+dirMostrar+(p.tel?' · '+p.tel:'')+'</div>';
+      html+='<div class="paquete-codigo">'+p.codigo+' <span class="badge '+badgeClass+'">'+badgeTxt+'</span></div>';
+      html+='</div>';
+      if(p.estado==='pendiente'){
+        html+='<div class="paquete-acciones" onclick="event.stopPropagation()">';
+        html+='<button class="btn btn-verde btn-sm" onclick="marcar('+p.id+',\'entregado\')">✅</button>';
+        html+='<button class="btn btn-rojo btn-sm" onclick="marcar('+p.id+',\'devuelto\')">↩️</button>';
+        html+='<button class="btn btn-naranja btn-sm" onclick="marcar('+p.id+',\'daniado\')">⚠️</button>';
+        var linkWaTarjeta = armarLinkWhatsApp(p);
+        if(linkWaTarjeta){
+          html+='<a href="'+linkWaTarjeta+'" target="_blank"><button class="btn btn-sm" style="background:#25D366;color:#fff;">💬</button></a>';
         }
         html+='</div>';
-      });
+      }
+      html+='</div>';
     });
   });
   lista.innerHTML=html;
