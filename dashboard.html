@@ -90,7 +90,7 @@
     <div class="grid">
       <div class="card"><div class="card-label">Órdenes entregadas del mes</div><div class="card-value" id="op-ord-mes">—</div></div>
       <div class="card"><div class="card-label">Efectividad acumulada</div><div class="card-value verde" id="op-ef-mes">—</div></div>
-      <div class="card"><div class="card-label">Incidencias del mes</div><div class="card-value naranja" id="op-inc-mes">—</div></div>
+      <div class="card"><div class="card-label">Incidencias del mes</div><div class="card-value naranja" id="op-inc-mes">—</div><div class="card-sub" id="op-inc-mes-sub">—</div></div>
     </div>
     <div class="banner-info">WOM se paga a tarifa fija, sin bono, y no cuenta para calcular el % de efectividad del mes (que define el tramo de bono de ALAS para el resto de las marcas).</div>
     <div class="grid">
@@ -184,6 +184,7 @@ const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbx6aAlb99tMoR2leEQep
 
 let cierres = [];
 let costos = [];
+let incidenciasReales = [];
 let gastosPersonales = [];
 
 function formatoPesos(n){
@@ -236,10 +237,11 @@ async function cargarDatos(){
   document.getElementById('sync-badge').textContent = '🔄 Sincronizando...';
 
   try{
-    const [rCierres, rCostos, rPersonal] = await Promise.all([
+    const [rCierres, rCostos, rPersonal, rDetalle] = await Promise.all([
       fetch(SHEETS_URL + '?tipo=cierres').then(r=>r.json()),
       fetch(SHEETS_URL + '?tipo=costos').then(r=>r.json()),
-      fetch(SHEETS_URL + '?tipo=gastos_personales').then(r=>r.json())
+      fetch(SHEETS_URL + '?tipo=gastos_personales').then(r=>r.json()),
+      fetch(SHEETS_URL + '?tipo=detalle_historico').then(r=>r.json())
     ]);
     cierres = (rCierres||[]).slice(1).map(row => ({
       fecha: row[0], total: Number(row[1])||0, entregados: Number(row[2])||0,
@@ -260,6 +262,31 @@ async function cargarDatos(){
     gastosPersonales = (rPersonal||[]).slice(1).map(row => ({
       fecha: row[0], mes: mesComoTexto(row[1]), categoria: row[2], descripcion: row[3], monto: Number(row[4])||0
     }));
+    // Detalle histórico por pedido: hace falta para saber el estado REAL final de cada
+    // código, no solo el del día en que un intento falló. Un pedido marcado "devuelto"
+    // el día 3 pero reintentado y entregado el día 8 NO es una incidencia pendiente —
+    // ya se resolvió. Solo cuenta como incidencia si su ÚLTIMO registro conocido (el más
+    // reciente) sigue en devuelto/dañado, sin un intento posterior exitoso.
+    function claveFechaOrden(f){
+      const p = String(f||'').trim().split('-');
+      if(p.length!==3) return '00000000';
+      return p[2]+p[1].padStart(2,'0')+p[0].padStart(2,'0');
+    }
+    const porCodigo = {};
+    (rDetalle||[]).slice(1).forEach(row => {
+      const fecha = row[0], codigo = row[1], estado = row[7];
+      if(!codigo) return;
+      if(!porCodigo[codigo]) porCodigo[codigo] = [];
+      porCodigo[codigo].push({fecha, estado});
+    });
+    incidenciasReales = []; // [{codigo, fecha, estado}] — solo las que quedaron sin resolver
+    Object.keys(porCodigo).forEach(codigo => {
+      const registros = porCodigo[codigo].sort((a,b) => claveFechaOrden(a.fecha) < claveFechaOrden(b.fecha) ? -1 : 1);
+      const ultimo = registros[registros.length-1];
+      if(ultimo.estado === 'devuelto' || ultimo.estado === 'daniado'){
+        incidenciasReales.push({codigo, fecha: ultimo.fecha, estado: ultimo.estado});
+      }
+    });
     document.getElementById('sync-badge').textContent = '☁️ Sincronizado (toca para actualizar)';
     document.getElementById('loading').style.display = 'none';
   } catch(e){
@@ -301,10 +328,21 @@ function pintarOperacion(mesTexto){
   const delMes = cierres.filter(c => perteneceAlMes(c.fecha, mesTexto));
   const ordMes = delMes.reduce((a,c)=>a+c.entregadosOrdenes,0);
   const totalOrdMes = delMes.reduce((a,c)=>a+c.totalOrdenes,0);
-  const incMes = delMes.reduce((a,c)=>a+c.devueltos+c.daniados,0);
+  // CORREGIDO: antes esto sumaba TODOS los "devuelto"/"dañado" registrados día por día,
+  // pero eso cuenta también intentos fallidos que después se reintentaron y SÍ se
+  // entregaron (ej. falla el día 3, se reintenta y se entrega el día 8 — ya no es una
+  // incidencia pendiente). Ahora se usa el estado FINAL real de cada código
+  // (incidenciasReales, calculado con el historial completo), filtrado a este mes.
+  const incBruto = delMes.reduce((a,c)=>a+c.devueltos+c.daniados,0);
+  const incidenciasDelMes = incidenciasReales.filter(inc => perteneceAlMes(inc.fecha, mesTexto));
+  const incMes = incidenciasDelMes.length;
   document.getElementById('op-ord-mes').textContent = ordMes;
   document.getElementById('op-ef-mes').textContent = totalOrdMes>0 ? Math.round(ordMes/totalOrdMes*100)+'%' : '—';
   document.getElementById('op-inc-mes').textContent = incMes;
+  const incSubEl = document.getElementById('op-inc-mes-sub');
+  if(incSubEl){
+    incSubEl.textContent = incBruto>incMes ? `${incBruto} intentos fallidos en total, ${incBruto-incMes} ya se reintentaron y se entregaron` : 'sin reintentos pendientes de resolver';
+  }
 
   // Desglose WOM del mes: la efectividad "oficial" para el bono es SIN WOM.
   const ordEntNoWomMes = delMes.reduce((a,c)=>a+c.entregadosOrdenesNoWom,0);
