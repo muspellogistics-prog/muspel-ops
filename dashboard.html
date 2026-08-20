@@ -185,6 +185,7 @@ const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbx6aAlb99tMoR2leEQep
 let cierres = [];
 let costos = [];
 let incidenciasReales = [];
+let resumenPorCodigo = [];
 let gastosPersonales = [];
 
 function formatoPesos(n){
@@ -272,20 +273,36 @@ async function cargarDatos(){
       if(p.length!==3) return '00000000';
       return p[2]+p[1].padStart(2,'0')+p[0].padStart(2,'0');
     }
+    function mesDeFecha(fechaDDMMYYYY){
+      const p = String(fechaDDMMYYYY||'').trim().split('-');
+      if(p.length!==3) return null;
+      const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+      const mesIdx = parseInt(p[1],10)-1;
+      if(mesIdx<0 || mesIdx>11) return null;
+      return meses[mesIdx] + ' ' + p[2];
+    }
     const porCodigo = {};
     (rDetalle||[]).slice(1).forEach(row => {
-      const fecha = row[0], codigo = row[1], estado = row[7];
+      const fecha = row[0], codigo = row[1], estado = row[7], b2b = row[9];
       if(!codigo) return;
       if(!porCodigo[codigo]) porCodigo[codigo] = [];
-      porCodigo[codigo].push({fecha, estado});
+      porCodigo[codigo].push({fecha, estado, b2b});
     });
     incidenciasReales = []; // [{codigo, fecha, estado}] — solo las que quedaron sin resolver
+    // resumenPorCodigo: para CADA código, en qué mes se originó (su primer registro) y
+    // cuál fue su estado FINAL (su registro más reciente). Con esto, "Órdenes entregadas
+    // del mes" y "Efectividad acumulada" cuentan cada pedido UNA sola vez — antes, un
+    // pedido reintentado (ej. falla el día 3, se reintenta y se entrega el día 8) se
+    // sumaba 2 veces al total del mes (una el día que falló, otra el día del reintento),
+    // inflando "órdenes recibidas" y bajando la efectividad real sin motivo.
+    resumenPorCodigo = [];
     Object.keys(porCodigo).forEach(codigo => {
       const registros = porCodigo[codigo].sort((a,b) => claveFechaOrden(a.fecha) < claveFechaOrden(b.fecha) ? -1 : 1);
-      const ultimo = registros[registros.length-1];
+      const primero = registros[0], ultimo = registros[registros.length-1];
       if(ultimo.estado === 'devuelto' || ultimo.estado === 'daniado'){
         incidenciasReales.push({codigo, fecha: ultimo.fecha, estado: ultimo.estado});
       }
+      resumenPorCodigo.push({codigo, mesOrigen: mesDeFecha(primero.fecha), fechaOrigen: primero.fecha, estadoFinal: ultimo.estado, b2b: ultimo.b2b||''});
     });
     document.getElementById('sync-badge').textContent = '☁️ Sincronizado (toca para actualizar)';
     document.getElementById('loading').style.display = 'none';
@@ -326,13 +343,16 @@ function pintarOperacion(mesTexto){
   document.getElementById('op-dev-dia').textContent = ultimo.devueltos + ultimo.daniados;
 
   const delMes = cierres.filter(c => perteneceAlMes(c.fecha, mesTexto));
-  const ordMes = delMes.reduce((a,c)=>a+c.entregadosOrdenes,0);
-  const totalOrdMes = delMes.reduce((a,c)=>a+c.totalOrdenes,0);
-  // CORREGIDO: antes esto sumaba TODOS los "devuelto"/"dañado" registrados día por día,
-  // pero eso cuenta también intentos fallidos que después se reintentaron y SÍ se
-  // entregaron (ej. falla el día 3, se reintenta y se entrega el día 8 — ya no es una
-  // incidencia pendiente). Ahora se usa el estado FINAL real de cada código
-  // (incidenciasReales, calculado con el historial completo), filtrado a este mes.
+  // CORREGIDO: antes "Órdenes entregadas del mes" y "Efectividad acumulada" sumaban el
+  // totalOrdenes/entregadosOrdenes de CADA DÍA por separado. Un pedido reintentado (ej.
+  // falla el día 3 — cuenta ahí — y se reintenta y entrega el día 8 — vuelve a contar
+  // ahí) se sumaba 2 VECES al total del mes, inflando "recibidas" y bajando la
+  // efectividad real sin motivo. Ahora se cuenta cada CÓDIGO una sola vez, usando su
+  // estado final (resumenPorCodigo, calculado con el historial completo), agrupado por
+  // el mes en que se originó cada pedido.
+  const codigosDelMes = resumenPorCodigo.filter(r => r.mesOrigen === mesTexto);
+  const totalOrdMes = codigosDelMes.length;
+  const ordMes = codigosDelMes.filter(r => r.estadoFinal === 'entregado').length;
   const incBruto = delMes.reduce((a,c)=>a+c.devueltos+c.daniados,0);
   const incidenciasDelMes = incidenciasReales.filter(inc => perteneceAlMes(inc.fecha, mesTexto));
   const incMes = incidenciasDelMes.length;
@@ -344,11 +364,14 @@ function pintarOperacion(mesTexto){
     incSubEl.textContent = incBruto>incMes ? `${incBruto} intentos fallidos en total, ${incBruto-incMes} ya se reintentaron y se entregaron` : 'sin reintentos pendientes de resolver';
   }
 
-  // Desglose WOM del mes: la efectividad "oficial" para el bono es SIN WOM.
-  const ordEntNoWomMes = delMes.reduce((a,c)=>a+c.entregadosOrdenesNoWom,0);
-  const ordTotNoWomMes = delMes.reduce((a,c)=>a+c.totalOrdenesNoWom,0);
-  const ordWomMes = delMes.reduce((a,c)=>a+c.ordenesWom,0);
-  const ingWomMes = delMes.reduce((a,c)=>a+c.ingresoWom,0);
+  // Desglose WOM del mes: la efectividad "oficial" para el bono es SIN WOM. Misma
+  // corrección: por código único y estado final, no por suma diaria.
+  const codigosNoWomMes = codigosDelMes.filter(r => String(r.b2b||'').toUpperCase().indexOf('WOM')===-1);
+  const codigosWomMes = codigosDelMes.filter(r => String(r.b2b||'').toUpperCase().indexOf('WOM')!==-1);
+  const ordTotNoWomMes = codigosNoWomMes.length;
+  const ordEntNoWomMes = codigosNoWomMes.filter(r => r.estadoFinal==='entregado').length;
+  const ordWomMes = codigosWomMes.length;
+  const ingWomMes = delMes.reduce((a,c)=>a+c.ingresoWom,0); // el $ no se duplica: solo se paga cuando se entrega de verdad
   document.getElementById('op-ef-mes-nowom').textContent = ordTotNoWomMes>0 ? Math.round(ordEntNoWomMes/ordTotNoWomMes*100)+'%' : '—';
   document.getElementById('op-ef-mes-nowom-sub').textContent = ordEntNoWomMes+' de '+ordTotNoWomMes+' órdenes (sin contar WOM)';
   document.getElementById('op-ord-wom').textContent = ordWomMes;
