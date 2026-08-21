@@ -43,6 +43,7 @@
   .stat.rojo .stat-n{color:var(--rojo);}
   .stat.azul .stat-n{color:var(--azul2);}
   .stat.naranja .stat-n{color:var(--naranja);}
+  .stat.amarillo .stat-n{color:#b45309;}
   /* BARRA PROGRESO */
   .prog-wrap{background:var(--blanco);border-radius:10px;padding:14px;border:1px solid var(--borde);box-shadow:var(--sombra);margin-bottom:12px;}
   .prog-label{display:flex;justify-content:space-between;font-size:0.78rem;margin-bottom:6px;}
@@ -66,6 +67,7 @@
   .badge-verde{background:#dcfce7;color:#15803d;}
   .badge-rojo{background:#fee2e2;color:#b91c1c;}
   .badge-naranja{background:#ffedd5;color:#c2410c;}
+  .badge-amarillo{background:#fef9c3;color:#854d0e;}
   .badge-azul{background:#dbeafe;color:#1d4ed8;}
   .badge-gris{background:#f1f5f9;color:#64748b;}
   /* PAQUETES */
@@ -73,7 +75,6 @@
   .paquete-item{background:var(--blanco);border:1px solid var(--borde);border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:flex-start;gap:10px;}
   .paquete-item.entregado{border-left:3px solid var(--verde);opacity:0.7;}
   .paquete-item.devuelto{border-left:3px solid var(--rojo);opacity:0.7;}
-  .paquete-item.retorno{border-left:3px solid var(--naranja);opacity:0.7;}
   .paquete-item.daniado{border-left:3px solid var(--naranja);opacity:0.7;}
   .paquete-info{flex:1;min-width:0;}
   .paquete-nombre{font-weight:600;font-size:0.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -156,6 +157,15 @@
     <div class="modal-titulo" id="modal-resumen-titulo">—</div>
     <div style="font-size:0.75rem;color:#64748b;margin-bottom:12px;" id="modal-resumen-subtitulo">—</div>
     <div id="modal-resumen-lista"></div>
+  </div>
+</div>
+
+<!-- MODAL SELECCIONAR MOTIVO (retorno/devuelto/dañado) -->
+<div class="modal-overlay" id="modal-motivo-overlay" onclick="if(event.target===this) cerrarSelectorMotivo()">
+  <div class="modal-box" style="max-width:400px;">
+    <div class="modal-handle"></div>
+    <div class="modal-titulo" id="modal-motivo-titulo" style="margin-bottom:14px;">¿Por qué?</div>
+    <div id="modal-motivo-opciones" style="display:flex;flex-direction:column;gap:8px;"></div>
   </div>
 </div>
 
@@ -257,7 +267,8 @@
   <div class="stats-grid">
     <div class="stat azul" onclick="abrirResumenDetalle('todos')" style="cursor:pointer;"><div class="stat-n" id="s-recibidos">0</div><div class="stat-label">Paquetes recibidos</div></div>
     <div class="stat verde" onclick="abrirResumenDetalle('entregado')" style="cursor:pointer;"><div class="stat-n" id="s-entregados">0</div><div class="stat-label">Paquetes entregados</div><div style="font-size:0.68rem;color:#94a3b8;margin-top:2px;" id="s-entregados-ordenes"></div></div>
-    <div class="stat rojo" onclick="abrirResumenDetalle('devuelto')" style="cursor:pointer;"><div class="stat-n" id="s-devueltos">0</div><div class="stat-label">Paquetes no entregados</div><div style="font-size:0.68rem;color:#94a3b8;margin-top:2px;" id="s-devueltos-desglose"></div></div>
+    <div class="stat amarillo" onclick="abrirResumenDetalle('retorno')" style="cursor:pointer;"><div class="stat-n" id="s-retornos">0</div><div class="stat-label">Retornos (a reintentar)</div></div>
+    <div class="stat rojo" onclick="abrirResumenDetalle('devuelto')" style="cursor:pointer;"><div class="stat-n" id="s-devueltos">0</div><div class="stat-label">Devueltos a ALAS</div></div>
     <div class="stat naranja" onclick="abrirResumenDetalle('pendiente')" style="cursor:pointer;"><div class="stat-n" id="s-pendientes">0</div><div class="stat-label">Órdenes pendientes</div><div style="font-size:0.68rem;color:#94a3b8;margin-top:2px;" id="s-pendientes-paquetes"></div></div>
   </div>
   <div class="prog-wrap">
@@ -374,8 +385,8 @@
     <button class="filtro-btn active" onclick="filtrarPaquetes('todos',this)">Todos</button>
     <button class="filtro-btn" onclick="filtrarPaquetes('pendiente',this)">Pendientes</button>
     <button class="filtro-btn" onclick="filtrarPaquetes('entregado',this)">Entregados</button>
-    <button class="filtro-btn" onclick="filtrarPaquetes('retorno',this)">🔁 Retorno</button>
-    <button class="filtro-btn" onclick="filtrarPaquetes('devuelto',this)">📮 Devueltas a Alas</button>
+    <button class="filtro-btn" onclick="filtrarPaquetes('retorno',this)">Retornos</button>
+    <button class="filtro-btn" onclick="filtrarPaquetes('devuelto',this)">Devueltos ALAS</button>
   </div>
   <button class="btn btn-primary" onclick="generarRutaOptimizada()" style="margin-bottom:6px;">🗺 Generar ruta optimizada del día</button>
   <button class="btn btn-verde" id="btn-siguiente-tramo" onclick="siguienteTramo()" style="display:none;margin-bottom:10px;">▶ Siguiente tramo</button>
@@ -399,12 +410,12 @@
     <div id="qr-multibulto-box" style="display:none;margin-top:10px;background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px;"></div>
     <div style="display:flex;gap:8px;margin-top:10px;">
       <button class="btn btn-verde btn-sm" style="flex:1;padding:10px;" onclick="marcarDesdeQR('entregado')">✅ Entregado</button>
-      <button class="btn btn-naranja btn-sm" style="flex:1;padding:10px;" onclick="marcarDesdeQR('retorno')">🔁 Retorno</button>
-      <button class="btn btn-rojo btn-sm" style="flex:1;padding:10px;" onclick="marcarDesdeQR('daniado')">⚠️ Dañado</button>
+      <button class="btn btn-rojo btn-sm" style="flex:1;padding:10px;" onclick="marcarDesdeQR(preguntarTipoDevolucion())">↩️ Retorno / Devuelto</button>
+      <button class="btn btn-naranja btn-sm" style="flex:1;padding:10px;" onclick="marcarDesdeQR('daniado')">⚠️ Dañado</button>
     </div>
     <div id="qr-multibulto-acciones" style="display:none;margin-top:8px;">
       <button class="btn btn-verde" onclick="marcarTodoMultibulto('entregado')" style="margin-bottom:6px;">✅ Marcar TODOS entregados</button>
-      <button class="btn btn-naranja" onclick="marcarTodoMultibulto('retorno')">🔁 Marcar TODOS en retorno</button>
+      <button class="btn btn-rojo" onclick="marcarTodoMultibulto(preguntarTipoDevolucion())">↩️ Marcar TODOS retorno/devuelto</button>
     </div>
     <button class="btn btn-outline" style="margin-top:10px;" onclick="limpiarQR()">🔄 Escanear siguiente</button>
   </div>
@@ -464,7 +475,7 @@
         <div class="dash-sub">entregas / recibidos</div>
       </div>
       <div class="dash-card">
-        <div class="dash-card-title">Total no entregadas</div>
+        <div class="dash-card-title">Total devoluciones</div>
         <div class="dash-big" id="d-devoluciones" style="color:var(--rojo);">0</div>
         <div class="dash-sub" id="d-tasa-dev">0% del total</div>
       </div>
@@ -516,14 +527,6 @@
     <div class="card-title">↩️ ¿Se cerró el día por error?</div>
     <div style="font-size:0.78rem;color:#64748b;margin-bottom:10px;">Esto deshace SOLO el último día cerrado, devolviendo sus órdenes a Resumen/Órdenes para corregirlas. No afecta días anteriores.</div>
     <button class="btn btn-rojo" onclick="reabrirUltimoDia()">↩️ Reabrir último día cerrado</button>
-  </div>
-  <div class="card" style="border:1.5px solid var(--naranja);">
-    <div class="card-title">🔁 Reclasificar devoluciones históricas</div>
-    <div style="font-size:0.78rem;color:#64748b;margin-bottom:10px;">Corrige el historial (DetalleHistorico en Sheets) para separar lo que fue <strong>Devuelta a Alas de verdad</strong> (físicamente entregado de vuelta) de lo que en realidad fue un <strong>Retorno</strong> (intento fallido que se reintentó o se debía reintentar). Usa la lista de códigos confirmados como devoluciones efectivas. Todo lo demás que hoy dice "devuelto" pasa a "retorno".</div>
-    <div style="font-size:0.72rem;color:#94a3b8;margin-bottom:10px;">Código(s) confirmados como devueltos de verdad a Alas (uno por línea). Ya vienen precargados los que Cristian mandó por foto — agrega más si hace falta.</div>
-    <textarea class="form-input" id="codigos-devueltos-confirmados" rows="6" style="font-family:monospace;font-size:0.72rem;margin-bottom:10px;"></textarea>
-    <button class="btn btn-naranja" onclick="reclasificarDevolucionesHistoricas()">🔁 Reclasificar historial ahora</button>
-    <div id="reclasificar-status" style="margin-top:8px;font-size:0.8rem;color:#64748b;"></div>
   </div>
   <div class="card">
     <div class="card-title">🗑 Vaciar órdenes actuales (sin cerrar)</div>
@@ -646,27 +649,20 @@ function calcularIngresoOrdenes(arr, efMesPct){
 }
 
 // Igual que contarOrdenes, pero clasifica cada orden en su estado real
-// (entregada / retorno / devuelta a Alas / dañada / pendiente), asumiendo que todos
-// los bultos de una misma orden se entregan/devuelven juntos.
-//
-// DISTINCIÓN RETORNO vs DEVUELTA (agregado 20-08-2026):
-// - 'retorno'  = no se pudo entregar hoy, el paquete se queda con Muspel para
-//                reintentar en un próximo intento (NO volvió a Alas).
-// - 'devuelto' = el paquete se entregó FÍSICAMENTE de vuelta a Alas — ya no hay más
-//                intentos, se considera cerrado/perdido para efectos de reparto.
-// Antes ambos casos se guardaban igual como 'devuelto', mezclando cosas muy distintas.
+// (entregada / devuelta / dañada / pendiente), asumiendo que todos los
+// bultos de una misma orden se entregan/devuelven juntos.
 function contarOrdenesPorEstado(arr){
   var grupos = agruparOrdenes(arr);
-  var total=0, entregadas=0, devueltas=0, retornos=0, daniadas=0, pendientes=0;
+  var total=0, entregadas=0, retornos=0, devueltas=0, daniadas=0, pendientes=0;
   grupos.forEach(function(items){
     total++;
     if(items.every(function(p){return p.estado==='entregado';})) entregadas++;
-    else if(items.every(function(p){return p.estado==='devuelto';})) devueltas++;
     else if(items.every(function(p){return p.estado==='retorno';})) retornos++;
+    else if(items.every(function(p){return p.estado==='devuelto';})) devueltas++;
     else if(items.every(function(p){return p.estado==='daniado';})) daniadas++;
     else pendientes++; // pendiente, o mezcla (caso excepcional)
   });
-  return {total:total, entregadas:entregadas, devueltas:devueltas, retornos:retornos, daniadas:daniadas, pendientes:pendientes};
+  return {total:total, entregadas:entregadas, retornos:retornos, devueltas:devueltas, daniadas:daniadas, pendientes:pendientes};
 }
 
 // ¿Esta fecha (del historial) pertenece al mes calendario actual? Así el cálculo de
@@ -1026,106 +1022,6 @@ function reenviarHistorialCompleto(){
   alert('✅ '+historial.length+' día(s) puestos en la cola de envío a DetalleHistorico. Revisa el indicador de sincronización abajo hasta que diga "☁️ Sincronizado".\n\n¿La hoja Cierres también tiene datos incompletos o duplicados? Avísame y lo revisamos aparte.');
 }
 
-// ════════════════════════════════════════
-// RECLASIFICAR DEVOLUCIONES HISTÓRICAS (Retorno vs Devuelta a Alas) — 20-08-2026
-// Hasta ahora, TODO lo que no se entregaba se guardaba como 'devuelto', sin distinguir
-// si el paquete había vuelto de verdad a Alas o si solo fue un intento fallido que se
-// iba a reintentar. Esta herramienta corrige el historial ya guardado en
-// DetalleHistorico: los códigos de la lista de abajo (devoluciones efectivas
-// confirmadas por Cristian con foto) quedan como 'devuelto'; TODO el resto que hoy
-// dice 'devuelto' pasa a 'retorno'.
-//
-// Cómo corrige: usa el mismo mecanismo que ya existe para cerrar el día
-// (enviarASheets('detalle_dia', ...)), que reemplaza por fecha (no duplica) — por
-// eso es seguro reenviar el detalle completo de cada día afectado con el estado ya
-// corregido.
-//
-// LIMITACIÓN CONOCIDA: esto corrige el detalle por orden (DetalleHistorico), que es
-// lo que usa el Dashboard para el detalle por código. La hoja "Cierres" (el resumen
-// por día) seguirá mostrando el número viejo de "devueltos" para los días ya
-// cerrados ANTES de hoy, porque esa hoja solo se puede agregar, no reemplazar, sin
-// tocar el Apps Script (Code.gs), que esta app no tiene acceso a modificar. Si quieres
-// que ese número quede exacto también en Cierres, hay que corregirlo a mano en el
-// Sheet (te puedo dejar los números exactos) o compartirme el Code.gs para
-// automatizarlo también ahí.
-// ════════════════════════════════════════
-function reclasificarDevolucionesHistoricas(){
-  var status = document.getElementById('reclasificar-status');
-  var textarea = document.getElementById('codigos-devueltos-confirmados');
-  var codigosConfirmados = textarea.value.split('\n').map(function(s){ return s.trim(); }).filter(Boolean);
-  if(codigosConfirmados.length === 0){
-    if(!confirm('No hay ningún código en la lista de devoluciones confirmadas — esto va a reclasificar TODO lo que hoy dice "devuelto" como "retorno", sin dejar ninguna como Devuelta a Alas.\n\n¿Continuar de todas formas?')) return;
-  }
-  var setConfirmados = {};
-  codigosConfirmados.forEach(function(c){ setConfirmados[c] = true; });
-
-  if(!confirm('Esto va a revisar TODO el historial (DetalleHistorico) y:\n\n• Los '+codigosConfirmados.length+' código(s) de la lista quedan como "Devuelta a Alas".\n• TODO el resto que hoy dice "devuelto" pasa a "Retorno".\n\nSe reenvía día por día a Sheets (reemplaza, no duplica). Puede tomar unos segundos. ¿Continuar?')) return;
-
-  status.style.color='var(--azul2)';
-  status.textContent = '🔄 Descargando historial completo desde Sheets...';
-
-  fetch(SHEETS_URL + '?tipo=detalle_historico').then(function(r){ return r.json(); }).then(function(rows){
-    if(!rows || rows.length <= 1){
-      status.style.color='var(--rojo)';
-      status.textContent = '❌ No se pudo leer DetalleHistorico (vacío o sin conexión).';
-      return;
-    }
-    // encabezado: fecha,codigo,folio,nombre,dir,comuna,tipo,estado,motivo,b2b
-    var porFecha = {};
-    var totalDevueltosAntes = 0, totalPasanARetorno = 0, totalQuedanDevueltos = 0;
-    rows.slice(1).forEach(function(row){
-      var fechaLegible = formatoFechaLegible(String(row[0]||'').trim());
-      if(!fechaLegible) return;
-      var codigo = String(row[1]||'').trim();
-      var estadoOriginal = String(row[7]||'').trim();
-      var estadoNuevo = estadoOriginal;
-      if(estadoOriginal === 'devuelto'){
-        totalDevueltosAntes++;
-        if(setConfirmados[codigo]){
-          estadoNuevo = 'devuelto';
-          totalQuedanDevueltos++;
-        } else {
-          estadoNuevo = 'retorno';
-          totalPasanARetorno++;
-        }
-      }
-      if(!porFecha[fechaLegible]) porFecha[fechaLegible] = [];
-      porFecha[fechaLegible].push({
-        id: codigo + '_' + fechaLegible, // id local solo para armar el objeto, no afecta Sheets
-        codigo: codigo,
-        folio: String(row[2]||'').trim(),
-        nombre: String(row[3]||'').trim(),
-        dir: String(row[4]||'').trim(),
-        comuna: String(row[5]||'').trim(),
-        tipo: String(row[6]||'').trim(),
-        estado: estadoNuevo,
-        motivo: String(row[8]||'').trim(),
-        b2b: String(row[9]||'').trim()
-      });
-    });
-
-    var fechas = Object.keys(porFecha);
-    if(fechas.length === 0){
-      status.style.color='var(--rojo)';
-      status.textContent = '❌ No se encontraron días en el historial.';
-      return;
-    }
-
-    fechas.forEach(function(fecha){
-      enviarASheets('detalle_dia', { fecha: fecha, paquetes: porFecha[fecha] });
-    });
-
-    status.style.color='var(--verde)';
-    status.innerHTML = '✅ Reclasificación enviada: '+totalDevueltosAntes+' registros que decían "devuelto" revisados — '+
-      totalQuedanDevueltos+' quedan como <strong>Devuelta a Alas</strong>, '+totalPasanARetorno+' pasan a <strong>Retorno</strong>.<br>'+
-      'Se reenviaron '+fechas.length+' día(s) a DetalleHistorico. Espera a que el indicador de sincronización (en Resumen) diga "☁️ Sincronizado" para confirmar que ya subió todo.<br><br>'+
-      '⚠️ Ojo: los totales de "devueltos" por día en la hoja <strong>Cierres</strong> (los que ves en el Dashboard/Control de Gestión, para días ya cerrados antes de hoy) no se corrigen automáticamente con esto — esa hoja solo permite agregar filas, no reemplazarlas, sin acceso al Apps Script. Avísame si quieres que te deje los números exactos para corregirlos ahí a mano.';
-  }).catch(function(err){
-    status.style.color='var(--rojo)';
-    status.textContent = '❌ Error al descargar el historial: '+err.message;
-  });
-}
-
 // Trae automáticamente los cambios de estado de otros teléfonos/computadores
 // cada 30 segundos, para que el Resumen/Dashboard se mantengan al día solos.
 setInterval(function(){
@@ -1324,28 +1220,6 @@ cargarConfigOp();
 cargarColaSync();
 
 // ════════════════════════════════════════
-// CÓDIGOS CONFIRMADOS COMO DEVOLUCIÓN EFECTIVA A ALAS (precarga de la herramienta de
-// reclasificación en Historial). Vienen de las fotos que Cristian mandó el 19-08-2026.
-// Se puede editar la lista directo en el textarea de la app antes de reclasificar.
-// ════════════════════════════════════════
-var CODIGOS_DEVUELTOS_CONFIRMADOS_INICIAL = [
-  'SG10P2602MSRXA5SG', // Juan Francisco Torres Aguilera
-  'SGE9B582MSJBSRK4',  // Erwin Andrés Collao Villanueva
-  '192808-1514334',    // RIMU Puerto Octay Food (Inversierra)
-  'SGDRNLA2MS3BZ50K',  // Rosa Cárdenas Neira
-  'SG4Z2X52MSHXHFRU',  // Jeremías Enoc Mercegue Vargas
-  'SG1ETD2MRZH6IP9',   // Juan Marcelo Gallardo Barría
-  'SG4F5942MS0T50KW',  // Carmen Gloria Oyarzún Burgos
-  'SG1EMRLR2MS9F0KK5', // Mauricio Alejandro Vargas
-  'SG54ZCY2MSDHC797',  // Michel Abel Llanos Campos
-  'SG1W6L9Y2MS7U4R4P'  // Juan Francisco Torres Aguilera (2da orden distinta)
-];
-document.addEventListener('DOMContentLoaded', function(){
-  var ta = document.getElementById('codigos-devueltos-confirmados');
-  if(ta && !ta.value) ta.value = CODIGOS_DEVUELTOS_CONFIRMADOS_INICIAL.join('\n');
-});
-
-// ════════════════════════════════════════
 // LECTURA DESDE GOOGLE SHEETS (polling)
 // ════════════════════════════════════════
 var ultimaFilaLeida = 0;
@@ -1407,8 +1281,8 @@ function abrirResumenDetalle(filtro){
   var titulos = {
     'todos':'📦 Todas las órdenes',
     'entregado':'✅ Entregadas',
-    'devuelto':'↩️ No entregadas (retorno + devueltas a Alas)',
-    'retorno':'🔁 Retorno',
+    'retorno':'🔄 Retornos (a reintentar)',
+    'devuelto':'🚫 Devueltas a ALAS',
     'daniado':'⚠️ Dañadas',
     'pendiente':'⏳ Pendientes',
     'principal':'🏙 Ruta Principal',
@@ -1419,7 +1293,7 @@ function abrirResumenDetalle(filtro){
     if(filtro === 'todos') return true;
     if(filtro === 'principal') return (p.tipo||'').toLowerCase() === 'principal';
     if(filtro === 'ramal') return (p.tipo||'').toLowerCase() === 'ramal';
-    if(filtro === 'devuelto') return p.estado === 'devuelto' || p.estado === 'retorno' || p.estado === 'daniado';
+    if(filtro === 'devuelto') return p.estado === 'devuelto' || p.estado === 'daniado';
     return p.estado === filtro;
   });
 
@@ -1496,8 +1370,8 @@ function abrirResumenDetalle(filtro){
       var abierto = esHoy || pendientes > 0;
       html += '<div id="grp-'+idx+'" style="display:'+(abierto?'block':'none')+';padding:0 12px;">';
       g.items.forEach(function(p){
-        var badgeClass = p.estado==='entregado'?'badge-verde':p.estado==='devuelto'?'badge-rojo':p.estado==='retorno'?'badge-naranja':p.estado==='daniado'?'badge-naranja':'badge-gris';
-        var badgeTxt = p.estado==='entregado'?'Entregado':p.estado==='devuelto'?'Devuelta a Alas':p.estado==='retorno'?'Retorno':p.estado==='daniado'?'Dañado':'Pendiente';
+        var badgeClass = estadoBadgeClass(p.estado);
+        var badgeTxt = estadoBadgeTexto(p.estado);
         var dir = (p.dir||'').trim();
         var dirMostrar = (dir.toLowerCase().indexOf('http')!==-1||dir.length<5) ? '' : dir;
         html += '<div style="padding:8px 0;border-bottom:1px solid #f1f5f9;cursor:pointer;" onclick="cerrarResumenDetalle();setTimeout(function(){abrirModal('+p.id+')},100)">';
@@ -1554,7 +1428,7 @@ function abrirModal(id){
     dirMostrar = dir.length > 5 ? dir : '(sin dirección registrada)';
   }
 
-  var estadoTextos = {entregado:'✅ Entregado', devuelto:'📮 Devuelta a Alas', retorno:'🔁 Retorno (a reintentar)', daniado:'⚠️ Dañado', pendiente:'⏳ Pendiente'};
+  var estadoTextos = {entregado:'✅ Entregado', devuelto:'↩️ Devuelto', daniado:'⚠️ Dañado', pendiente:'⏳ Pendiente'};
 
   document.getElementById('modal-nombre').textContent = p.nombre || 'Sin nombre';
   document.getElementById('modal-codigo').textContent = p.codigo || '';
@@ -1577,7 +1451,7 @@ function abrirModal(id){
   if(grupo.length > 1){
     document.getElementById('modal-totalpaquetes').textContent = grupo.length + ' paquetes (multibulto)';
     totalPaqRow.style.display = 'flex';
-    var estadoIcono = {entregado:'✅',devuelto:'📮',retorno:'🔁',daniado:'⚠️',pendiente:'⏳'};
+    var estadoIcono = {entregado:'✅',devuelto:'↩️',daniado:'⚠️',pendiente:'⏳'};
     desgloseDiv.innerHTML = grupo.map(function(x){
       return (estadoIcono[x.estado]||'⏳')+' '+(x.codigo||'')+(x.folio?' · folio '+x.folio:'');
     }).join('<br>');
@@ -1614,29 +1488,20 @@ function abrirModal(id){
     modalRepetidoEl.style.display = 'none';
   }
   var motivoRow = document.getElementById('modal-motivo-row');
-  if((p.estado==='devuelto' || p.estado==='retorno' || p.estado==='daniado') && p.motivo){
+  if((p.estado==='retorno' || p.estado==='devuelto' || p.estado==='daniado') && p.motivo){
     document.getElementById('modal-motivo').textContent = p.motivo;
     motivoRow.style.display = 'flex';
   } else {
     motivoRow.style.display = 'none';
   }
 
-  // Botones según estado actual.
-  // 'pendiente'  → las 3 acciones normales de ruta: Entregado / Retorno / Dañado.
-  // 'retorno'    → acá es donde se marca la devolución EFECTIVA a Alas: cuando Cristian
-  //                ya entregó físicamente el paquete de vuelta en la oficina de Alas,
-  //                se toca "Marcar Devuelta a Alas" y pasa a estado final 'devuelto'.
-  // cualquier otro estado → solo revertir a pendiente, por si hubo un error al marcar.
+  // Botones según estado actual
   var acciones = document.getElementById('modal-acciones');
   if(p.estado === 'pendiente'){
     acciones.innerHTML =
       '<button class="btn btn-verde" style="flex:1;margin-bottom:0;" onclick="marcarDesdeModal(\'entregado\')">✅ Entregado</button>' +
-      '<button class="btn btn-naranja" style="flex:1;margin-bottom:0;" onclick="marcarDesdeModal(\'retorno\')">🔁 Retorno</button>' +
-      '<button class="btn btn-rojo" style="flex:1;margin-bottom:0;" onclick="marcarDesdeModal(\'daniado\')">⚠️ Dañado</button>';
-  } else if(p.estado === 'retorno'){
-    acciones.innerHTML =
-      '<button class="btn btn-rojo" style="flex:1;margin-bottom:0;" onclick="marcarDesdeModal(\'devuelto\')">📮 Marcar Devuelta a Alas</button>' +
-      '<button class="btn btn-outline" style="flex:1;margin-bottom:0;" onclick="marcarDesdeModal(\'pendiente\')">↺ Revertir a pendiente</button>';
+      '<button class="btn btn-rojo" style="flex:1;margin-bottom:0;" onclick="marcarDesdeModal(preguntarTipoDevolucion())">↩️ Retorno / Devuelto</button>' +
+      '<button class="btn btn-naranja" style="flex:1;margin-bottom:0;" onclick="marcarDesdeModal(\'daniado\')">⚠️ Dañado</button>';
   } else {
     acciones.innerHTML =
       '<button class="btn btn-outline" style="flex:1;margin-bottom:0;" onclick="marcarDesdeModal(\'pendiente\')">↺ Revertir a pendiente</button>';
@@ -1665,18 +1530,6 @@ function calcularGrupoMultibulto(p){
   return grupo.length > 1 ? grupo : [p];
 }
 
-// Pide motivo cuando el nuevo estado es una de las 3 formas de "no entregado":
-// retorno (se reintentará), devuelto (devuelta efectiva a Alas) o daniado.
-function requiereMotivo(estado){
-  return estado === 'retorno' || estado === 'devuelto' || estado === 'daniado';
-}
-function tituloParaMotivo(estado){
-  if(estado === 'retorno') return 'Retorno (se reintentará)';
-  if(estado === 'devuelto') return 'Devuelta a Alas';
-  if(estado === 'daniado') return 'Dañado';
-  return estado;
-}
-
 function marcarDesdeModal(estado){
   if(!modalOrdenId) return;
   // Misma protección contra doble toque que en marcar() — reusa el mismo registro de
@@ -1684,20 +1537,20 @@ function marcarDesdeModal(estado){
   var ahoraMarcarModalTs = Date.now();
   if(_ultimoMarcarTs[modalOrdenId] && (ahoraMarcarModalTs - _ultimoMarcarTs[modalOrdenId] < 3000)) return;
   _ultimoMarcarTs[modalOrdenId] = ahoraMarcarModalTs;
-  var p = paquetes.find(function(x){return x.id===modalOrdenId;});
+  var idParaMarcar = modalOrdenId;
+  if(estado === 'retorno' || estado === 'devuelto' || estado === 'daniado'){
+    pedirMotivo(estado, function(motivoElegido){ marcarDesdeModalConMotivo(idParaMarcar, estado, motivoElegido); });
+  } else {
+    marcarDesdeModalConMotivo(idParaMarcar, estado, '');
+  }
+}
+function marcarDesdeModalConMotivo(id, estado, motivo){
+  var p = paquetes.find(function(x){return x.id===id;});
   if(p){
-    var motivo = '';
-    if(estado === 'devuelto' && p.estado === 'retorno'){
-      // Pasando de Retorno → Devuelta a Alas: conserva el motivo original del retorno
-      // (ya quedó registrado por qué no se pudo entregar) salvo que se quiera anotar algo más.
-      motivo = prompt('¿Algo que anotar sobre esta devolución a Alas? (opcional)', p.motivo||'') || '';
-    } else if(requiereMotivo(estado)){
-      motivo = prompt('¿Por qué se marca '+tituloParaMotivo(estado)+'? (opcional)') || '';
-    }
-    motivo = motivo.trim();
+    motivo = (motivo||'').trim();
     var grupo = calcularGrupoMultibulto(p);
     if(grupo.length > 1){
-      alert('📦 Esta orden tiene '+grupo.length+' paquetes — se van a marcar TODOS como '+tituloParaMotivo(estado)+' juntos.');
+      alert('📦 Esta orden tiene '+grupo.length+' paquetes — se van a marcar TODOS como '+estado+' juntos.');
     }
     grupo.forEach(function(item){
       item.estado = estado;
@@ -1732,7 +1585,7 @@ function eliminarPaqueteDesdeModal(){
   var p = paquetes.find(function(x){return x.id===modalOrdenId;});
   if(!p) return;
   var grupo = calcularGrupoMultibulto(p);
-  var estadoTxt = {entregado:'✅ ENTREGADO', devuelto:'📮 Devuelta a Alas', retorno:'🔁 Retorno', daniado:'⚠️ Dañado', pendiente:'⏳ Pendiente'};
+  var estadoTxt = {entregado:'✅ ENTREGADO', devuelto:'↩️ Devuelto', daniado:'⚠️ Dañado', pendiente:'⏳ Pendiente'};
   var advertenciaEstado = '';
   if(p.estado === 'entregado'){
     advertenciaEstado = '\n\n⚠️ OJO: este pedido está marcado ENTREGADO. Si lo eliminas, se pierde ese registro y el ingreso asociado ya no se contará. Solo elimínalo si es un resabio de otro día (ya cobrado antes) — NO si es una entrega real de hoy.';
@@ -1774,7 +1627,7 @@ function eliminarPorCodigo(){
   }
   var p = candidatos[0];
   var grupo = calcularGrupoMultibulto(p);
-  var estadoTxt = {entregado:'✅ ENTREGADO', devuelto:'📮 Devuelta a Alas', retorno:'🔁 Retorno', daniado:'⚠️ Dañado', pendiente:'⏳ Pendiente'};
+  var estadoTxt = {entregado:'✅ ENTREGADO', devuelto:'↩️ Devuelto', daniado:'⚠️ Dañado', pendiente:'⏳ Pendiente'};
   var detalle = candidatos.map(function(c){ return c.nombre+' — '+(estadoTxt[c.estado]||c.estado); }).join('\n');
   var palabra = prompt('Vas a ELIMINAR de forma permanente:\n\n'+detalle+
     (grupo.length>candidatos.length ? '\n\n(Esta orden tiene '+grupo.length+' paquetes en total — se eliminarán TODOS juntos.)' : '')+
@@ -1849,9 +1702,8 @@ function showTab(name){
 function actualizarResumen(){
   var total = paquetes.length;
   var ent = paquetes.filter(function(p){return p.estado==='entregado';}).length;
-  var dev = paquetes.filter(function(p){return p.estado==='devuelto'||p.estado==='retorno'||p.estado==='daniado';}).length;
-  var retornoCount = paquetes.filter(function(p){return p.estado==='retorno';}).length;
-  var devueltoCount = paquetes.filter(function(p){return p.estado==='devuelto';}).length;
+  var retornos = paquetes.filter(function(p){return p.estado==='retorno';}).length;
+  var dev = paquetes.filter(function(p){return p.estado==='devuelto'||p.estado==='daniado';}).length;
   var pend = paquetes.filter(function(p){return p.estado==='pendiente';}).length;
   var prin = paquetes.filter(function(p){return (p.tipo||'').toLowerCase()==='principal';}).length;
   var ram = paquetes.filter(function(p){return (p.tipo||'').toLowerCase()==='ramal';}).length;
@@ -1871,9 +1723,8 @@ function actualizarResumen(){
   document.getElementById('s-entregados').textContent = ent;
   var elEO = document.getElementById('s-entregados-ordenes');
   if(elEO) elEO.textContent = ordStatsPorEstado.entregadas + (ordStatsPorEstado.entregadas===1?' orden entregada':' órdenes entregadas');
+  document.getElementById('s-retornos').textContent = retornos;
   document.getElementById('s-devueltos').textContent = dev;
-  var elDevDesglose = document.getElementById('s-devueltos-desglose');
-  if(elDevDesglose) elDevDesglose.textContent = retornoCount+' retorno · '+devueltoCount+' devuelta a Alas';
   document.getElementById('s-pendientes').textContent = ordStatsPorEstado.pendientes;
   var elPP = document.getElementById('s-pendientes-paquetes');
   if(elPP) elPP.textContent = pend + (pend===1?' paquete por entregar':' paquetes por entregar');
@@ -1918,7 +1769,27 @@ function importarExcel(input){
     reader.onload = function(e){
     try{
       var wb = XLSX.read(e.target.result, {type:'binary'});
-      var ws = wb.Sheets[wb.SheetNames[0]];
+      // Elige la hoja correcta: la primera que tenga "FOLIO" en su fila de encabezado,
+      // evitando pestañas tipo "RESUMEN" que no traen filas por pedido. Antes esto
+      // siempre usaba la PRIMERA hoja del archivo (wb.SheetNames[0]) sin más, así que
+      // si el archivo de ALAS traía varias pestañas (ej. RESUMEN, DETALLE, Hoja1) en
+      // otro orden, podía leer la hoja equivocada.
+      var nombreHojaElegida = wb.SheetNames[0];
+      for(var si=0; si<wb.SheetNames.length; si++){
+        var nombreHoja = wb.SheetNames[si];
+        if(/^resumen$/i.test(nombreHoja.trim())) continue;
+        var wsPrueba = wb.Sheets[nombreHoja];
+        var dataPrueba = XLSX.utils.sheet_to_json(wsPrueba, {header:1, range:0});
+        var encontrada = false;
+        for(var hi2=0; hi2<Math.min(3,dataPrueba.length); hi2++){
+          var celdasPrueba = (dataPrueba[hi2]||[]).map(function(v){
+            return String(v||'').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+          });
+          if(celdasPrueba.indexOf('FOLIO') !== -1 || celdasPrueba.indexOf('CODIGO PAQUETE') !== -1){ encontrada = true; break; }
+        }
+        if(encontrada){ nombreHojaElegida = nombreHoja; break; }
+      }
+      var ws = wb.Sheets[nombreHojaElegida];
       var data = XLSX.utils.sheet_to_json(ws, {header:1});
       // Detectar si hay dos filas de encabezado (caso Excel de Alas)
       // La fila real de encabezados es la que contiene "CÓDIGO PAQUETE"
@@ -1931,6 +1802,7 @@ function importarExcel(input){
       }
       var header = data[headerRowIdx];
       var idx = {};
+      var idxBase = undefined, idxDir2 = undefined, idxComuna2 = undefined;
       for(var i=0;i<header.length;i++){
         var h = String(header[i]).trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
         if(h==='CODIGO PAQUETE'||h==='CÓDIGO PAQUETE') idx.codigo=i;
@@ -1938,15 +1810,31 @@ function importarExcel(input){
         if(h==='NOMBRE') idx.nombre=i;
         if(h==='TELEFONO'||h==='TELÉFONO') idx.tel=i;
         if(h==='DIRECCION'||h==='DIRECCIÓN') idx.dir=i;
+        if(h==='DIRECCION2'||h==='DIRECCIÓN2') idxDir2=i;
         if(h==='COMUNA') idx.comuna=i;
+        if(h==='COMUNA2') idxComuna2=i;
         if(h==='REGION'||h==='REGIÓN') idx.region=i;
         if(h==='TIPO DESTINO') idx.tipo=i;
         if(h==='ESTADO') idx.estado=i;
         if(h==='B2B') idx.b2b=i;
         if(h==='BULTO DE ENTREGA') idx.bulto=i;
+        if(h==='BASE') idxBase=i;
       }
+      // Formatos "DIRECCIÓN2"/"COMUNA2" (variante vista en algunos exports de ALAS) tienen
+      // prioridad sobre "DIRECCIÓN"/"COMUNA" simples, que en esos archivos vienen vacías
+      // o con datos incompletos.
+      if(idxDir2 !== undefined) idx.dir = idxDir2;
+      if(idxComuna2 !== undefined) idx.comuna = idxComuna2;
+      // Formato nacional crudo de ALAS: trae columna BASE con el código de zona (ej. "J06"
+      // para Ramal Osorno) en vez de "TIPO DESTINO" directo, y mezcla TODAS las bases del
+      // país en una sola hoja. Si aparece BASE, se filtran las filas a J06 más adelante y
+      // el tipo destino queda "Ramal" para todas — sin preguntar nada.
+      var filtrarPorBaseJ06 = (idxBase !== undefined && idx.tipo === undefined);
       var tipoPorDefecto = 'Principal';
-      if(idx.tipo === undefined){
+      if(idx.tipo === undefined && filtrarPorBaseJ06){
+        // Formato nacional con columna BASE: todo lo que sea J06 es Ramal, sin preguntar.
+        tipoPorDefecto = 'Ramal';
+      } else if(idx.tipo === undefined){
         var elegido = prompt('Este archivo no trae la columna "Tipo Destino" (Principal/Ramal).\n\n¿Cómo se marcan TODAS estas órdenes? Escribe: Principal o Ramal', 'Principal');
         if(elegido && elegido.trim().toLowerCase().indexOf('ramal')===0){
           tipoPorDefecto = 'Ramal';
@@ -1979,18 +1867,24 @@ function importarExcel(input){
       var codigosPreExistentes = {};
       paquetes.forEach(function(p){ codigosPreExistentes[p.codigo] = true; });
 
-      var nuevos=0, dup=0, ocultasSalteadas=0, alertas=[];
+      var nuevos=0, dup=0, ocultasSalteadas=0, alertas=[], filtradasPorBase=0;
       for(var r=headerRowIdx+1;r<data.length;r++){
         if(filasOcultas[r]){ ocultasSalteadas++; continue; }
         var row=data[r];
         if(!row||!row[idx.codigo]) continue;
+        // Formato nacional con columna BASE: solo interesa la zona J06 (Ramal Osorno) —
+        // el resto del país en la misma hoja se descarta acá, sin tocar nada más.
+        if(filtrarPorBaseJ06){
+          var baseFila = String(row[idxBase]||'').trim().toUpperCase();
+          if(baseFila !== 'J06'){ filtradasPorBase++; continue; }
+        }
         var codigo=String(row[idx.codigo]).trim();
         if(!codigo) continue;
         // revisa duplicado real (de una importación anterior), no dentro de este mismo archivo
         if(codigosPreExistentes[codigo]){dup++;continue;}
         // revisa si ese código ya fue entregado/procesado en días anteriores (historial)
         var registrosPrevios = calcularIntentos(codigo);
-        var intentosFallidos = registrosPrevios.filter(function(r){return r.estado==='devuelto'||r.estado==='retorno'||r.estado==='daniado';}).length;
+        var intentosFallidos = registrosPrevios.filter(function(r){return r.estado==='retorno'||r.estado==='devuelto'||r.estado==='daniado';}).length;
         var yaEntregadoAntes = registrosPrevios.some(function(r){return r.estado==='entregado';});
         var intentoActual = intentosFallidos + 1;
         if(registrosPrevios.length>0){
@@ -2039,6 +1933,9 @@ function importarExcel(input){
       }, function(){
         status.style.color='var(--verde)';
         status.textContent = '✅ ' + nuevos + ' órdenes listas para repartir.';
+        if(filtradasPorBase>0){
+          status.innerHTML += '<br><span style="color:#64748b;">(se descartaron '+filtradasPorBase+' filas de otras zonas del país, fuera de J06)</span>';
+        }
         if(alertas.length>0){
           status.innerHTML += '<br><span style="color:var(--naranja);font-weight:600;">⚠️ '+alertas.length+' código(s) ya existían en días anteriores.</span>';
         }
@@ -2066,7 +1963,7 @@ function agregarManual(){
   actualizarHistorialRemotoIntentos(function(){
   // Revisa si este código ya tuvo intentos este mes (igual que al importar Excel)
   var registrosPrevios = calcularIntentos(codigo);
-  var intentosFallidos = registrosPrevios.filter(function(r){return r.estado==='devuelto'||r.estado==='retorno'||r.estado==='daniado';}).length;
+  var intentosFallidos = registrosPrevios.filter(function(r){return r.estado==='retorno'||r.estado==='devuelto'||r.estado==='daniado';}).length;
   var yaEntregadoAntes = registrosPrevios.some(function(r){return r.estado==='entregado';});
   var intentoActual = intentosFallidos + 1;
   if(registrosPrevios.length>0){
@@ -2492,8 +2389,8 @@ function mostrarListaRutaOptimizada(){
     }
     html += '</div>';
     p.ordenes.forEach(function(o){
-      var badgeClass = o.estado==='entregado'?'badge-verde':o.estado==='devuelto'?'badge-rojo':o.estado==='retorno'?'badge-naranja':o.estado==='daniado'?'badge-naranja':'badge-gris';
-      var badgeTxt = o.estado==='entregado'?'✅ Entregado':o.estado==='devuelto'?'📮 Devuelta a Alas':o.estado==='retorno'?'🔁 Retorno':o.estado==='daniado'?'⚠️ Dañado':'⏳ Pendiente';
+      var badgeClass = estadoBadgeClass(o.estado);
+      var badgeTxt = (o.estado==='entregado'?'✅ ':o.estado==='retorno'?'🔄 ':o.estado==='devuelto'?'🚫 ':o.estado==='daniado'?'⚠️ ':'⏳ ')+estadoBadgeTexto(o.estado);
       html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-top:1px solid #f1f5f9;font-size:0.75rem;cursor:pointer;" onclick="abrirModal('+o.id+')">';
       html += '<span style="color:#64748b;">'+(o.folio||o.codigo)+'</span>';
       html += '<span class="badge '+badgeClass+'">'+badgeTxt+'</span>';
@@ -2632,8 +2529,8 @@ function renderPaquetes(){
         html+='<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:6px 10px;margin-bottom:4px;font-size:0.72rem;font-weight:700;color:#92400e;">📦 MULTIBULTO — '+grupo.length+' bultos del mismo pedido</div>';
         yaMostrado[gi] = true;
       }
-      var badgeClass = p.estado==='entregado'?'badge-verde':p.estado==='devuelto'?'badge-rojo':p.estado==='retorno'?'badge-naranja':p.estado==='daniado'?'badge-naranja':'badge-gris';
-      var badgeTxt = p.estado==='entregado'?'Entregado':p.estado==='devuelto'?'Devuelta a Alas':p.estado==='retorno'?'Retorno':p.estado==='daniado'?'Dañado':'Pendiente';
+      var badgeClass = estadoBadgeClass(p.estado);
+      var badgeTxt = estadoBadgeTexto(p.estado);
 
       // Dirección: si es URL de Google Maps o muy corta, mostrar solo comuna
       var dir = (p.dir||'').trim();
@@ -2657,19 +2554,12 @@ function renderPaquetes(){
       if(p.estado==='pendiente'){
         html+='<div class="paquete-acciones" onclick="event.stopPropagation()">';
         html+='<button class="btn btn-verde btn-sm" onclick="marcar('+p.id+',\'entregado\')">✅</button>';
-        html+='<button class="btn btn-naranja btn-sm" onclick="marcar('+p.id+',\'retorno\')">🔁</button>';
-        html+='<button class="btn btn-rojo btn-sm" onclick="marcar('+p.id+',\'daniado\')">⚠️</button>';
+        html+='<button class="btn btn-rojo btn-sm" onclick="marcar('+p.id+',preguntarTipoDevolucion())">↩️</button>';
+        html+='<button class="btn btn-naranja btn-sm" onclick="marcar('+p.id+',\'daniado\')">⚠️</button>';
         var linkWaTarjeta = armarLinkWhatsApp(p);
         if(linkWaTarjeta){
           html+='<a href="'+linkWaTarjeta+'" target="_blank"><button class="btn btn-sm" style="background:#25D366;color:#fff;">💬</button></a>';
         }
-        html+='</div>';
-      } else if(p.estado==='retorno'){
-        // Acceso rápido desde la tarjeta para marcar la devolución EFECTIVA a Alas
-        // sin tener que entrar al modal — Cristian suele hacer esto en lote al volver
-        // de la ruta con los paquetes que va a dejar en la oficina de Alas.
-        html+='<div class="paquete-acciones" onclick="event.stopPropagation()">';
-        html+='<button class="btn btn-rojo btn-sm" onclick="marcar('+p.id+',\'devuelto\')" title="Marcar Devuelta a Alas">📮</button>';
         html+='</div>';
       }
       html+='</div>';
@@ -2708,25 +2598,26 @@ function armarLinkWhatsApp(p){
 
 var _ultimoMarcarTs = {}; // por id de paquete, para no bloquear marcar 2 pedidos distintos seguidos
 function marcar(id, estado){
-  // Evita que un doble toque/doble clic en los íconos rápidos (✅🔁⚠️📮) dispare el mismo
+  // Evita que un doble toque/doble clic en los íconos rápidos (✅↩️⚠️) dispare el mismo
   // cambio de estado 2 veces si el usuario toca más rápido de lo que tarda en
   // desaparecer el botón al re-dibujar la lista.
   var ahoraMarcarTs = Date.now();
   if(_ultimoMarcarTs[id] && (ahoraMarcarTs - _ultimoMarcarTs[id] < 3000)) return;
   _ultimoMarcarTs[id] = ahoraMarcarTs;
 
+  if(estado === 'retorno' || estado === 'devuelto' || estado === 'daniado'){
+    pedirMotivo(estado, function(motivoElegido){ marcarConMotivo(id, estado, motivoElegido); });
+  } else {
+    marcarConMotivo(id, estado, '');
+  }
+}
+function marcarConMotivo(id, estado, motivo){
   var p = paquetes.find(function(x){return x.id===id;});
   if(p){
-    var motivo = '';
-    if(estado === 'devuelto' && p.estado === 'retorno'){
-      motivo = prompt('¿Algo que anotar sobre esta devolución a Alas? (opcional)', p.motivo||'') || '';
-    } else if(requiereMotivo(estado)){
-      motivo = prompt('¿Por qué se marca '+tituloParaMotivo(estado)+'? (opcional)') || '';
-    }
-    motivo = motivo.trim();
+    motivo = (motivo||'').trim();
     var grupo = calcularGrupoMultibulto(p);
     if(grupo.length > 1){
-      alert('📦 Esta orden tiene '+grupo.length+' paquetes — se van a marcar TODOS como '+tituloParaMotivo(estado)+' juntos.');
+      alert('📦 Esta orden tiene '+grupo.length+' paquetes — se van a marcar TODOS como '+estado+' juntos.');
     }
     grupo.forEach(function(item){
       item.estado = estado;
@@ -2791,6 +2682,98 @@ function getFolioBase(folio){
   return f.replace(/-\d{1,2}(\/\d{1,2})?$/, '').trim() || f;
 }
 
+// ════════════════════════════════════════
+// ESTADOS: PENDIENTE / ENTREGADO / RETORNO / DEVUELTO (A ALAS) / DAÑADO
+// CORREGIDO: antes "devuelto" se usaba para 2 cosas distintas — un intento que falló
+// pero se podía reintentar, Y una devolución real y definitiva a ALAS. Eso mezclaba
+// las métricas de "cuánto se devolvió de verdad" con "cuántos intentos fallaron pero
+// se resolvieron después". Ahora son 2 estados separados:
+//   - "retorno": este intento falló, el paquete vuelve a Muspel, SE PUEDE reintentar
+//     (esto es lo que antes se llamaba simplemente "devuelto")
+//   - "devuelto": decisión FINAL — se devuelve de verdad a ALAS, no se reintenta más.
+//     Solo esto cuenta como devolución real en las métricas de Cierres/Dashboard.
+// Los datos ANTIGUOS (de antes de este cambio) que dicen "devuelto" en realidad
+// significaban "retorno" con el sistema viejo — no se puede corregir retroactivo sin
+// revisar cada uno a mano, pero de aquí en adelante queda bien separado.
+// ════════════════════════════════════════
+function estadoBadgeClass(estado){
+  if(estado==='entregado') return 'badge-verde';
+  if(estado==='retorno') return 'badge-amarillo';
+  if(estado==='devuelto') return 'badge-rojo';
+  if(estado==='daniado') return 'badge-naranja';
+  return 'badge-gris';
+}
+function estadoBadgeTexto(estado){
+  if(estado==='entregado') return 'Entregado';
+  if(estado==='retorno') return 'Retorno (reintentable)';
+  if(estado==='devuelto') return 'Devuelto a ALAS';
+  if(estado==='daniado') return 'Dañado';
+  return 'Pendiente';
+}
+// Cualquier estado donde el paquete NO llegó a manos del cliente (para efectividad,
+// intentos, etc.) — incluye tanto retorno (reintentable) como devuelto/dañado (finales).
+function esEstadoFallido(estado){
+  return estado==='retorno' || estado==='devuelto' || estado==='daniado';
+}
+// Le pregunta a quien esté marcando el pedido si es un intento que se puede reintentar
+// (Retorno) o una devolución definitiva a ALAS (Devuelto) — la decisión la toma la
+// persona en el momento, según lo que corresponda a ese caso puntual.
+function preguntarTipoDevolucion(){
+  return confirm('¿Es una DEVOLUCIÓN DEFINITIVA a ALAS? (no se va a reintentar más este pedido)\n\nAceptar = Devolución definitiva a ALAS\nCancelar = Solo falló este intento — se puede reintentar (Retorno)') ? 'devuelto' : 'retorno';
+}
+
+// ════════════════════════════════════════
+// SELECTOR DE MOTIVO (retorno / devuelto / dañado)
+// Reemplaza el prompt() de texto libre por una lista de motivos comunes — mucho más
+// rápido para Cristian en terreno que escribir. "Otro" sigue permitiendo texto libre
+// para casos que no calzan con la lista. Como un selector con botones no puede pausar
+// la ejecución (a diferencia de prompt()), esto funciona con callback: se le pasa una
+// función que se ejecuta cuando la persona elige el motivo (o cancela).
+// ════════════════════════════════════════
+var MOTIVOS_COMUNES = [
+  'No hay quien reciba',
+  'No contesta el teléfono',
+  'Dirección no existe / errónea',
+  'Cliente desiste de la compra',
+  'Cliente rechaza el producto',
+  'Producto dañado en el trayecto',
+  'Zona de difícil acceso',
+  '3 intentos agotados'
+];
+var _callbackMotivoPendiente = null;
+function pedirMotivo(estado, callback){
+  _callbackMotivoPendiente = callback;
+  var titulo = estado==='retorno' ? '¿Por qué se marca Retorno?'
+    : estado==='devuelto' ? '¿Por qué se Devuelve a ALAS?'
+    : '¿Por qué se marca Dañado?';
+  document.getElementById('modal-motivo-titulo').textContent = titulo;
+  var cont = document.getElementById('modal-motivo-opciones');
+  var html = '';
+  MOTIVOS_COMUNES.forEach(function(m){
+    html += '<button class="btn btn-outline" style="text-align:left;" onclick="elegirMotivo(\''+m.replace(/'/g,"\\'")+'\')">'+m+'</button>';
+  });
+  html += '<button class="btn btn-outline" style="text-align:left;" onclick="elegirMotivoLibre()">✏️ Otro (escribir)</button>';
+  html += '<button class="btn btn-outline" style="text-align:left;color:#94a3b8;" onclick="cerrarSelectorMotivo()">Sin motivo / cancelar</button>';
+  cont.innerHTML = html;
+  document.getElementById('modal-motivo-overlay').classList.add('open');
+}
+function elegirMotivo(m){
+  document.getElementById('modal-motivo-overlay').classList.remove('open');
+  var cb = _callbackMotivoPendiente; _callbackMotivoPendiente = null;
+  if(cb) cb(m);
+}
+function elegirMotivoLibre(){
+  document.getElementById('modal-motivo-overlay').classList.remove('open');
+  var texto = prompt('Escribe el motivo:') || '';
+  var cb = _callbackMotivoPendiente; _callbackMotivoPendiente = null;
+  if(cb) cb(texto);
+}
+function cerrarSelectorMotivo(){
+  document.getElementById('modal-motivo-overlay').classList.remove('open');
+  var cb = _callbackMotivoPendiente; _callbackMotivoPendiente = null;
+  if(cb) cb('');
+}
+
 var qrMultibultoActual = []; // todas las órdenes del mismo folio base
 
 function procesarQR(texto){
@@ -2803,8 +2786,8 @@ function procesarQR(texto){
   if(p){
     qrPaqueteActual = p;
     box.innerHTML='<div class="qr-result ok">✅ Orden encontrada: <strong>'+p.nombre+'</strong></div>';
-    var badgeClass = p.estado==='entregado'?'badge-verde':p.estado==='devuelto'?'badge-rojo':p.estado==='retorno'?'badge-naranja':p.estado==='daniado'?'badge-naranja':'badge-gris';
-    var badgeTxt = p.estado==='entregado'?'Entregado':p.estado==='devuelto'?'Devuelta a Alas':p.estado==='retorno'?'Retorno':p.estado==='daniado'?'Dañado':'Pendiente';
+    var badgeClass = estadoBadgeClass(p.estado);
+    var badgeTxt = estadoBadgeTexto(p.estado);
     var dir = (p.dir||'').trim();
     var dirMostrar = (dir.toLowerCase().indexOf('http') !== -1 || dir.length < 5) ? (p.comuna||'') : dir;
 
@@ -2834,8 +2817,8 @@ function procesarQR(texto){
       html += '<div style="font-size:0.72rem;color:#92400e;margin-top:4px;">Folio base: '+folioBase+'</div>';
       html += '<div style="margin-top:8px;">';
       qrMultibultoActual.forEach(function(x){
-        var bc = x.estado==='entregado'?'badge-verde':x.estado==='devuelto'?'badge-rojo':x.estado==='retorno'?'badge-naranja':x.estado==='daniado'?'badge-naranja':'badge-gris';
-        var bt = x.estado==='entregado'?'Entregado':x.estado==='devuelto'?'Devuelta a Alas':x.estado==='retorno'?'Retorno':x.estado==='daniado'?'Dañado':'Pendiente';
+        var bc = estadoBadgeClass(x.estado);
+        var bt = estadoBadgeTexto(x.estado);
         html += '<div style="font-size:0.75rem;margin-bottom:4px;">📦 '+(x.bulto||x.codigo)+' <span class="badge '+bc+'">'+bt+'</span></div>';
       });
       html += '</div>';
@@ -2874,11 +2857,15 @@ function limpiarQR(){
 
 function marcarTodoMultibulto(estado){
   if(!qrPaqueteActual) return;
-  var motivo = '';
-  if(requiereMotivo(estado)){
-    motivo = prompt('¿Por qué se marca '+tituloParaMotivo(estado)+'? (opcional, aplica a todos los bultos)') || '';
+  if(estado === 'retorno' || estado === 'devuelto' || estado === 'daniado'){
+    pedirMotivo(estado, function(motivoElegido){ marcarTodoMultibultoConMotivo(estado, motivoElegido); });
+  } else {
+    marcarTodoMultibultoConMotivo(estado, '');
   }
-  motivo = motivo.trim();
+}
+function marcarTodoMultibultoConMotivo(estado, motivo){
+  if(!qrPaqueteActual) return;
+  motivo = (motivo||'').trim();
   // Marcar la orden escaneada
   qrPaqueteActual.estado = estado;
   qrPaqueteActual.motivo = motivo;
@@ -2893,8 +2880,8 @@ function marcarTodoMultibulto(estado){
   });
   guardarStorage();
   actualizarResumen();
-  var textos={entregado:'✅ Todos los bultos marcados como entregados',retorno:'🔁 Todos los bultos marcados en retorno',devuelto:'📮 Todos los bultos marcados como devueltos a Alas'};
-  document.getElementById('qr-result-box').innerHTML='<div class="qr-result ok">'+(textos[estado]||estado)+'</div>';
+  var textos={entregado:'✅ Todos los bultos marcados como entregados',retorno:'🔄 Todos los bultos marcados como retorno',devuelto:'🚫 Todos los bultos marcados como devueltos a ALAS',daniado:'⚠️ Todos los bultos marcados como dañados'};
+  document.getElementById('qr-result-box').innerHTML='<div class="qr-result ok">'+textos[estado]+'</div>';
   document.getElementById('qr-paquete-card').style.display='none';
   document.getElementById('qr-multibulto-box').style.display='none';
   document.getElementById('qr-multibulto-acciones').style.display='none';
@@ -2903,14 +2890,18 @@ function marcarTodoMultibulto(estado){
 }
 function marcarDesdeQR(estado){
   if(!qrPaqueteActual) return;
-  var motivo = '';
-  if(requiereMotivo(estado)){
-    motivo = prompt('¿Por qué se marca '+tituloParaMotivo(estado)+'? (opcional)') || '';
+  if(estado === 'retorno' || estado === 'devuelto' || estado === 'daniado'){
+    pedirMotivo(estado, function(motivoElegido){ marcarDesdeQRConMotivo(estado, motivoElegido); });
+  } else {
+    marcarDesdeQRConMotivo(estado, '');
   }
-  motivo = motivo.trim();
+}
+function marcarDesdeQRConMotivo(estado, motivo){
+  if(!qrPaqueteActual) return;
+  motivo = (motivo||'').trim();
   var grupo = calcularGrupoMultibulto(qrPaqueteActual);
   if(grupo.length > 1){
-    alert('📦 Esta orden tiene '+grupo.length+' paquetes — se van a marcar TODOS como '+tituloParaMotivo(estado)+' juntos.');
+    alert('📦 Esta orden tiene '+grupo.length+' paquetes — se van a marcar TODOS como '+estado+' juntos.');
   }
   grupo.forEach(function(item){
     item.estado = estado;
@@ -2925,8 +2916,8 @@ function marcarDesdeQR(estado){
   }
   guardarStorage();
   actualizarResumen();
-  var textos={entregado:'✅ Marcado como entregado',retorno:'🔁 Marcado en retorno (a reintentar)',devuelto:'📮 Marcado como devuelto a Alas',daniado:'⚠️ Marcado como dañado'};
-  document.getElementById('qr-result-box').innerHTML='<div class="qr-result ok">'+(textos[estado]||estado)+': <strong>'+qrPaqueteActual.nombre+'</strong></div>';
+  var textos={entregado:'✅ Marcado como entregado',retorno:'🔄 Marcado como retorno',devuelto:'🚫 Marcado como devuelto a ALAS',daniado:'⚠️ Marcado como dañado'};
+  document.getElementById('qr-result-box').innerHTML='<div class="qr-result ok">'+textos[estado]+': <strong>'+qrPaqueteActual.nombre+'</strong></div>';
   document.getElementById('qr-paquete-card').style.display='none';
   document.getElementById('qr-multibulto-box').style.display='none';
   document.getElementById('qr-multibulto-acciones').style.display='none';
@@ -2996,8 +2987,8 @@ function actualizarCierre(){
   document.getElementById('resumen-cierre-box').innerHTML=
     '<div class="resumen-cierre-row"><span>Órdenes recibidas</span><strong>'+ordStatsCierre.total+'</strong></div>'+
     '<div class="resumen-cierre-row"><span>Órdenes entregadas</span><strong style="color:var(--verde)">'+ordStatsCierre.entregadas+'<span style="font-size:0.68rem;color:#94a3b8;font-weight:400;"> ('+paqEntregadosCierre+' paquete'+(paqEntregadosCierre===1?'':'s')+')</span></strong></div>'+
-    '<div class="resumen-cierre-row"><span>🔁 Retorno (a reintentar)</span><strong style="color:var(--naranja)">'+ordStatsCierre.retornos+'</strong></div>'+
-    '<div class="resumen-cierre-row"><span>📮 Devueltas a Alas</span><strong style="color:var(--rojo)">'+ordStatsCierre.devueltas+'</strong></div>'+
+    '<div class="resumen-cierre-row"><span>Retornos (a reintentar)</span><strong style="color:#b45309">'+ordStatsCierre.retornos+'</strong></div>'+
+    '<div class="resumen-cierre-row"><span>Devueltas a ALAS (definitivo)</span><strong style="color:var(--rojo)">'+ordStatsCierre.devueltas+'</strong></div>'+
     '<div class="resumen-cierre-row"><span>Dañadas</span><strong style="color:var(--naranja)">'+ordStatsCierre.daniadas+'</strong></div>'+
     '<div class="resumen-cierre-row"><span>Pendientes</span><strong style="color:var(--naranja)">'+ordStatsCierre.pendientes+'<span style="font-size:0.68rem;color:#94a3b8;font-weight:400;"> ('+paqPendientesCierre+' paquete'+(paqPendientesCierre===1?'':'s')+' por entregar)</span></strong></div>'+
     '<div class="resumen-cierre-row"><span>Efectividad del día</span><strong>'+ef+'%</strong></div>'+
@@ -3051,8 +3042,7 @@ function enviarWhatsApp(){
   var msg='*MUSPEL OPS — Cierre '+fecha+'*\n\n'+
     '📦 Órdenes recibidas: '+ordStatsWa.total+'\n'+
     '✅ Entregadas: '+ordStatsWa.entregadas+'\n'+
-    '🔁 Retorno (a reintentar): '+ordStatsWa.retornos+'\n'+
-    '📮 Devueltas a Alas: '+ordStatsWa.devueltas+'\n'+
+    '↩️ Devueltas: '+ordStatsWa.devueltas+'\n'+
     '⚠️ Dañadas: '+ordStatsWa.daniadas+'\n'+
     '📊 Efectividad día: '+ef+'%\n'+
     '📊 Efectividad mes: '+_efWa+'%';
@@ -3074,8 +3064,8 @@ function cerrarDia(){
 
   if(diaEnCompletar){
     // Estamos completando pendientes de un día YA cerrado: se actualiza ese mismo día,
-    // combinando lo que ya estaba (entregado/devuelto/retorno) con lo recién resuelto —
-    // no se crea un día nuevo ni se duplica nada en el Dashboard.
+    // combinando lo que ya estaba (entregado/devuelto) con lo recién resuelto — no se
+    // crea un día nuevo ni se duplica nada en el Dashboard.
     var idx = historial.findIndex(function(h){ return h.fecha === diaEnCompletar.fecha; });
     var diaOriginal = historial[idx];
     if(idx === -1 || !diaOriginal){
@@ -3089,8 +3079,8 @@ function cerrarDia(){
       return actualizado || p;
     });
     var ent=detalleActualizado.filter(function(p){return p.estado==='entregado';}).length;
-    var dev=detalleActualizado.filter(function(p){return p.estado==='devuelto';}).length;
     var ret=detalleActualizado.filter(function(p){return p.estado==='retorno';}).length;
+    var dev=detalleActualizado.filter(function(p){return p.estado==='devuelto';}).length;
     var dan=detalleActualizado.filter(function(p){return p.estado==='daniado';}).length;
     var pend=detalleActualizado.filter(function(p){return p.estado==='pendiente';}).length;
     var total=detalleActualizado.length;
@@ -3101,7 +3091,7 @@ function cerrarDia(){
     var _ingresoCierre = calcularIngresoOrdenes(detalleActualizado, _efCierre);
     var registroActualizado = {
       fecha: diaOriginal.fecha, ts: Date.now(),
-      total:total, entregados:ent, devueltos:dev, retornos:ret, daniados:dan, pendientes:pend,
+      total:total, entregados:ent, retornos:ret, devueltos:dev, daniados:dan, pendientes:pend,
       totalOrdenes:ordStats.total, entregadosOrdenes:ordStats.entregados,
       totalOrdenesNoWom:ordStatsNoWom.total, entregadosOrdenesNoWom:ordStatsNoWom.entregados,
       efectividad:total>0?Math.round(ent/total*100):0,
@@ -3111,13 +3101,8 @@ function cerrarDia(){
       detalle:detalleActualizado
     };
     historial[idx] = registroActualizado;
-    // NOTA: se agrega "retornos" al payload por si en algún momento se actualiza el
-    // Apps Script (Code.gs) para guardarlo como columna aparte en Cierres. Mientras eso
-    // no pase, este campo extra simplemente no se persiste ahí — pero el detalle por
-    // orden (con su estado retorno/devuelto correcto) SÍ queda bien guardado en
-    // DetalleHistorico vía "detalle_dia", que es lo que importa para no perder el dato.
     enviarASheets('cierre_dia', {
-      fecha:registroActualizado.fecha, total:total, entregados:ent, devueltos:dev, retornos:ret,
+      fecha:registroActualizado.fecha, total:total, entregados:ent, retornos:ret, devueltos:dev,
       daniados:dan, pendientes:pend, totalOrdenes:ordStats.total, entregadosOrdenes:ordStats.entregados,
       totalOrdenesNoWom:ordStatsNoWom.total, entregadosOrdenesNoWom:ordStatsNoWom.entregados,
       ingresoNoWom:_ingresoCierre.entregadasNoWom*_ingresoCierre.valorNoWom,
@@ -3131,13 +3116,13 @@ function cerrarDia(){
     paquetes=[];
     guardarStorage();
     actualizarResumen();
-    alert('✅ Día '+registroActualizado.fecha+' completado y actualizado — ahora con '+total+' paquetes contabilizados en total ('+ent+' entregados, '+ret+' en retorno, '+dev+' devueltos a Alas). El Dashboard queda al día, sin duplicar el día.');
+    alert('✅ Día '+registroActualizado.fecha+' completado y actualizado — ahora con '+total+' paquetes contabilizados en total ('+ent+' entregados). El Dashboard queda al día, sin duplicar el día.');
     return;
   }
 
   var ent=paquetes.filter(function(p){return p.estado==='entregado';}).length;
-  var dev=paquetes.filter(function(p){return p.estado==='devuelto';}).length;
   var ret=paquetes.filter(function(p){return p.estado==='retorno';}).length;
+  var dev=paquetes.filter(function(p){return p.estado==='devuelto';}).length;
   var dan=paquetes.filter(function(p){return p.estado==='daniado';}).length;
   var pend=paquetes.filter(function(p){return p.estado==='pendiente';}).length;
   var total=paquetes.length;
@@ -3163,7 +3148,7 @@ function cerrarDia(){
   var _ingresoCierre = calcularIngresoOrdenes(paquetes, _efCierre);
   var registroDia = {
     fecha:fecha, ts:Date.now(),
-    total:total, entregados:ent, devueltos:dev, retornos:ret, daniados:dan, pendientes:pend,
+    total:total, entregados:ent, retornos:ret, devueltos:dev, daniados:dan, pendientes:pend,
     totalOrdenes:ordStats.total, entregadosOrdenes:ordStats.entregados,
     totalOrdenesNoWom:ordStatsNoWom.total, entregadosOrdenesNoWom:ordStatsNoWom.entregados,
     efectividad:total>0?Math.round(ent/total*100):0,
@@ -3175,7 +3160,7 @@ function cerrarDia(){
   historial.push(registroDia);
   // se envía el cierre completo del día a Sheets (resumen en "Cierres", detalle completo en "DetalleHistorico")
   enviarASheets('cierre_dia', {
-    fecha:fecha, total:total, entregados:ent, devueltos:dev, retornos:ret,
+    fecha:fecha, total:total, entregados:ent, retornos:ret, devueltos:dev,
     daniados:dan, pendientes:pend, totalOrdenes:ordStats.total, entregadosOrdenes:ordStats.entregados,
     totalOrdenesNoWom:ordStatsNoWom.total, entregadosOrdenesNoWom:ordStatsNoWom.entregados,
     ingresoNoWom:_ingresoCierre.entregadasNoWom*_ingresoCierre.valorNoWom,
@@ -3188,7 +3173,7 @@ function cerrarDia(){
   paquetes=[];
   guardarStorage();
   actualizarResumen();
-  alert('✅ Día cerrado y guardado en el historial ('+ret+' en retorno para reintentar, '+dev+' devueltas a Alas). Google Sheets también quedó en 0, listo para mañana.');
+  alert('✅ Día cerrado y guardado en el historial. Google Sheets también quedó en 0, listo para mañana.');
 }
 
 // ════════════════════════════════════════
@@ -3242,11 +3227,6 @@ function descargarCierresDesdeSheets(callback){
         efectividadMesAlCierre: Number(row[9])||0,
         valorPorEntrega: Number(row[10])||0,
         ingresos: Number(row[11])||0,
-        // "retornos" no tiene columna dedicada en Cierres todavía (ver nota en la
-        // herramienta de reclasificación histórica) — queda en 0 para días leídos
-        // directo de Sheets hasta que se agregue esa columna en Code.gs. Si el registro
-        // ya existe localmente con su detalle completo, se conserva ese valor real más abajo.
-        retornos: 0,
         detalle: [], // el detalle por paquete no viaja en el resumen de Sheets
         sincronizadoDesdeNube: true
       };
@@ -3265,12 +3245,6 @@ function descargarCierresDesdeSheets(callback){
         if(!mismoDato){
           var detalleAConservar = (existente.detalle && existente.detalle.length>0) ? existente.detalle : nuevoRegistro.detalle;
           nuevoRegistro.detalle = detalleAConservar;
-          // Si hay detalle local real, recalcula retornos desde ahí (más preciso que Sheets)
-          if(detalleAConservar && detalleAConservar.length>0){
-            nuevoRegistro.retornos = detalleAConservar.filter(function(p){return p.estado==='retorno';}).length;
-          } else if(existente.retornos != null){
-            nuevoRegistro.retornos = existente.retornos;
-          }
           nuevoRegistro.sincronizadoDesdeNube = !(detalleAConservar && detalleAConservar.length>0);
           nuevoRegistro.ts = Math.max(tsNube, existente.ts||0); // conserva el ts más alto para no desordenar la lista
           historial[porFecha[fechaCierre]] = nuevoRegistro;
@@ -3306,7 +3280,7 @@ function actualizarDashboard(){
   historialDelMes.forEach(function(h){
     totalEntOrd += (h.entregadosOrdenes!=null ? h.entregadosOrdenes : h.entregados);
     totalRecOrd += (h.totalOrdenes!=null ? h.totalOrdenes : h.total);
-    totalDev += h.devueltos+(h.retornos||0)+h.daniados;
+    totalDev += h.devueltos+h.daniados;
     totalRecBultos += h.total;
   });
   var ef=totalRecOrd>0?Math.round(totalEntOrd/totalRecOrd*100):0;
@@ -3337,7 +3311,7 @@ function actualizarDashboard(){
   ultimos.forEach(function(h){
     html+='<div class="semana-row">';
     html+='<div><strong>'+formatoFechaLegible(h.fecha)+'</strong><div style="font-size:0.7rem;color:#64748b;">'+h.total+' paq · '+h.efectividad+'% ef</div></div>';
-    html+='<div style="text-align:right"><div style="color:var(--verde);font-weight:700;">$'+h.ingresos.toLocaleString('es-CL')+'</div><div style="font-size:0.7rem;color:var(--rojo);">'+h.devueltos+(h.retornos?' dev · '+h.retornos+' ret':' dev')+'</div></div>';
+    html+='<div style="text-align:right"><div style="color:var(--verde);font-weight:700;">$'+h.ingresos.toLocaleString('es-CL')+'</div><div style="font-size:0.7rem;color:var(--rojo);">'+h.devueltos+' dev</div></div>';
     html+='</div>';
   });
   lista.innerHTML=html;
@@ -3408,9 +3382,9 @@ function exportarReporteMensualAhora(){
   if(historialDelMes.length===0){alert('No hay días cerrados del mes actual todavía.');return;}
   var wb=XLSX.utils.book_new();
   // Hoja resumen
-  var resumen=[['Fecha','Recibidos (bultos)','Entregados (bultos)','Devueltos a Alas','Retorno','Dañados','Pendientes','Órdenes Totales','Órdenes Entregadas','Efectividad Día %','Efectividad Mes al Cierre %','Valor x Entrega (Neto)','Ingresos Neto $']];
+  var resumen=[['Fecha','Recibidos (bultos)','Entregados (bultos)','Devueltos','Dañados','Pendientes','Órdenes Totales','Órdenes Entregadas','Efectividad Día %','Efectividad Mes al Cierre %','Valor x Entrega (Neto)','Ingresos Neto $']];
   historialDelMes.forEach(function(h){
-    resumen.push([formatoFechaLegible(h.fecha),h.total,h.entregados,h.devueltos,(h.retornos||0),h.daniados,h.pendientes,
+    resumen.push([formatoFechaLegible(h.fecha),h.total,h.entregados,h.devueltos,h.daniados,h.pendientes,
       (h.totalOrdenes!=null?h.totalOrdenes:h.total),(h.entregadosOrdenes!=null?h.entregadosOrdenes:h.entregados),
       h.efectividad,(h.efectividadMesAlCierre!=null?h.efectividadMesAlCierre:''),(h.valorPorEntrega!=null?h.valorPorEntrega:TARIFA_BASE),h.ingresos]);
   });
@@ -3567,7 +3541,7 @@ function renderHistorial(){
   [].concat(historialUnicoPorFecha()).reverse().forEach(function(h){
     html+='<div class="hist-item">';
     html+='<div><div class="hist-fecha">'+formatoFechaLegible(h.fecha)+'</div>';
-    html+='<div class="hist-stats">'+h.total+' paq · ✅'+h.entregados+' · 🔁'+(h.retornos||0)+' · 📮'+h.devueltos+' · '+h.efectividad+'%</div></div>';
+    html+='<div class="hist-stats">'+h.total+' paq · ✅'+h.entregados+' · ↩️'+h.devueltos+' · '+h.efectividad+'%</div></div>';
     html+='<div style="text-align:right"><div style="font-weight:700;color:var(--verde);">$'+h.ingresos.toLocaleString('es-CL')+'</div>';
     html+='<button class="btn btn-outline btn-sm" style="margin-top:4px;" onclick="exportarDiaHistorial('+historial.indexOf(h)+')">Descargar</button></div>';
     html+='</div>';
@@ -3615,13 +3589,6 @@ function ajustarPosicionTabs(){
 window.addEventListener('resize', ajustarPosicionTabs);
 setTimeout(ajustarPosicionTabs, 50);
 setTimeout(ajustarPosicionTabs, 300); // por si el header cambia de alto tras cargar datos
-
-// Precarga el textarea de reclasificación aunque DOMContentLoaded ya haya pasado
-// (por si el script corre después del evento en algún navegador).
-(function precargarCodigosConfirmados(){
-  var ta = document.getElementById('codigos-devueltos-confirmados');
-  if(ta && !ta.value) ta.value = CODIGOS_DEVUELTOS_CONFIRMADOS_INICIAL.join('\n');
-})();
 
 aplicarPerfil();
 actualizarResumen();
