@@ -265,8 +265,8 @@
     <div style="font-size:0.68rem;color:#94a3b8;margin-top:4px;">Un multibulto es 1 orden con más de 1 paquete — todos sus paquetes se entregan juntos.</div>
   </div>
   <div class="stats-grid">
-    <div class="stat azul" onclick="abrirResumenDetalle('todos')" style="cursor:pointer;"><div class="stat-n" id="s-recibidos">0</div><div class="stat-label">Paquetes recibidos</div></div>
-    <div class="stat verde" onclick="abrirResumenDetalle('entregado')" style="cursor:pointer;"><div class="stat-n" id="s-entregados">0</div><div class="stat-label">Paquetes entregados</div><div style="font-size:0.68rem;color:#94a3b8;margin-top:2px;" id="s-entregados-ordenes"></div></div>
+    <div class="stat azul" onclick="abrirResumenDetalle('todos')" style="cursor:pointer;"><div class="stat-n" id="s-recibidos">0</div><div class="stat-label">Órdenes recibidas</div><div style="font-size:0.68rem;color:#94a3b8;margin-top:2px;" id="s-recibidos-paquetes"></div></div>
+    <div class="stat verde" onclick="abrirResumenDetalle('entregado')" style="cursor:pointer;"><div class="stat-n" id="s-entregados-ordenes">0</div><div class="stat-label">Órdenes entregadas</div><div style="font-size:0.68rem;color:#94a3b8;margin-top:2px;" id="s-entregados"></div></div>
     <div class="stat amarillo" onclick="abrirResumenDetalle('retorno')" style="cursor:pointer;"><div class="stat-n" id="s-retornos">0</div><div class="stat-label">Retornos (a reintentar)</div></div>
     <div class="stat rojo" onclick="abrirResumenDetalle('devuelto')" style="cursor:pointer;"><div class="stat-n" id="s-devueltos">0</div><div class="stat-label">Devueltos a ALAS</div></div>
     <div class="stat naranja" onclick="abrirResumenDetalle('pendiente')" style="cursor:pointer;"><div class="stat-n" id="s-pendientes">0</div><div class="stat-label">Órdenes pendientes</div><div style="font-size:0.68rem;color:#94a3b8;margin-top:2px;" id="s-pendientes-paquetes"></div></div>
@@ -1719,10 +1719,12 @@ function actualizarResumen(){
   if(elTO) elTO.textContent = ordStatsResumen.total;
   if(elTM) elTM.textContent = totalMultibultos;
   var ef = total > 0 ? Math.round(ent/total*100) : 0;
-  document.getElementById('s-recibidos').textContent = total;
-  document.getElementById('s-entregados').textContent = ent;
-  var elEO = document.getElementById('s-entregados-ordenes');
-  if(elEO) elEO.textContent = ordStatsPorEstado.entregadas + (ordStatsPorEstado.entregadas===1?' orden entregada':' órdenes entregadas');
+  document.getElementById('s-recibidos').textContent = ordStatsResumen.total;
+  var elRP = document.getElementById('s-recibidos-paquetes');
+  if(elRP) elRP.textContent = total + (total===1?' paquete recibido':' paquetes recibidos');
+  document.getElementById('s-entregados-ordenes').textContent = ordStatsPorEstado.entregadas;
+  var elEO = document.getElementById('s-entregados');
+  if(elEO) elEO.textContent = ent + (ent===1?' paquete entregado':' paquetes entregados');
   document.getElementById('s-retornos').textContent = retornos;
   document.getElementById('s-devueltos').textContent = dev;
   document.getElementById('s-pendientes').textContent = ordStatsPorEstado.pendientes;
