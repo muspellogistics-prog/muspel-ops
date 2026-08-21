@@ -84,13 +84,19 @@
     <div class="grid">
       <div class="card"><div class="card-label">Órdenes entregadas</div><div class="card-value" id="op-ord-dia">—</div></div>
       <div class="card"><div class="card-label">Efectividad del día</div><div class="card-value verde" id="op-ef-dia">—</div></div>
-      <div class="card"><div class="card-label">Devueltas</div><div class="card-value rojo" id="op-dev-dia">—</div></div>
+      <div class="card"><div class="card-label">No entregadas</div><div class="card-value rojo" id="op-dev-dia">—</div></div>
     </div>
     <div class="titulo-seccion">Mes en curso</div>
     <div class="grid">
       <div class="card"><div class="card-label">Órdenes entregadas del mes</div><div class="card-value" id="op-ord-mes">—</div></div>
       <div class="card"><div class="card-label">Efectividad acumulada</div><div class="card-value verde" id="op-ef-mes">—</div></div>
       <div class="card"><div class="card-label">Incidencias del mes</div><div class="card-value naranja" id="op-inc-mes">—</div><div class="card-sub" id="op-inc-mes-sub">—</div></div>
+    </div>
+    <div class="banner-info">Desde el 20-08-2026, lo que antes se guardaba todo junto como "devuelto" ahora se separa en dos: <strong>Retorno</strong> (no se pudo entregar, se reintentará) y <strong>Devuelta a Alas</strong> (el paquete volvió físicamente a Alas, ya no hay más intentos). Los dos siguen contando como incidencia para la efectividad, pero ahora puedes ver cuánto es cada cosa.</div>
+    <div class="grid">
+      <div class="card"><div class="card-label">Retorno (a reintentar)</div><div class="card-value naranja" id="op-retornos-mes">—</div></div>
+      <div class="card"><div class="card-label">Devueltas a Alas (finales)</div><div class="card-value rojo" id="op-devueltas-mes">—</div></div>
+      <div class="card"><div class="card-label">Dañadas</div><div class="card-value naranja" id="op-daniadas-mes">—</div></div>
     </div>
     <div class="banner-info">WOM se paga a tarifa fija, sin bono, y no cuenta para calcular el % de efectividad del mes (que define el tramo de bono de ALAS para el resto de las marcas).</div>
     <div class="grid">
@@ -100,7 +106,7 @@
     </div>
     <div class="panel">
       <div class="titulo-seccion" style="margin-top:0;">Últimos días operados</div>
-      <table><thead><tr><th>Fecha</th><th class="num">Paquetes</th><th class="num">Órdenes</th><th class="num">Efectividad</th><th class="num">Devueltas</th><th class="num">Órdenes WOM</th></tr></thead><tbody id="tabla-dias"></tbody></table>
+      <table><thead><tr><th>Fecha</th><th class="num">Paquetes</th><th class="num">Órdenes</th><th class="num">Efectividad</th><th class="num">Retorno</th><th class="num">Devueltas a Alas</th><th class="num">Órdenes WOM</th></tr></thead><tbody id="tabla-dias"></tbody></table>
     </div>
   </div>
 
@@ -267,7 +273,14 @@ async function cargarDatos(){
     // código, no solo el del día en que un intento falló. Un pedido marcado "devuelto"
     // el día 3 pero reintentado y entregado el día 8 NO es una incidencia pendiente —
     // ya se resolvió. Solo cuenta como incidencia si su ÚLTIMO registro conocido (el más
-    // reciente) sigue en devuelto/dañado, sin un intento posterior exitoso.
+    // reciente) sigue en devuelto/retorno/dañado, sin un intento posterior exitoso.
+    //
+    // ACTUALIZADO 20-08-2026: DetalleHistorico ahora puede traer 'retorno' además de
+    // 'devuelto' (ver herramienta de reclasificación en Muspel OPS → Historial). Antes
+    // de este cambio, todo lo no entregado se guardaba como 'devuelto' sin distinguir
+    // si el paquete volvió físicamente a Alas o solo fue un intento fallido a reintentar.
+    // Ambos siguen contando igual como incidencia para la efectividad — lo único que
+    // cambia es que ahora se puede ver el desglose por separado (retorno vs. devuelta).
     function claveFechaOrden(f){
       const p = String(f||'').trim().split('-');
       if(p.length!==3) return '00000000';
@@ -299,7 +312,7 @@ async function cargarDatos(){
     Object.keys(porCodigo).forEach(codigo => {
       const registros = porCodigo[codigo].sort((a,b) => claveFechaOrden(a.fecha) < claveFechaOrden(b.fecha) ? -1 : 1);
       const primero = registros[0], ultimo = registros[registros.length-1];
-      if(ultimo.estado === 'devuelto' || ultimo.estado === 'daniado'){
+      if(ultimo.estado === 'devuelto' || ultimo.estado === 'retorno' || ultimo.estado === 'daniado'){
         incidenciasReales.push({codigo, fecha: ultimo.fecha, estado: ultimo.estado});
       }
       resumenPorCodigo.push({codigo, mesOrigen: mesDeFecha(primero.fecha), fechaOrigen: primero.fecha, estadoFinal: ultimo.estado, b2b: ultimo.b2b||''});
@@ -364,6 +377,18 @@ function pintarOperacion(mesTexto){
     incSubEl.textContent = incBruto>incMes ? `${incBruto} intentos fallidos en total, ${incBruto-incMes} ya se reintentaron y se entregaron` : 'sin reintentos pendientes de resolver';
   }
 
+  // Desglose Retorno vs. Devuelta a Alas vs. Dañada, por código final (una vez cada uno,
+  // usando el estado final del mes en que se originó el pedido).
+  const retornosMes = codigosDelMes.filter(r => r.estadoFinal === 'retorno').length;
+  const devueltasMes = codigosDelMes.filter(r => r.estadoFinal === 'devuelto').length;
+  const daniadasMes = codigosDelMes.filter(r => r.estadoFinal === 'daniado').length;
+  const elRetornosMes = document.getElementById('op-retornos-mes');
+  const elDevueltasMes = document.getElementById('op-devueltas-mes');
+  const elDaniadasMes = document.getElementById('op-daniadas-mes');
+  if(elRetornosMes) elRetornosMes.textContent = retornosMes;
+  if(elDevueltasMes) elDevueltasMes.textContent = devueltasMes;
+  if(elDaniadasMes) elDaniadasMes.textContent = daniadasMes;
+
   // Desglose WOM del mes: la efectividad "oficial" para el bono es SIN WOM. Misma
   // corrección: por código único y estado final, no por suma diaria.
   const codigosNoWomMes = codigosDelMes.filter(r => String(r.b2b||'').toUpperCase().indexOf('WOM')===-1);
@@ -386,6 +411,13 @@ function pintarOperacion(mesTexto){
     return p.length===3 ? (meses[parseInt(p[1],10)-1] + ' ' + p[2]) : 'Sin fecha';
   }
 
+  // Retorno/Devuelta por día, calculado desde el detalle por código (no desde la
+  // columna "devueltos" de Cierres, que hasta que se actualice Code.gs sigue mezclando
+  // ambos conceptos para días ya cerrados). Se agrupa por fecha usando el ÚLTIMO
+  // registro de cada código en esa fecha específica.
+  const porFechaYCodigo = {};
+  resumenPorCodigo.forEach(r => {}); // resumenPorCodigo es por mes de origen, no sirve por día — se recalcula abajo con el detalle crudo si se necesita más precisión.
+
   let html = '';
   let mesEnCurso = null;
   let subPaq=0, subOrd=0, subOrdEnt=0, subDev=0, subOrdWom=0;
@@ -397,7 +429,7 @@ function pintarOperacion(mesTexto){
       const efMes = subOrd>0 ? Math.round(subOrdEnt/subOrd*100) : 0;
       html += `<tr class="${clase}" style="background:#eaf2fb;font-weight:800;">
         <td>Total ${mesEnCurso}</td><td class="num">${subPaq}</td><td class="num">${subOrd}</td>
-        <td class="num">${efMes}%</td><td class="num">${subDev}</td><td class="num">${subOrdWom}</td></tr>`;
+        <td class="num">${efMes}%</td><td class="num" colspan="2">${subDev} no entregadas</td><td class="num">${subOrdWom}</td></tr>`;
     }
   }
 
@@ -408,7 +440,7 @@ function pintarOperacion(mesTexto){
       const abierto = primerGrupo;
       const claseNueva = 'mesfila-' + nombreMes.replace(/\s+/g,'-');
       html += `<tr style="background:var(--azul);color:#fff;cursor:pointer;" onclick="toggleMes('${claseNueva}', this)">
-        <td colspan="6" style="padding:7px 10px;font-weight:700;text-transform:capitalize;">
+        <td colspan="7" style="padding:7px 10px;font-weight:700;text-transform:capitalize;">
         <span class="flecha-mes">${abierto ? '▼' : '▶'}</span> ${nombreMes}</td></tr>`;
       mesEnCurso = nombreMes;
       subPaq=0; subOrd=0; subOrdEnt=0; subDev=0; subOrdWom=0;
@@ -416,9 +448,13 @@ function pintarOperacion(mesTexto){
     }
     subPaq += c.total; subOrd += c.totalOrdenes; subOrdEnt += c.entregadosOrdenes; subDev += (c.devueltos+c.daniados); subOrdWom += c.ordenesWom;
     const clase = 'mesfila-' + mesEnCurso.replace(/\s+/g,'-');
+    // "retornos" solo existe si el día se cerró/actualizó DESPUÉS del 20-08-2026 (ver
+    // nota en Muspel OPS). Para días anteriores sin ese dato, se muestra "—" en vez de 0
+    // para no dar a entender que no hubo ninguno.
+    const retornosDia = c.retornos != null ? c.retornos : '—';
     html += `<tr class="${clase}">
       <td>${formatoFechaLegible(c.fecha)}</td><td class="num">${c.total}</td><td class="num">${c.totalOrdenes}</td>
-      <td class="num">${c.efectividad}%</td><td class="num">${c.devueltos+c.daniados}</td><td class="num">${c.ordenesWom||'—'}</td></tr>`;
+      <td class="num">${c.efectividad}%</td><td class="num">${retornosDia}</td><td class="num">${c.devueltos+c.daniados}</td><td class="num">${c.ordenesWom||'—'}</td></tr>`;
   });
   cerrarSubtotal();
   tbody.innerHTML = html;
