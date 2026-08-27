@@ -1852,13 +1852,12 @@ function showTab(name){
     descargarCierresDesdeSheets(function(n){ if(n>0) renderHistorial(); });
   }
   if(name==='dashboard'){
-    actualizarDashboard();
-    descargarCierresDesdeSheets(function(n){
-      // completarDetalleDesdeSheets trae el detalle por pedido de los días que solo
-      // tenían el resumen — necesario para que el desglose Retorno/Devuelta a Alas
-      // salga exacto en vez de aproximado.
-      completarDetalleDesdeSheets(function(){ actualizarDashboard(); });
-    });
+    actualizarDashboard(); // primero pinta con lo que haya (rápido, puede estar desactualizado)
+    descargarCierresDesdeSheets(); // trae Cierres para Ingresos y Últimos días operados
+    // Efectividad, Retorno, Devueltas a Alas e Incidencias del mes SIEMPRE se recalculan
+    // frescos desde DetalleHistorico (nunca desde el caché local) — así coinciden con
+    // Control de Gestión sin importar en qué equipo se corrió la reclasificación.
+    cargarResumenPorCodigo(function(){ actualizarDashboard(); });
   }
   if(name!=='qr' && qrActivo) detenerQR();
 }
@@ -3320,36 +3319,69 @@ function formatoFechaLegible(fechaStr){
   return s; // ya viene como DD-MM-AAAA u otro texto simple
 }
 
+// ════════════════════════════════════════
+// RESUMEN POR CÓDIGO — mismo método que Control de Gestión (27-08-2026)
+// Antes, este Dashboard sacaba la efectividad y el total de no entregadas SUMANDO
+// los totales de cada día en Cierres. Eso cuenta un mismo pedido reintentado en
+// MÁS DE UN DÍA varias veces, e inflaba el número — y además usaba la columna
+// "devueltos" de Cierres, que para los días cerrados ANTES del 22-08-2026 sigue
+// siendo el número viejo sin separar Retorno de Devuelta a Alas (Cierres solo
+// permite agregar filas, no reemplazarlas, así que "Reclasificar devoluciones
+// históricas" no la corrige — ver nota en esa herramienta, en Historial).
+// Control de Gestión, en cambio, siempre contó cada CÓDIGO una sola vez, según su
+// estado MÁS RECIENTE — el resultado final, no cada intento. Ahora este Dashboard
+// usa exactamente ese mismo método, leyendo SIEMPRE fresco desde DetalleHistorico
+// (nunca desde historial[].detalle cacheado en este navegador, que puede haber
+// quedado desactualizado si la reclasificación se corrió desde OTRO equipo).
+// Así los dos paneles muestran siempre el mismo número.
+// ════════════════════════════════════════
+var resumenPorCodigoOPS = [];
+function cargarResumenPorCodigo(callback){
+  fetch(SHEETS_URL + '?tipo=detalle_historico').then(function(r){ return r.json(); }).then(function(rows){
+    function claveFechaOrden(f){
+      var p = String(f||'').trim().split('-');
+      if(p.length!==3) return '00000000';
+      return p[2]+p[1].padStart(2,'0')+p[0].padStart(2,'0');
+    }
+    var porCodigo = {};
+    (rows||[]).slice(1).forEach(function(row){
+      var fecha = formatoFechaLegible(String(row[0]||'').trim());
+      var codigo = row[1];
+      var estado = row[7];
+      if(!codigo || !fecha) return;
+      if(!porCodigo[codigo]) porCodigo[codigo] = [];
+      porCodigo[codigo].push({fecha:fecha, estado:estado});
+    });
+    var resumen = [];
+    Object.keys(porCodigo).forEach(function(codigo){
+      var registros = porCodigo[codigo].sort(function(a,b){ return claveFechaOrden(a.fecha) < claveFechaOrden(b.fecha) ? -1 : 1; });
+      var primero = registros[0], ultimo = registros[registros.length-1];
+      resumen.push({codigo:codigo, fechaOrigen:primero.fecha, estadoFinal:ultimo.estado});
+    });
+    resumenPorCodigoOPS = resumen;
+    if(callback) callback();
+  }).catch(function(){ if(callback) callback(); });
+}
+
 function actualizarDashboard(){
   var historialDelMes = historialUnicoPorFecha().filter(function(h){ return perteneceAMesActual(h.fecha); });
-  var totalEntOrd=0, totalRecOrd=0, totalDev=0, totalRecBultos=0, dias=historialDelMes.length;
-  // Desglose Retorno vs. Devuelta a Alas: usa el detalle por pedido cuando está
-  // disponible (más preciso, cuenta cada estado real), y si no hay detalle para ese
-  // día (solo llegó el resumen de Sheets), usa los campos del resumen tal cual estén.
-  // Para días cerrados ANTES de esta corrección (20-08-2026) y que todavía no se hayan
-  // pasado por "Reclasificar devoluciones históricas", el número de "Devueltas a Alas"
-  // puede seguir incluyendo retornos mezclados — quedan marcados como "sin confirmar"
-  // en la nota de abajo para que quede claro cuáles números ya están limpios.
-  var totalRetornos=0, totalDevueltasAlas=0, diasSinReclasificar=0;
+  var totalEntOrd=0, totalRecOrd=0, dias=historialDelMes.length;
   historialDelMes.forEach(function(h){
     totalEntOrd += (h.entregadosOrdenes!=null ? h.entregadosOrdenes : h.entregados);
     totalRecOrd += (h.totalOrdenes!=null ? h.totalOrdenes : h.total);
-    totalDev += h.devueltos+(h.retornos||0)+h.daniados;
-    totalRecBultos += h.total;
-    if(h.detalle && h.detalle.length>0){
-      var tieneRetorno = h.detalle.some(function(p){return p.estado==='retorno';});
-      var tieneDevuelto = h.detalle.some(function(p){return p.estado==='devuelto';});
-      totalRetornos += h.detalle.filter(function(p){return p.estado==='retorno';}).length;
-      totalDevueltasAlas += h.detalle.filter(function(p){return p.estado==='devuelto';}).length;
-      if(tieneDevuelto && !tieneRetorno) diasSinReclasificar++; // pinta de "devuelto" sin ningún retorno: probable día viejo sin reclasificar
-    } else {
-      totalRetornos += (h.retornos||0);
-      totalDevueltasAlas += (h.devueltos||0);
-      if((h.devueltos||0)>0 && !h.retornos) diasSinReclasificar++;
-    }
   });
-  var ef=totalRecOrd>0?Math.round(totalEntOrd/totalRecOrd*100):0;
-  var tasaDev=totalRecBultos>0?Math.round(totalDev/totalRecBultos*100):0;
+  // Efectividad, Retorno, Devueltas a Alas e Incidencias: por código único y estado
+  // final (ver cargarResumenPorCodigo arriba) — el mismo método que usa Control de
+  // Gestión, para que los dos paneles coincidan siempre.
+  var codigosDelMesOPS = resumenPorCodigoOPS.filter(function(r){ return perteneceAMesActual(r.fechaOrigen); });
+  var totalOrdMesOPS = codigosDelMesOPS.length;
+  var ordMesOPS = codigosDelMesOPS.filter(function(r){return r.estadoFinal==='entregado';}).length;
+  var retornosMesOPS = codigosDelMesOPS.filter(function(r){return r.estadoFinal==='retorno';}).length;
+  var devueltasMesOPS = codigosDelMesOPS.filter(function(r){return r.estadoFinal==='devuelto';}).length;
+  var daniadasMesOPS = codigosDelMesOPS.filter(function(r){return r.estadoFinal==='daniado';}).length;
+  var ef = totalOrdMesOPS>0 ? Math.round(ordMesOPS/totalOrdMesOPS*100) : 0;
+  var totalDev = retornosMesOPS+devueltasMesOPS+daniadasMesOPS;
+  var tasaDev = totalOrdMesOPS>0 ? Math.round(totalDev/totalOrdMesOPS*100) : 0;
   var valorEntregaDash=valorPorEntregaNeto(ef);
   var ingresoNetoDash=totalEntOrd*valorEntregaDash;
   var ingresoConIvaDash=Math.round(ingresoNetoDash*(1+IVA_TASA));
@@ -3360,13 +3392,13 @@ function actualizarDashboard(){
   document.getElementById('d-devoluciones').textContent=totalDev;
   var elRetMes = document.getElementById('d-retornos-mes');
   var elDevMes = document.getElementById('d-devueltas-mes');
-  if(elRetMes) elRetMes.textContent = totalRetornos;
-  if(elDevMes) elDevMes.textContent = totalDevueltasAlas;
+  if(elRetMes) elRetMes.textContent = retornosMesOPS;
+  if(elDevMes) elDevMes.textContent = devueltasMesOPS;
   var elNota = document.getElementById('d-devoluciones-nota');
   if(elNota){
-    elNota.textContent = diasSinReclasificar>0
-      ? '⚠️ '+diasSinReclasificar+' día(s) de este mes todavía no pasaron por "Reclasificar devoluciones históricas" (en Historial) — su número de "Devuelta a Alas" puede incluir retornos sin separar.'
-      : '';
+    elNota.textContent = resumenPorCodigoOPS.length===0
+      ? '🔄 Cargando desde Sheets...'
+      : 'Mismo método que Control de Gestión: cada pedido cuenta una sola vez, según su estado más reciente.';
   }
   var rangoTxt, bonoNum=calcularBonoEfectividad(ef);
   if(ef>=97) rangoTxt='≥97% efectividad → $'+TARIFA_BASE.toLocaleString('es-CL')+' + $230 bono';
