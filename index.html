@@ -519,6 +519,39 @@
 <!-- TAB: HISTORIAL -->
 <!-- ══════════════════════════════════════════ -->
 <div class="content" id="tab-historial">
+  <div class="card" style="border:1.5px solid var(--azul2);">
+    <div class="card-title">📥 Registrar retiro (respaldo del manifiesto de Alas)</div>
+    <div style="font-size:0.78rem;color:#64748b;margin-bottom:10px;">Cada retiro trae un "Informe de Recepción" desde la web de Alas (folio, N° de bulto, estado). Guarda acá los totales y el detalle como respaldo — todavía no calcula cobro, eso se agrega cuando llegue el anexo de tarifas.</div>
+    <label class="form-label">Fecha del retiro</label>
+    <input class="form-input" id="retiro-fecha" type="text" placeholder="DD-MM-AAAA" style="margin-bottom:8px;">
+    <label class="form-label">Marca / empresa (ej. Flapp)</label>
+    <input class="form-input" id="retiro-marca" type="text" style="margin-bottom:8px;">
+    <div style="display:flex;gap:8px;margin-bottom:8px;">
+      <div style="flex:1;">
+        <label class="form-label">Total aceptados</label>
+        <input class="form-input" id="retiro-aceptados" type="number" value="0">
+      </div>
+      <div style="flex:1;">
+        <label class="form-label">Total dañados</label>
+        <input class="form-input" id="retiro-daniados" type="number" value="0">
+      </div>
+      <div style="flex:1;">
+        <label class="form-label">Total no existe</label>
+        <input class="form-input" id="retiro-noexiste" type="number" value="0">
+      </div>
+    </div>
+    <label class="form-label">Detalle (pega aquí las filas del informe: N° orden, N° bulto, estado)</label>
+    <textarea class="form-input" id="retiro-detalle" rows="6" style="font-family:monospace;font-size:0.72rem;margin-bottom:8px;" placeholder="3017528-FRO#177129 · bulto 1 · Aceptado&#10;3017551-FRO#177131 · bulto 1 · Aceptado&#10;..."></textarea>
+    <label class="form-label">Nota (opcional)</label>
+    <input class="form-input" id="retiro-nota" type="text" style="margin-bottom:10px;">
+    <button class="btn btn-primary" onclick="guardarRetiro()">📥 Guardar retiro</button>
+    <div id="retiro-status" style="margin-top:8px;font-size:0.8rem;color:#64748b;"></div>
+  </div>
+  <div class="card">
+    <div class="card-title">📋 Retiros guardados</div>
+    <button class="btn btn-outline" onclick="cargarListaRetiros()" style="margin-bottom:10px;">🔄 Actualizar lista</button>
+    <div id="lista-retiros"><div class="alerta alerta-info">Toca "Actualizar lista" para cargar los retiros guardados.</div></div>
+  </div>
   <div class="card">
     <div class="card-title">🗂 Días cerrados</div>
     <div id="lista-historial"></div>
@@ -1073,6 +1106,70 @@ function reenviarHistorialCompleto(){
 // del Dashboard seguirán sin este ajuste (esos se calculan por código individual).
 // Solo corrige paquetes/órdenes/$ a cobrar, que es lo que se veía descuadrado.
 // ════════════════════════════════════════
+// ════════════════════════════════════════
+// RETIROS — RESPALDO DE MANIFIESTOS DE ALAS — 03-09-2026
+// Guarda el respaldo de cada retiro (Informe de Recepción que entrega la web de Alas)
+// en la hoja "Retiros" de Sheets. Por ahora solo guarda el respaldo — el cálculo de
+// cobro se agrega cuando llegue el anexo de tarifas de retiros.
+// ════════════════════════════════════════
+function guardarRetiro(){
+  var fecha = document.getElementById('retiro-fecha').value.trim();
+  var marca = document.getElementById('retiro-marca').value.trim();
+  var aceptados = Number(document.getElementById('retiro-aceptados').value) || 0;
+  var daniados = Number(document.getElementById('retiro-daniados').value) || 0;
+  var noExiste = Number(document.getElementById('retiro-noexiste').value) || 0;
+  var detalle = document.getElementById('retiro-detalle').value.trim();
+  var nota = document.getElementById('retiro-nota').value.trim();
+  var status = document.getElementById('retiro-status');
+
+  if(!/^\d{2}-\d{2}-\d{4}$/.test(fecha)){ alert('La fecha debe ir en formato DD-MM-AAAA.'); return; }
+  if(!marca){ alert('Ingresa la marca/empresa del retiro.'); return; }
+
+  enviarASheets('retiro_nuevo', {
+    fecha: fecha, marca: marca,
+    totalAceptados: aceptados, totalDaniados: daniados, totalNoExiste: noExiste,
+    detalle: detalle, nota: nota
+  });
+
+  status.style.color = 'var(--verde)';
+  status.textContent = '✅ Retiro guardado como respaldo ('+aceptados+' aceptados, '+daniados+' dañados, '+noExiste+' no existe).';
+  document.getElementById('retiro-fecha').value='';
+  document.getElementById('retiro-marca').value='';
+  document.getElementById('retiro-aceptados').value='0';
+  document.getElementById('retiro-daniados').value='0';
+  document.getElementById('retiro-noexiste').value='0';
+  document.getElementById('retiro-detalle').value='';
+  document.getElementById('retiro-nota').value='';
+  cargarListaRetiros();
+}
+
+function cargarListaRetiros(){
+  var lista = document.getElementById('lista-retiros');
+  lista.innerHTML = '<div class="alerta alerta-info">🔄 Cargando...</div>';
+  fetch(SHEETS_URL + '?tipo=retiros').then(function(r){ return r.json(); }).then(function(rows){
+    var datos = (rows||[]).slice(1); // fila 0 es encabezado
+    if(datos.length === 0){
+      lista.innerHTML = '<div class="alerta alerta-info">Aún no hay retiros guardados.</div>';
+      return;
+    }
+    // Más recientes primero
+    datos.reverse();
+    var html = '';
+    datos.forEach(function(row){
+      var fecha=row[0], marca=row[1], aceptados=row[2], daniados=row[3], noExiste=row[4], detalle=row[5], nota=row[6];
+      html += '<div style="background:var(--blanco);border:1px solid var(--borde);border-radius:8px;padding:10px 12px;margin-bottom:8px;">';
+      html += '<div style="font-weight:700;font-size:0.85rem;">'+fecha+' · '+marca+'</div>';
+      html += '<div style="font-size:0.75rem;color:#64748b;margin-top:2px;">✅ '+aceptados+' aceptados · ⚠️ '+daniados+' dañados · ❌ '+noExiste+' no existe</div>';
+      if(nota) html += '<div style="font-size:0.72rem;color:#64748b;margin-top:4px;">📝 '+nota+'</div>';
+      if(detalle) html += '<details style="margin-top:6px;"><summary style="font-size:0.72rem;color:var(--azul2);cursor:pointer;">Ver detalle</summary><div style="font-size:0.68rem;font-family:monospace;white-space:pre-wrap;margin-top:4px;color:#334155;">'+detalle+'</div></details>';
+      html += '</div>';
+    });
+    lista.innerHTML = html;
+  }).catch(function(){
+    lista.innerHTML = '<div class="alerta alerta-info" style="color:var(--rojo);">⚠️ No se pudo cargar. Revisa tu conexión.</div>';
+  });
+}
+
 function agregarAjusteManual(){
   var fecha = document.getElementById('ajuste-fecha').value.trim();
   var paquetes = Number(document.getElementById('ajuste-paquetes').value) || 0;
