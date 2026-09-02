@@ -542,6 +542,22 @@
     <button class="btn btn-naranja" onclick="reclasificarDevolucionesHistoricas()">🔁 Reclasificar historial ahora</button>
     <div id="reclasificar-status" style="margin-top:8px;font-size:0.8rem;color:#64748b;"></div>
   </div>
+  <div class="card" style="border:1.5px solid var(--azul2);">
+    <div class="card-title">🧩 Ajuste manual de un día sin detalle por orden</div>
+    <div style="font-size:0.78rem;color:#64748b;margin-bottom:10px;">Para días operados que nunca quedaron cargados en OPS (ej. julio 27-28, respaldados solo por guías de despacho), pero de los que SÍ sabes el total real según la liquidación de Alas. Esto agrega un "día cerrado" con esos totales, para que el Dashboard y la tabla de facturación cuadren con lo ya facturado — sin inventar órdenes individuales que no existen.</div>
+    <label class="form-label">Fecha (o la primera fecha del rango, si es más de un día junto)</label>
+    <input class="form-input" id="ajuste-fecha" type="text" placeholder="DD-MM-AAAA" style="margin-bottom:8px;">
+    <label class="form-label">Paquetes entregados</label>
+    <input class="form-input" id="ajuste-paquetes" type="number" style="margin-bottom:8px;">
+    <label class="form-label">Órdenes entregadas (lo que paga Alas — multibulto cuenta 1 vez)</label>
+    <input class="form-input" id="ajuste-ordenes" type="number" style="margin-bottom:8px;">
+    <label class="form-label">Ingreso neto de ese ajuste ($, sin IVA)</label>
+    <input class="form-input" id="ajuste-ingreso" type="number" style="margin-bottom:8px;">
+    <label class="form-label">Nota (ej. "guías 33974/33707, sin detalle por orden")</label>
+    <input class="form-input" id="ajuste-nota" type="text" style="margin-bottom:10px;">
+    <button class="btn btn-primary" onclick="agregarAjusteManual()">🧩 Agregar ajuste al historial</button>
+    <div id="ajuste-status" style="margin-top:8px;font-size:0.8rem;color:#64748b;"></div>
+  </div>
   <div class="card">
     <div class="card-title">🗑 Vaciar órdenes actuales (sin cerrar)</div>
     <div style="font-size:0.78rem;color:#64748b;margin-bottom:10px;">Borra las órdenes que están cargadas ahora mismo en el teléfono (ej. datos de prueba), sin guardarlas en el historial ni afectar días ya cerrados. Úsalo antes de empezar a operar de verdad.</div>
@@ -1041,6 +1057,63 @@ function reenviarHistorialCompleto(){
     enviarASheets('detalle_dia', { fecha:h.fecha, paquetes:h.detalle||[] });
   });
   alert('✅ '+historial.length+' día(s) puestos en la cola de envío a DetalleHistorico. Revisa el indicador de sincronización abajo hasta que diga "☁️ Sincronizado".\n\n¿La hoja Cierres también tiene datos incompletos o duplicados? Avísame y lo revisamos aparte.');
+}
+
+// ════════════════════════════════════════
+// AJUSTE MANUAL DE UN DÍA SIN DETALLE POR ORDEN — 02-09-2026
+// Para días operados de verdad (ej. julio 27-28, con guías de despacho firmadas como
+// respaldo) que nunca quedaron cargados orden por orden en OPS. En vez de inventar
+// órdenes individuales que no existen, esto agrega un registro agregado directo a la
+// hoja "Cierres" (mismo mecanismo que un cierre de día normal), usando los totales
+// reales que ya se cruzaron contra la liquidación de Alas. Así el Dashboard y la
+// tabla de facturación cuadran con lo ya facturado.
+//
+// LIMITACIÓN CONOCIDA: como no hay detalle por orden, esto NO alimenta
+// DetalleHistorico — así que la efectividad% y el desglose retorno/devuelta B2C/B2B
+// del Dashboard seguirán sin este ajuste (esos se calculan por código individual).
+// Solo corrige paquetes/órdenes/$ a cobrar, que es lo que se veía descuadrado.
+// ════════════════════════════════════════
+function agregarAjusteManual(){
+  var fecha = document.getElementById('ajuste-fecha').value.trim();
+  var paquetes = Number(document.getElementById('ajuste-paquetes').value) || 0;
+  var ordenes = Number(document.getElementById('ajuste-ordenes').value) || 0;
+  var ingreso = Number(document.getElementById('ajuste-ingreso').value) || 0;
+  var nota = document.getElementById('ajuste-nota').value.trim();
+  var status = document.getElementById('ajuste-status');
+
+  if(!/^\d{2}-\d{2}-\d{4}$/.test(fecha)){ alert('La fecha debe ir en formato DD-MM-AAAA.'); return; }
+  if(ordenes<=0 || ingreso<=0){ alert('Ingresa al menos las órdenes entregadas y el ingreso neto.'); return; }
+  if(!confirm('Vas a agregar un día "'+fecha+'" con '+paquetes+' paquetes, '+ordenes+' órdenes y $'+ingreso.toLocaleString('es-CL')+' neto ($'+Math.round(ingreso*(1+IVA_TASA)).toLocaleString('es-CL')+' con IVA).\n\nEsto se suma como un cierre más — no reemplaza ni borra ningún día ya cargado.\n\n¿Confirmar?')) return;
+
+  var valorPorEntrega = Math.round(ingreso/ordenes);
+  var registro = {
+    fecha: fecha, total: paquetes, entregados: paquetes, devueltos: 0, daniados: 0, pendientes: 0,
+    totalOrdenes: ordenes, entregadosOrdenes: ordenes,
+    efectividad: 100, efectividadMesAlCierre: 100,
+    valorPorEntrega: valorPorEntrega, ingresos: ingreso,
+    totalOrdenesNoWom: ordenes, entregadosOrdenesNoWom: ordenes, retornos: 0
+  };
+  enviarASheets('cierre_dia', registro);
+
+  // También lo agrega al historial local, para que se vea de inmediato en la tabla
+  // de facturación sin esperar a que sincronice con Sheets.
+  historial.push({
+    fecha: fecha, total: paquetes, entregados: paquetes, devueltos: 0, daniados: 0, pendientes: 0,
+    totalOrdenes: ordenes, entregadosOrdenes: ordenes, efectividad: 100, efectividadMesAlCierre: 100,
+    valorPorEntrega: valorPorEntrega, ingresos: ingreso, ts: Date.now(), retornos: 0,
+    detalle: [], sincronizadoDesdeNube: false, esAjusteManual: true, notaAjuste: nota
+  });
+  guardarStorage();
+  actualizarDashboard();
+  renderHistorial();
+
+  status.style.color = 'var(--verde)';
+  status.innerHTML = '✅ Ajuste agregado para '+fecha+'. Recuerda: esto NO tiene detalle por orden, así que la efectividad% y el desglose B2C/B2B del Dashboard no lo incluyen — solo la tabla de paquetes/órdenes/$ a cobrar.';
+  document.getElementById('ajuste-fecha').value='';
+  document.getElementById('ajuste-paquetes').value='';
+  document.getElementById('ajuste-ordenes').value='';
+  document.getElementById('ajuste-ingreso').value='';
+  document.getElementById('ajuste-nota').value='';
 }
 
 // ════════════════════════════════════════
