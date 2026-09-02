@@ -2903,20 +2903,31 @@ function renderComunasDeTipo(items, diaSemana, tipo){
     gruposReales.forEach(function(grupo, gi){
       grupo.forEach(function(p){ claveGrupoDePaquete[p.id] = gi; });
     });
-    // CORREGIDO: antes se recorría g.items en su orden original, así que los bultos de
+    // CORREGIDO (1): antes se recorría g.items en su orden original, así que los bultos de
     // un mismo multibulto podían quedar SEPARADOS en la lista (ej. bulto 1 acá, bulto 2
     // más abajo), y el pedido que quedaba justo después del aviso "MULTIBULTO" — sin ser
     // parte de ese grupo — parecía visualmente ser el segundo bulto. Ahora se arma primero
-    // el orden de despliegue agrupando cada multibulto COMPLETO y contiguo, respetando el
-    // orden de primera aparición de cada grupo.
-    var ordenParaMostrar = [];
-    var gruposYaAgregados = {};
+    // el orden de despliegue agrupando cada multibulto COMPLETO y contiguo.
+    // CORREGIDO (2): antes esos grupos quedaban en el orden en que aparecían en el Excel
+    // (que no sigue la numeración de Circuit/Spoke dentro de una misma comuna), así que
+    // dentro de una comuna se veían saltos tipo 27, 28, 46, 47... Ahora los grupos se
+    // ordenan por su Nº de ruta (el menor Nº entre sus bultos), para que dentro de cada
+    // comuna las tarjetas queden correlativas según la ruta real.
+    var gruposDeEstaComuna = [];
+    var gruposVistos = {};
     g.items.forEach(function(p){
       var gi = claveGrupoDePaquete[p.id];
-      if(gruposYaAgregados[gi]) return;
-      gruposYaAgregados[gi] = true;
-      gruposReales[gi].forEach(function(miembro){ ordenParaMostrar.push(miembro); });
+      if(gruposVistos[gi]) return;
+      gruposVistos[gi] = true;
+      gruposDeEstaComuna.push(gruposReales[gi]);
     });
+    function numRutaRepresentativo(grupo){
+      var nums = grupo.map(function(x){ return x.numRuta; }).filter(function(n){ return n!==null && n!==undefined && !isNaN(n); });
+      return nums.length ? Math.min.apply(null, nums) : Infinity; // sin Nº: al final
+    }
+    gruposDeEstaComuna.sort(function(ga, gb){ return numRutaRepresentativo(ga) - numRutaRepresentativo(gb); });
+    var ordenParaMostrar = [];
+    gruposDeEstaComuna.forEach(function(grupo){ grupo.forEach(function(miembro){ ordenParaMostrar.push(miembro); }); });
     var yaMostrado = {};
     ordenParaMostrar.forEach(function(p){
       var gi = claveGrupoDePaquete[p.id];
