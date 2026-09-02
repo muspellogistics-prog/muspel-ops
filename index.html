@@ -1668,8 +1668,8 @@ function abrirModal(id){
     document.getElementById('modal-totalpaquetes').textContent = grupo.length + ' paquetes (multibulto)';
     totalPaqRow.style.display = 'flex';
     var estadoIcono = {entregado:'✅',devuelto:'📮',retorno:'🔁',daniado:'⚠️',pendiente:'⏳'};
-    desgloseDiv.innerHTML = grupo.map(function(x){
-      return (estadoIcono[x.estado]||'⏳')+' '+(x.codigo||'')+(x.folio?' · folio '+x.folio:'');
+    desgloseDiv.innerHTML = grupo.map(function(x, i){
+      return '<strong>'+(i+1)+'.</strong> '+(estadoIcono[x.estado]||'⏳')+' '+(x.codigo||'')+(x.folio?' · folio '+x.folio:'');
     }).join('<br>');
   } else {
     totalPaqRow.style.display = 'none';
@@ -2876,8 +2876,22 @@ function renderComunasDeTipo(items, diaSemana){
     gruposReales.forEach(function(grupo, gi){
       grupo.forEach(function(p){ claveGrupoDePaquete[p.id] = gi; });
     });
-    var yaMostrado = {};
+    // CORREGIDO: antes se recorría g.items en su orden original, así que los bultos de
+    // un mismo multibulto podían quedar SEPARADOS en la lista (ej. bulto 1 acá, bulto 2
+    // más abajo), y el pedido que quedaba justo después del aviso "MULTIBULTO" — sin ser
+    // parte de ese grupo — parecía visualmente ser el segundo bulto. Ahora se arma primero
+    // el orden de despliegue agrupando cada multibulto COMPLETO y contiguo, respetando el
+    // orden de primera aparición de cada grupo.
+    var ordenParaMostrar = [];
+    var gruposYaAgregados = {};
     g.items.forEach(function(p){
+      var gi = claveGrupoDePaquete[p.id];
+      if(gruposYaAgregados[gi]) return;
+      gruposYaAgregados[gi] = true;
+      gruposReales[gi].forEach(function(miembro){ ordenParaMostrar.push(miembro); });
+    });
+    var yaMostrado = {};
+    ordenParaMostrar.forEach(function(p){
       var gi = claveGrupoDePaquete[p.id];
       var grupo = gruposReales[gi];
       var esMultibulto = grupo.length > 1;
@@ -2885,6 +2899,10 @@ function renderComunasDeTipo(items, diaSemana){
         html+='<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:6px 10px;margin-bottom:4px;font-size:0.72rem;font-weight:700;color:#92400e;">📦 MULTIBULTO — '+grupo.length+' bultos del mismo pedido</div>';
         yaMostrado[gi] = true;
       }
+      // Número de bulto dentro de su grupo (1 de 3, 2 de 3...) — para distinguir tarjetas
+      // que se ven idénticas (mismo nombre, mismo folio, mismo código) cuando son varios
+      // bultos del mismo pedido.
+      var numeroBulto = esMultibulto ? (grupo.indexOf(p)+1) : null;
       var badgeClass = p.estado==='entregado'?'badge-verde':p.estado==='devuelto'?'badge-rojo':p.estado==='retorno'?'badge-naranja':p.estado==='daniado'?'badge-naranja':'badge-gris';
       var badgeTxt = p.estado==='entregado'?'Entregado':p.estado==='devuelto'?textoBadgeDevuelto(p):p.estado==='retorno'?'Retorno':p.estado==='daniado'?'Dañado':'Pendiente';
 
@@ -2897,6 +2915,7 @@ function renderComunasDeTipo(items, diaSemana){
 
       html+='<div class="paquete-item '+p.estado+'" id="pi-'+p.id+'" onclick="abrirModal('+p.id+')" style="cursor:pointer;'+(esMultibulto?'border-left:3px solid #f59e0b;':'')+(p.estado!=='pendiente'?'':'')+'">'; 
       html+='<div class="paquete-info">';
+      if(numeroBulto) html+='<div style="font-size:0.68rem;font-weight:700;color:#92400e;">📦 Bulto '+numeroBulto+' de '+grupo.length+'</div>';
       if(p.repetidoDeHistorial){
         var txtIntento = p.intentosAgotados
           ? '🚫 INTENTO '+p.intentos+'/3 — YA AGOTÓ los intentos del mes, revisar con Alas'
