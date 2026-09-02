@@ -2913,8 +2913,11 @@ function renderComunasDeTipo(items, diaSemana){
         dirMostrar = (p.comuna||'').trim() ? '📍 Ver detalle — '+p.comuna.trim() : '(sin dirección — tocar para ver)';
       }
 
-      html+='<div class="paquete-item '+p.estado+'" id="pi-'+p.id+'" onclick="abrirModal('+p.id+')" style="cursor:pointer;'+(esMultibulto?'border-left:3px solid #f59e0b;':'')+(p.estado!=='pendiente'?'':'')+'">'; 
-      html+='<div class="paquete-info">';
+      html+='<div class="paquete-item '+p.estado+'" id="pi-'+p.id+'" onclick="abrirModal('+p.id+')" style="cursor:pointer;display:flex;align-items:flex-start;gap:10px;'+(esMultibulto?'border-left:3px solid #f59e0b;':'')+(p.estado!=='pendiente'?'':'')+'">'; 
+      if(p.numRuta !== null && p.numRuta !== undefined && !isNaN(p.numRuta)){
+        html+='<div style="flex-shrink:0;background:var(--azul);color:#fff;border-radius:8px;min-width:38px;height:38px;display:flex;align-items:center;justify-content:center;font-size:1.15rem;font-weight:800;">'+p.numRuta+'</div>';
+      }
+      html+='<div class="paquete-info" style="flex:1;min-width:0;">';
       if(numeroBulto) html+='<div style="font-size:0.68rem;font-weight:700;color:#92400e;">📦 Bulto '+numeroBulto+' de '+grupo.length+'</div>';
       if(p.repetidoDeHistorial){
         var txtIntento = p.intentosAgotados
