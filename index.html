@@ -2793,64 +2793,20 @@ function renderPaquetes(){
   var lista = document.getElementById('lista-paquetes');
   var filtered = filtroActual==='todos' ? paquetes : paquetes.filter(function(p){return p.estado===filtroActual;});
   if(filtered.length===0){lista.innerHTML='<div class="alerta alerta-info">No hay órdenes en este filtro.</div>';return;}
-  // agrupar por tipo (J05 Principal / J06 Ramal) y dentro de eso por comuna
-  var gruposTipo = {};
-  filtered.forEach(function(p){
-    var tipo = p.tipo||'Principal';
-    var key = tipo.toLowerCase();
-    if(!gruposTipo[key]) gruposTipo[key] = {tipo:tipo, items:[]};
-    gruposTipo[key].items.push(p);
-  });
-  var keysTipo = Object.keys(gruposTipo).sort(function(a,b){
-    if(a==='principal'&&b!=='principal') return -1;
-    if(a!=='principal'&&b==='principal') return 1;
-    return a.localeCompare(b);
-  });
-
-  var htmlFinal = '';
+  // CORREGIDO 03-09-2026: antes esto separaba en dos secciones grandes, Principal (J05)
+  // y Ramal (J06), cada una con su propio desplegable. Eso rompía el orden correlativo
+  // real de la ruta (Circuit numera J05 y J06 mezclados en un solo recorrido, ej. Osorno
+  // 1-28, Ramal 29-45, Osorno de nuevo 46-70) — con las dos secciones separadas, dentro de
+  // "Principal" se veía un salto de 28 a 46 porque el 29-45 estaba en la OTRA sección. A
+  // pedido de Kathy, ahora es una sola lista continua ordenada de punta a punta; J05/J06
+  // queda como una etiqueta chica en cada tarjeta en vez de una sección aparte.
   var diaSemana = new Date().getDay();
-
-  keysTipo.forEach(function(keyTipo){
-    var gTipo = gruposTipo[keyTipo];
-    var totalTipo = gTipo.items.length;
-    var pendientesTipo = gTipo.items.filter(function(p){ return p.estado==='pendiente'; }).length;
-    var hayPendientes = pendientesTipo > 0;
-
-    // Estado inicial de la sección: abierta si tiene pendientes, cerrada si no.
-    if(_seccionTipoAbierta[keyTipo] === undefined){
-      _seccionTipoAbierta[keyTipo] = hayPendientes;
-    }
-    // Auto-cerrar SOLO en el momento en que la sección pasa de "con pendientes" a "completa".
-    if(_seccionTipoTuvoPendientes[keyTipo] && !hayPendientes){
-      _seccionTipoAbierta[keyTipo] = false;
-    }
-    _seccionTipoTuvoPendientes[keyTipo] = hayPendientes;
-
-    var abierta = _seccionTipoAbierta[keyTipo];
-    var colorTipo = keyTipo==='principal' ? 'var(--azul2)' : 'var(--naranja)';
-    var iconoTipo = keyTipo==='principal' ? '🏙' : '🛣';
-
-    htmlFinal += '<div style="border:1px solid var(--borde);border-radius:10px;margin-bottom:10px;overflow:hidden;">';
-    htmlFinal += '<div onclick="toggleSeccionTipo(\''+gTipo.tipo+'\')" style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;cursor:pointer;background:var(--gris);">';
-    htmlFinal += '<div style="font-weight:700;font-size:0.9rem;color:'+colorTipo+';">'+iconoTipo+' '+gTipo.tipo+' <span style="color:#94a3b8;font-weight:400;font-size:0.78rem;">('+totalTipo+')</span></div>';
-    htmlFinal += '<div style="display:flex;align-items:center;gap:8px;">';
-    if(!hayPendientes) htmlFinal += '<span style="font-size:0.7rem;color:var(--verde);font-weight:700;">✅ Completo</span>';
-    else htmlFinal += '<span style="font-size:0.7rem;color:var(--naranja);font-weight:700;">⏳ '+pendientesTipo+' pend.</span>';
-    htmlFinal += '<span style="font-size:0.8rem;color:#94a3b8;">'+(abierta?'▼':'▶')+'</span>';
-    htmlFinal += '</div></div>';
-
-    htmlFinal += '<div style="display:'+(abierta?'block':'none')+';padding:10px 10px 4px 10px;">';
-    htmlFinal += renderComunasDeTipo(gTipo.items, diaSemana, gTipo.tipo);
-    htmlFinal += '</div></div>';
-  });
-
-  lista.innerHTML = htmlFinal;
+  lista.innerHTML = renderComunasDeTipo(filtered, diaSemana, null);
 }
 
-// Arma el HTML de los grupos por comuna dentro de una sección J05/J06 — es lo que antes
-// hacía renderPaquetes() de punta a punta, ahora factorizado para que cada sección
-// (Principal/Ramal) tenga su propio bloque desplegable por separado.
-// Recuerda si cada COMUNA (dentro de una sección J05/J06) está desplegada o cerrada,
+// Arma el HTML de los grupos por comuna — antes vivía por separado dentro de cada sección
+// J05/Ramal; ahora se llama una sola vez con TODAS las órdenes filtradas juntas.
+// Recuerda si cada COMUNA (o tramo de comuna) está desplegada o cerrada,
 // con la misma lógica que las secciones Principal/Ramal: abierta mientras tenga
 // pendientes, se cierra sola la primera vez que queda completa, y respeta el toggle
 // manual después de eso.
@@ -2965,7 +2921,7 @@ function renderComunasDeTipo(items, diaSemana, tipo){
       }
       html+='<div class="paquete-nombre">'+p.nombre+'</div>';
       html+='<div class="paquete-dir">'+dirMostrar+(p.tel?' · '+p.tel:'')+'</div>';
-      html+='<div class="paquete-codigo">'+p.codigo+' <span class="badge '+badgeClass+'">'+badgeTxt+'</span></div>';
+      html+='<div class="paquete-codigo">'+p.codigo+' <span class="badge '+badgeClass+'">'+badgeTxt+'</span> <span style="font-size:0.65rem;font-weight:700;color:'+((p.tipo||'Principal').toLowerCase()==='ramal'?'var(--naranja)':'var(--azul2)')+';">'+((p.tipo||'Principal').toLowerCase()==='ramal'?'🛣 J06':'🏙 J05')+'</span></div>';
       html+='</div>';
       if(p.estado==='pendiente'){
         html+='<div class="paquete-acciones" onclick="event.stopPropagation()">';
