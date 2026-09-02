@@ -2062,15 +2062,26 @@ function importarExcel(input){
         if(h==='COMUNA') idx.comuna=i;
         if(h==='REGION'||h==='REGIÓN') idx.region=i;
         if(h==='TIPO DESTINO') idx.tipo=i;
+        if(h==='BASE') idx.base=i;
         if(h==='ESTADO') idx.estado=i;
         if(h==='B2B') idx.b2b=i;
         if(h==='BULTO DE ENTREGA') idx.bulto=i;
         if(h==='N'||h==='N°'||h==='NRO'||h==='NUMERO'||h==='NÚMERO') idx.numRuta=i;
         if(h==='INTERCAMBIO') idx.intercambio=i;
       }
+      // "BASE" (J05/J06) trae el tipo POR FILA — cuando está, se usa directo y no hace
+      // falta preguntar nada (antes solo se leía "TIPO DESTINO" o se preguntaba UNA vez
+      // para marcar TODAS las filas igual, lo cual está mal cuando el archivo mezcla J05
+      // y J06 en la misma ruta, ordenada por Circuit/Spoke).
+      function tipoDesdeBase(valorBase){
+        var v = String(valorBase||'').trim().toUpperCase();
+        if(v.indexOf('J06')!==-1 || v.indexOf('RAMAL')!==-1) return 'Ramal';
+        if(v.indexOf('J05')!==-1 || v.indexOf('PRINCIPAL')!==-1) return 'Principal';
+        return null;
+      }
       var tipoPorDefecto = 'Principal';
-      if(idx.tipo === undefined){
-        var elegido = prompt('Este archivo no trae la columna "Tipo Destino" (Principal/Ramal).\n\n¿Cómo se marcan TODAS estas órdenes? Escribe: Principal o Ramal', 'Principal');
+      if(idx.tipo === undefined && idx.base === undefined){
+        var elegido = prompt('Este archivo no trae ni "Tipo Destino" ni "BASE" (J05/J06).\n\n¿Cómo se marcan TODAS estas órdenes? Escribe: Principal o Ramal', 'Principal');
         if(elegido && elegido.trim().toLowerCase().indexOf('ramal')===0){
           tipoPorDefecto = 'Ramal';
         } else {
@@ -2135,7 +2146,9 @@ function importarExcel(input){
           dir:row[idx.dir]?String(row[idx.dir]).trim():'',
           comuna:row[idx.comuna]?String(row[idx.comuna]).trim():'',
           region:row[idx.region]?String(row[idx.region]).trim():'',
-          tipo:row[idx.tipo]?String(row[idx.tipo]).trim():tipoPorDefecto,
+          tipo: (idx.tipo!==undefined && row[idx.tipo]) ? String(row[idx.tipo]).trim() :
+                (idx.base!==undefined && tipoDesdeBase(row[idx.base])) ? tipoDesdeBase(row[idx.base]) :
+                tipoPorDefecto,
           b2b:row[idx.b2b]?String(row[idx.b2b]).trim():'',
           estado:'pendiente', ts:Date.now(),
           repetidoDeHistorial: registrosPrevios.length>0,
