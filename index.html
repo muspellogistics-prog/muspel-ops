@@ -522,6 +522,12 @@
   <div class="card" style="border:1.5px solid var(--azul2);">
     <div class="card-title">📥 Registrar retiro (respaldo del manifiesto de Alas)</div>
     <div style="font-size:0.78rem;color:#64748b;margin-bottom:10px;">Cada retiro trae un "Informe de Recepción" desde la web de Alas (folio, N° de bulto, estado). Guarda acá los totales y el detalle como respaldo — todavía no calcula cobro, eso se agrega cuando llegue el anexo de tarifas.</div>
+    <label class="form-label">Link del informe (el que te manda Alas por WhatsApp)</label>
+    <div style="display:flex;gap:8px;margin-bottom:4px;">
+      <input class="form-input" id="retiro-link" type="text" placeholder="https://web.alasxpress.com/public/manifest?params=..." style="flex:1;">
+      <button class="btn btn-primary btn-sm" onclick="leerLinkRetiro()" style="flex-shrink:0;">📎 Leer</button>
+    </div>
+    <div style="font-size:0.7rem;color:#94a3b8;margin-bottom:10px;">Esto completa sola la fecha y la marca. Los totales y el detalle igual hay que mirarlos en el informe y copiarlos — el sitio de Alas no deja traerlos automático por seguridad.</div>
     <label class="form-label">Fecha del retiro</label>
     <input class="form-input" id="retiro-fecha" type="text" placeholder="DD-MM-AAAA" style="margin-bottom:8px;">
     <label class="form-label">Marca / empresa (ej. Flapp)</label>
@@ -541,6 +547,11 @@
       </div>
     </div>
     <label class="form-label">Detalle (pega aquí las filas del informe: N° orden, N° bulto, estado)</label>
+    <div style="display:flex;gap:8px;margin-bottom:6px;">
+      <input type="file" id="retiro-excel-input" accept=".xlsx,.xls" style="display:none" onchange="importarExcelRetiro(this)">
+      <button class="btn btn-outline btn-sm" onclick="document.getElementById('retiro-excel-input').click()">📎 Importar Excel del informe</button>
+    </div>
+    <div style="font-size:0.7rem;color:#94a3b8;margin-bottom:6px;">Manda el print del informe por chat y te devuelvo el Excel armado — lo subes acá y se completan solos el detalle y los 3 totales de arriba.</div>
     <textarea class="form-input" id="retiro-detalle" rows="6" style="font-family:monospace;font-size:0.72rem;margin-bottom:8px;" placeholder="3017528-FRO#177129 · bulto 1 · Aceptado&#10;3017551-FRO#177131 · bulto 1 · Aceptado&#10;..."></textarea>
     <label class="form-label">Nota (opcional)</label>
     <input class="form-input" id="retiro-nota" type="text" style="margin-bottom:10px;">
@@ -1112,6 +1123,101 @@ function reenviarHistorialCompleto(){
 // en la hoja "Retiros" de Sheets. Por ahora solo guarda el respaldo — el cálculo de
 // cobro se agrega cuando llegue el anexo de tarifas de retiros.
 // ════════════════════════════════════════
+// Importa el Excel del informe de retiro (armado por Claude a partir del print que
+// mandes por chat, con columnas: N° de Orden, N° de Bulto, Estado). Llena solo el
+// detalle y cuenta los 3 totales — no toca fecha/marca, esas se completan con el botón
+// "Leer" del link o a mano.
+function importarExcelRetiro(input){
+  var file = input.files[0];
+  if(!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      var wb = XLSX.read(e.target.result, {type:'binary'});
+      var ws = wb.Sheets[wb.SheetNames[0]];
+      var data = XLSX.utils.sheet_to_json(ws, {header:1});
+      // Detecta la fila de encabezado buscando "ORDEN" y "ESTADO" en las primeras filas.
+      var headerRowIdx = 0;
+      for(var hi=0; hi<Math.min(3,data.length); hi++){
+        var celdas = (data[hi]||[]).map(function(v){ return String(v||'').trim().toUpperCase(); });
+        if(celdas.some(function(c){return c.indexOf('ORDEN')!==-1;}) && celdas.some(function(c){return c.indexOf('ESTADO')!==-1;})){
+          headerRowIdx = hi; break;
+        }
+      }
+      var header = (data[headerRowIdx]||[]).map(function(v){ return String(v||'').trim().toUpperCase(); });
+      var idxOrden=-1, idxBulto=-1, idxEstado=-1;
+      header.forEach(function(h,i){
+        if(h.indexOf('ORDEN')!==-1) idxOrden=i;
+        if(h.indexOf('BULTO')!==-1) idxBulto=i;
+        if(h.indexOf('ESTADO')!==-1) idxEstado=i;
+      });
+      if(idxOrden===-1 || idxEstado===-1){
+        alert('No encontré las columnas "N° de Orden" y "Estado" en este Excel. Revisa el archivo.');
+        input.value=''; return;
+      }
+      var lineas = []; var aceptados=0, daniados=0, noExiste=0;
+      for(var r=headerRowIdx+1; r<data.length; r++){
+        var fila = data[r]; if(!fila || !fila[idxOrden]) continue;
+        var orden = String(fila[idxOrden]).trim();
+        var bulto = idxBulto!==-1 ? String(fila[idxBulto]||'').trim() : '';
+        var estado = String(fila[idxEstado]||'').trim();
+        lineas.push(orden + (bulto?' · bulto '+bulto:'') + ' · ' + estado);
+        var estadoNorm = estado.toLowerCase();
+        if(estadoNorm.indexOf('acept')!==-1) aceptados++;
+        else if(estadoNorm.indexOf('dañ')!==-1 || estadoNorm.indexOf('dan')!==-1) daniados++;
+        else if(estadoNorm.indexOf('no existe')!==-1) noExiste++;
+      }
+      document.getElementById('retiro-detalle').value = lineas.join('\n');
+      document.getElementById('retiro-aceptados').value = aceptados;
+      document.getElementById('retiro-daniados').value = daniados;
+      document.getElementById('retiro-noexiste').value = noExiste;
+      alert('Importado: '+lineas.length+' filas ('+aceptados+' aceptados, '+daniados+' dañados, '+noExiste+' no existe). Revisa que la fecha y la marca estén completas antes de guardar.');
+    } catch(err){
+      alert('No se pudo leer el Excel: '+err.message);
+    }
+    input.value='';
+  };
+  reader.readAsBinaryString(file);
+}
+
+// Lee el link del informe de Alas y completa sola la fecha y la marca. El link trae un
+// parámetro "params" codificado en base64 con el formato RUT|fecha|numero|MARCA (ej.
+// "77857789-5|2026-08-31|1|TIENDAS_OSORNO") — se decodifica directo en el navegador,
+// sin necesitar internet ni pedirle nada al sitio de Alas.
+// El detalle y los totales NO se pueden traer así: esa parte de la página de Alas se
+// carga aparte con JavaScript después de abrirla, y el sitio de Alas no deja que otras
+// páginas le pidan esos datos por temas de seguridad (CORS) — por eso se abre en una
+// pestaña nueva para que Kathy los copie a mano, en vez de intentar (y fallar) a
+// traerlos solo.
+function leerLinkRetiro(){
+  var link = document.getElementById('retiro-link').value.trim();
+  if(!link){ alert('Pega primero el link que manda Alas.'); return; }
+  try{
+    var url = new URL(link);
+    var paramsCodificado = url.searchParams.get('params');
+    if(!paramsCodificado){ alert('Ese link no trae el parámetro "params" esperado — revísalo o completa los campos a mano.'); return; }
+    var decodificado = atob(paramsCodificado);
+    var partes = decodificado.split('|');
+    if(partes.length >= 4){
+      var fechaISO = partes[1]; // AAAA-MM-DD
+      var marcaCruda = partes[3]; // ej. TIENDAS_OSORNO
+      var fechaPartes = fechaISO.split('-');
+      if(fechaPartes.length === 3){
+        document.getElementById('retiro-fecha').value = fechaPartes[2]+'-'+fechaPartes[1]+'-'+fechaPartes[0];
+      }
+      var marcaLegible = marcaCruda.replace(/_/g,' ').toLowerCase().replace(/\b\w/g, function(c){ return c.toUpperCase(); });
+      document.getElementById('retiro-marca').value = marcaLegible;
+    } else {
+      alert('El link se leyó pero no vino con el formato esperado. Completa fecha y marca a mano.');
+    }
+  } catch(e){
+    alert('No se pudo leer ese link. Revisa que esté completo y pégalo de nuevo, o completa fecha/marca a mano.');
+    return;
+  }
+  // Abre el informe en una pestaña nueva para que copie totales y detalle desde ahí.
+  window.open(link, '_blank');
+}
+
 function guardarRetiro(){
   var fecha = document.getElementById('retiro-fecha').value.trim();
   var marca = document.getElementById('retiro-marca').value.trim();
