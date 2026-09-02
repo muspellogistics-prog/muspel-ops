@@ -94,6 +94,15 @@
       <div class="card"><div class="card-label">Efectividad acumulada</div><div class="card-value verde" id="op-ef-mes">—</div></div>
       <div class="card"><div class="card-label">Incidencias del mes</div><div class="card-value naranja" id="op-inc-mes">—</div><div class="card-sub" id="op-inc-mes-sub">—</div></div>
     </div>
+    <div class="panel">
+      <div class="titulo-seccion" style="margin-top:0;">Desglose: devuelta B2C vs. B2B (retiro) — mes en curso</div>
+      <div style="font-size:0.78rem;color:#64748b;margin-bottom:8px;">Alas etiqueta ambas como "devolución" en su sistema, pero el retiro (B2B) se paga aparte — por eso van separadas acá.</div>
+      <div class="grid">
+        <div class="card"><div class="card-label">Devuelta B2C (real)</div><div class="card-value rojo" id="op-dev-b2c-mes">—</div></div>
+        <div class="card"><div class="card-label">Devuelta B2B (retiro)</div><div class="card-value" style="color:#b45309" id="op-dev-b2b-mes">—</div></div>
+        <div class="card"><div class="card-label">Intercambios del mes</div><div class="card-value" style="color:var(--azul,#1e3a5f)" id="op-intercambio-mes">—</div></div>
+      </div>
+    </div>
     <div class="banner-info">WOM se paga a tarifa fija, sin bono, y no cuenta para calcular el % de efectividad del mes (que define el tramo de bono de ALAS para el resto de las marcas).</div>
     <div class="grid">
       <div class="card"><div class="card-label">Efectividad del mes (sin WOM)</div><div class="card-value verde" id="op-ef-mes-nowom">—</div><div class="card-sub" id="op-ef-mes-nowom-sub">—</div></div>
@@ -118,7 +127,7 @@
     </div>
     <div class="panel">
       <div class="titulo-seccion" style="margin-top:0;">💵 Cuánto facturar — por mes, por separado</div>
-      <div class="panel-nota">Ingreso neto real de cada mes (según Cierres), y el total a facturar a ALAS con IVA. Cada mes queda aparte, no acumulado.</div>
+      <div class="panel-nota">Ingreso neto real de cada mes (según Cierres), y el total a facturar a ALAS con IVA. Cada mes queda aparte, no acumulado — usa esta tabla para cruzar julio, agosto y los meses que sigan contra la liquidación que mande ALAS.</div>
       <table><thead><tr><th>Mes</th><th class="num">Órdenes entregadas</th><th class="num">Ingreso Neto</th><th class="num">Total a facturar (+IVA)</th></tr></thead><tbody id="tabla-facturacion"></tbody></table>
     </div>
     <div class="panel">
@@ -302,13 +311,15 @@ async function cargarDatos(){
     const porCodigo = {};
     (rDetalle||[]).slice(1).forEach(row => {
       const fecha = row[0], codigo = row[1], folio = row[2], nombre = row[3], estado = row[7], motivo = row[8], b2b = row[9];
+      const esRetiro = String(row[10]||'').trim().toLowerCase() === 'si';
+      const intercambio = String(row[11]||'').trim().toLowerCase() === 'si';
       if(!codigo) return;
       // CORREGIDO: antes se agrupaba por "codigo" (único por CADA bulto físico). Ahora
       // se agrupa por el folio base (compartido entre los bultos de un mismo pedido),
       // igual que en Muspel OPS — así un pedido de 3 bultos cuenta como 1 orden, no 3.
       const clave = getFolioBaseLocal(folio) || codigo;
       if(!porCodigo[clave]) porCodigo[clave] = [];
-      porCodigo[clave].push({fecha, estado, b2b, nombre, motivo, codigo});
+      porCodigo[clave].push({fecha, estado, b2b, nombre, motivo, codigo, esRetiro, intercambio});
     });
     incidenciasReales = []; // [{codigo, fecha, estado}] — solo las que quedaron sin resolver
     // resumenPorCodigo: para CADA pedido (folio base), en qué mes se originó (su primer
@@ -322,9 +333,12 @@ async function cargarDatos(){
       const registros = porCodigo[clave].sort((a,b) => claveFechaOrden(a.fecha) < claveFechaOrden(b.fecha) ? -1 : 1);
       const primero = registros[0], ultimo = registros[registros.length-1];
       if(ultimo.estado === 'devuelto' || ultimo.estado === 'daniado'){
-        incidenciasReales.push({codigo: ultimo.codigo, fecha: ultimo.fecha, estado: ultimo.estado, nombre: ultimo.nombre||'', motivo: ultimo.motivo||'', b2b: ultimo.b2b||''});
+        incidenciasReales.push({codigo: ultimo.codigo, fecha: ultimo.fecha, estado: ultimo.estado, nombre: ultimo.nombre||'', motivo: ultimo.motivo||'', b2b: ultimo.b2b||'', esRetiro: ultimo.esRetiro||false});
       }
-      resumenPorCodigo.push({codigo: clave, mesOrigen: mesDeFecha(primero.fecha), fechaOrigen: primero.fecha, estadoFinal: ultimo.estado, b2b: ultimo.b2b||''});
+      // "intercambio" se marca si CUALQUIER registro del pedido lo trae marcado (se puede
+      // activar en cualquier momento, no solo en el último estado).
+      const esIntercambio = registros.some(r => r.intercambio);
+      resumenPorCodigo.push({codigo: clave, mesOrigen: mesDeFecha(primero.fecha), fechaOrigen: primero.fecha, estadoFinal: ultimo.estado, b2b: ultimo.b2b||'', esRetiro: ultimo.esRetiro||false, intercambio: esIntercambio});
     });
     document.getElementById('sync-badge').textContent = '☁️ Sincronizado (toca para actualizar)';
     document.getElementById('loading').style.display = 'none';
@@ -383,6 +397,20 @@ function pintarOperacion(mesTexto){
   document.getElementById('op-ord-mes').textContent = ordMes;
   document.getElementById('op-ef-mes').textContent = totalOrdMes>0 ? Math.round(ordMes/totalOrdMes*100)+'%' : '—';
   document.getElementById('op-inc-mes').textContent = incMes;
+
+  // Desglose B2C vs. B2B (retiro) del mes en curso — solo "devuelto" final (no daniado,
+  // que es una categoría aparte). Intercambios se cuentan sobre TODOS los pedidos del
+  // mes, no solo los devueltos, porque un intercambio se completa igual como entrega.
+  const devueltasDelMes = codigosDelMes.filter(r => r.estadoFinal === 'devuelto');
+  const devB2cMes = devueltasDelMes.filter(r => !r.esRetiro).length;
+  const devB2bMes = devueltasDelMes.filter(r => r.esRetiro).length;
+  const intercambiosMes = codigosDelMes.filter(r => r.intercambio).length;
+  const elDevB2c = document.getElementById('op-dev-b2c-mes');
+  const elDevB2b = document.getElementById('op-dev-b2b-mes');
+  const elIntercambio = document.getElementById('op-intercambio-mes');
+  if(elDevB2c) elDevB2c.textContent = devB2cMes;
+  if(elDevB2b) elDevB2b.textContent = devB2bMes;
+  if(elIntercambio) elIntercambio.textContent = intercambiosMes;
   const incSubEl = document.getElementById('op-inc-mes-sub');
   if(incSubEl){
     incSubEl.textContent = incBruto>incMes ? `${incBruto} intentos fallidos en total, ${incBruto-incMes} ya se reintentaron y se entregaron` : 'sin reintentos pendientes de resolver';
