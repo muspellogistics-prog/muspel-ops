@@ -2840,7 +2840,7 @@ function renderPaquetes(){
     htmlFinal += '</div></div>';
 
     htmlFinal += '<div style="display:'+(abierta?'block':'none')+';padding:10px 10px 4px 10px;">';
-    htmlFinal += renderComunasDeTipo(gTipo.items, diaSemana);
+    htmlFinal += renderComunasDeTipo(gTipo.items, diaSemana, gTipo.tipo);
     htmlFinal += '</div></div>';
   });
 
@@ -2850,7 +2850,18 @@ function renderPaquetes(){
 // Arma el HTML de los grupos por comuna dentro de una sección J05/J06 — es lo que antes
 // hacía renderPaquetes() de punta a punta, ahora factorizado para que cada sección
 // (Principal/Ramal) tenga su propio bloque desplegable por separado.
-function renderComunasDeTipo(items, diaSemana){
+// Recuerda si cada COMUNA (dentro de una sección J05/J06) está desplegada o cerrada,
+// con la misma lógica que las secciones Principal/Ramal: abierta mientras tenga
+// pendientes, se cierra sola la primera vez que queda completa, y respeta el toggle
+// manual después de eso.
+var _seccionComunaAbierta = {};
+var _seccionComunaTuvoPendientes = {};
+function toggleSeccionComuna(claveComuna){
+  _seccionComunaAbierta[claveComuna] = !_seccionComunaAbierta[claveComuna];
+  renderPaquetes();
+}
+
+function renderComunasDeTipo(items, diaSemana, tipo){
   var grupos = {};
   items.forEach(function(p){
     var key = (p.comuna||'Sin comuna');
@@ -2865,7 +2876,23 @@ function renderComunasDeTipo(items, diaSemana){
   });
   keys.forEach(function(key){
     var g=grupos[key];
-    html+='<div class="grupo-titulo">'+g.comuna+' <span style="color:#94a3b8;font-weight:400;">('+g.items.length+')</span></div>';
+    var claveComuna = (tipo||'')+'|'+g.comuna;
+    var pendientesComuna = g.items.filter(function(p){ return p.estado==='pendiente'; }).length;
+    var hayPendientesComuna = pendientesComuna > 0;
+    if(_seccionComunaAbierta[claveComuna] === undefined){
+      _seccionComunaAbierta[claveComuna] = hayPendientesComuna;
+    }
+    if(_seccionComunaTuvoPendientes[claveComuna] && !hayPendientesComuna){
+      _seccionComunaAbierta[claveComuna] = false;
+    }
+    _seccionComunaTuvoPendientes[claveComuna] = hayPendientesComuna;
+    var abiertaComuna = _seccionComunaAbierta[claveComuna];
+
+    html+='<div class="grupo-titulo" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onclick="toggleSeccionComuna(\''+claveComuna.replace(/'/g,"\\'")+'\')">';
+    html+='<span>'+g.comuna+' <span style="color:#94a3b8;font-weight:400;">('+g.items.length+')</span></span>';
+    html+='<span style="font-size:0.7rem;color:#94a3b8;">'+(hayPendientesComuna?('⏳ '+pendientesComuna+' · '):'✅ ')+(abiertaComuna?'▼':'▶')+'</span>';
+    html+='</div>';
+    if(!abiertaComuna) return; // comuna cerrada: no renderiza sus tarjetas, sigue con la próxima
     // Detectar multibultos DE VERDAD dentro de este grupo: usa la misma función central
     // que el resto de la app (agruparOrdenes), que ya excluye WOM y respeta "sinAgrupar"
     // — antes esto agrupaba solo por dirección exacta, sin esas reglas, y mostraba el
