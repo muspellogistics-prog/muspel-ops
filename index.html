@@ -502,6 +502,7 @@
             <th style="padding:6px 8px;text-align:right;">Paquetes entregados</th>
             <th style="padding:6px 8px;text-align:right;">Órdenes entregadas</th>
             <th style="padding:6px 8px;text-align:right;">Valor a cobrar</th>
+            <th style="padding:6px 8px;text-align:right;">Valor c/IVA</th>
           </tr>
         </thead>
         <tbody id="d-tabla-facturar"></tbody>
@@ -3578,59 +3579,91 @@ function actualizarDashboard(){
   lista.innerHTML=html;
 
   // Tabla de facturación: paquetes vs. órdenes vs. valor a cobrar, TODOS los días, pero
-  // agrupados por MES con su propio subtotal — para poder encontrar julio, agosto, etc.
-  // por separado y cruzarlos con la liquidación que mande ALAS mes a mes.
+  // agrupados por MES con su propio subtotal y colapsables (solo el mes en curso abierto
+  // por defecto) — para poder encontrar julio, agosto, etc. por separado y cruzarlos con
+  // la liquidación que mande ALAS mes a mes.
   var tbodyFactura = document.getElementById('d-tabla-facturar');
   if(tbodyFactura){
     var NOMBRES_MES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    // Clave cronológica real (AAAAMMDD) — NO comparar las fechas como texto "DD-MM-AAAA"
+    // directo, porque compara el día primero y desordena los meses (bug detectado:
+    // "01-09-2026" quedaba entre julio y agosto por empezar con "0").
+    function claveAAAAMMDD(fechaStr){
+      var p = formatoFechaLegible(fechaStr).split('-');
+      if(p.length!==3) return '00000000';
+      return p[2]+p[1].padStart(2,'0')+p[0].padStart(2,'0');
+    }
     function nombreMesDeFecha(fechaStr){
       var p = formatoFechaLegible(fechaStr).split('-');
-      return p.length===3 ? (NOMBRES_MES[parseInt(p[1],10)-1]+' '+p[2]) : 'Sin fecha';
+      return p.length===3 ? {nombre:(NOMBRES_MES[parseInt(p[1],10)-1]+' '+p[2]), clave:p[2]+p[1].padStart(2,'0')} : {nombre:'Sin fecha', clave:'000000'};
     }
     var ordenadoAsc = [].concat(historialCompleto).sort(function(a,b){
-      return formatoFechaLegible(a.fecha) < formatoFechaLegible(b.fecha) ? -1 : 1;
+      return claveAAAAMMDD(a.fecha) < claveAAAAMMDD(b.fecha) ? -1 : (claveAAAAMMDD(a.fecha) > claveAAAAMMDD(b.fecha) ? 1 : 0);
     });
     var porMes = {}; var ordenMeses = [];
     ordenadoAsc.forEach(function(h){
       var m = nombreMesDeFecha(h.fecha);
-      if(!porMes[m]){ porMes[m] = {dias:[], totalPaq:0, totalOrd:0, totalCobrar:0}; ordenMeses.push(m); }
+      if(!porMes[m.clave]){ porMes[m.clave] = {nombre:m.nombre, clave:m.clave, dias:[], totalPaq:0, totalOrd:0, totalCobrar:0}; ordenMeses.push(m.clave); }
       var ordEnt = h.entregadosOrdenes!=null ? h.entregadosOrdenes : h.entregados;
-      porMes[m].dias.push({fecha:h.fecha, entregados:h.entregados, ordEnt:ordEnt, ingresos:h.ingresos});
-      porMes[m].totalPaq += h.entregados;
-      porMes[m].totalOrd += ordEnt;
-      porMes[m].totalCobrar += h.ingresos;
+      porMes[m.clave].dias.push({fecha:h.fecha, entregados:h.entregados, ordEnt:ordEnt, ingresos:h.ingresos});
+      porMes[m.clave].totalPaq += h.entregados;
+      porMes[m.clave].totalOrd += ordEnt;
+      porMes[m.clave].totalCobrar += h.ingresos;
     });
+    // Clave del mes en curso, para que sea el único abierto por defecto la primera vez.
+    var hoyClave = (function(){ var d=new Date(); return String(d.getFullYear())+String(d.getMonth()+1).padStart(2,'0'); })();
     var filas='';
     var totalPaqGeneral=0, totalOrdGeneral=0, totalCobrarGeneral=0;
-    // Del mes más reciente al más antiguo, para que julio/agosto queden fáciles de ubicar arriba.
-    ordenMeses.slice().reverse().forEach(function(m){
-      var dm = porMes[m];
-      filas += '<tr style="background:var(--azul);color:#fff;">'+
-        '<td colspan="4" style="padding:6px 8px;font-weight:700;text-transform:capitalize;">'+m+'</td></tr>';
-      dm.dias.forEach(function(d){
-        filas += '<tr style="border-bottom:1px solid #eee;">'+
-          '<td style="padding:6px 8px;">'+formatoFechaLegible(d.fecha)+'</td>'+
-          '<td style="padding:6px 8px;text-align:right;">'+d.entregados+'</td>'+
-          '<td style="padding:6px 8px;text-align:right;">'+d.ordEnt+'</td>'+
-          '<td style="padding:6px 8px;text-align:right;color:var(--verde);font-weight:600;">$'+d.ingresos.toLocaleString('es-CL')+'</td>'+
-          '</tr>';
-      });
+    // Del mes más reciente al más antiguo, ya en orden cronológico correcto.
+    ordenMeses.slice().reverse().forEach(function(claveMes){
+      var dm = porMes[claveMes];
+      var idFila = 'mesfactura-'+claveMes;
+      if(_seccionFacturaAbierta[claveMes] === undefined){
+        _seccionFacturaAbierta[claveMes] = (claveMes === hoyClave);
+      }
+      var abierto = _seccionFacturaAbierta[claveMes];
+      filas += '<tr style="background:var(--azul);color:#fff;cursor:pointer;" onclick="toggleMesFactura(\''+claveMes+'\')">'+
+        '<td colspan="5" style="padding:6px 8px;font-weight:700;text-transform:capitalize;">'+(abierto?'▼ ':'▶ ')+dm.nombre+' — '+dm.dias.length+' día(s)</td></tr>';
+      if(abierto){
+        dm.dias.forEach(function(d){
+          var conIva = Math.round(d.ingresos*(1+IVA_TASA));
+          filas += '<tr class="'+idFila+'" style="border-bottom:1px solid #eee;">'+
+            '<td style="padding:6px 8px;">'+formatoFechaLegible(d.fecha)+'</td>'+
+            '<td style="padding:6px 8px;text-align:right;">'+d.entregados+'</td>'+
+            '<td style="padding:6px 8px;text-align:right;">'+d.ordEnt+'</td>'+
+            '<td style="padding:6px 8px;text-align:right;color:var(--verde);font-weight:600;">$'+d.ingresos.toLocaleString('es-CL')+'</td>'+
+            '<td style="padding:6px 8px;text-align:right;color:var(--verde);">$'+conIva.toLocaleString('es-CL')+'</td>'+
+            '</tr>';
+        });
+      }
+      var totalConIvaMes = Math.round(dm.totalCobrar*(1+IVA_TASA));
       filas += '<tr style="background:#f4f6fa;font-weight:800;">'+
-        '<td style="padding:7px 8px;">Total <span style="text-transform:capitalize;">'+m+'</span></td>'+
+        '<td style="padding:7px 8px;">Total <span style="text-transform:capitalize;">'+dm.nombre+'</span></td>'+
         '<td style="padding:7px 8px;text-align:right;">'+dm.totalPaq+'</td>'+
         '<td style="padding:7px 8px;text-align:right;">'+dm.totalOrd+'</td>'+
         '<td style="padding:7px 8px;text-align:right;color:var(--verde);">$'+dm.totalCobrar.toLocaleString('es-CL')+'</td>'+
+        '<td style="padding:7px 8px;text-align:right;color:var(--verde);">$'+totalConIvaMes.toLocaleString('es-CL')+'</td>'+
         '</tr>';
       totalPaqGeneral += dm.totalPaq; totalOrdGeneral += dm.totalOrd; totalCobrarGeneral += dm.totalCobrar;
     });
+    var totalConIvaGeneral = Math.round(totalCobrarGeneral*(1+IVA_TASA));
     filas += '<tr style="background:#1e293b;color:#fff;font-weight:800;">'+
       '<td style="padding:7px 8px;">Total general</td>'+
       '<td style="padding:7px 8px;text-align:right;">'+totalPaqGeneral+'</td>'+
       '<td style="padding:7px 8px;text-align:right;">'+totalOrdGeneral+'</td>'+
       '<td style="padding:7px 8px;text-align:right;">$'+totalCobrarGeneral.toLocaleString('es-CL')+'</td>'+
+      '<td style="padding:7px 8px;text-align:right;">$'+totalConIvaGeneral.toLocaleString('es-CL')+'</td>'+
       '</tr>';
     tbodyFactura.innerHTML = filas;
   }
+}
+
+// Recuerda qué meses están abiertos/cerrados en la tabla "Detalle para facturar" entre
+// un render y otro (por defecto solo el mes en curso viene abierto la primera vez).
+var _seccionFacturaAbierta = {};
+function toggleMesFactura(claveMes){
+  _seccionFacturaAbierta[claveMes] = !_seccionFacturaAbierta[claveMes];
+  actualizarDashboard();
 }
 
 // Trae el detalle completo por paquete desde Sheets, para los días que en este equipo
