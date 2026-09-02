@@ -206,6 +206,7 @@
       <span class="modal-campo-label">📋 Estado actual</span>
       <span class="modal-campo-valor" id="modal-estado">—</span>
     </div>
+    <div id="modal-clasificacion" style="display:flex;gap:8px;margin-top:8px;"></div>
     <div class="modal-campo" id="modal-motivo-row" style="display:none;">
       <span class="modal-campo-label">📝 Motivo</span>
       <span class="modal-campo-valor" id="modal-motivo">—</span>
@@ -1512,7 +1513,7 @@ function abrirResumenDetalle(filtro){
       html += '<div id="grp-'+idx+'" style="display:'+(abierto?'block':'none')+';padding:0 12px;">';
       g.items.forEach(function(p){
         var badgeClass = p.estado==='entregado'?'badge-verde':p.estado==='devuelto'?'badge-rojo':p.estado==='retorno'?'badge-naranja':p.estado==='daniado'?'badge-naranja':'badge-gris';
-        var badgeTxt = p.estado==='entregado'?'Entregado':p.estado==='devuelto'?'Devuelta a Alas':p.estado==='retorno'?'Retorno':p.estado==='daniado'?'Dañado':'Pendiente';
+        var badgeTxt = p.estado==='entregado'?'Entregado':p.estado==='devuelto'?textoBadgeDevuelto(p):p.estado==='retorno'?'Retorno':p.estado==='daniado'?'Dañado':'Pendiente';
         var dir = (p.dir||'').trim();
         var dirMostrar = (dir.toLowerCase().indexOf('http')!==-1||dir.length<5) ? '' : dir;
         html += '<div style="padding:8px 0;border-bottom:1px solid #f1f5f9;cursor:pointer;" onclick="cerrarResumenDetalle();setTimeout(function(){abrirModal('+p.id+')},100)">';
@@ -1569,7 +1570,7 @@ function abrirModal(id){
     dirMostrar = dir.length > 5 ? dir : '(sin dirección registrada)';
   }
 
-  var estadoTextos = {entregado:'✅ Entregado', devuelto:'📮 Devuelta a Alas', retorno:'🔁 Retorno (a reintentar)', daniado:'⚠️ Dañado', pendiente:'⏳ Pendiente'};
+  var estadoTextos = {entregado:'✅ Entregado', devuelto:(p.esRetiro?'📮 Devolución B2B (retiro)':'📮 Devolución B2C'), retorno:'🔁 Retorno (a reintentar)', daniado:'⚠️ Dañado', pendiente:'⏳ Pendiente'};
 
   document.getElementById('modal-nombre').textContent = p.nombre || 'Sin nombre';
   document.getElementById('modal-codigo').textContent = p.codigo || '';
@@ -1628,6 +1629,15 @@ function abrirModal(id){
   }else{
     modalRepetidoEl.style.display = 'none';
   }
+  // Clasificación B2B/Intercambio: editable siempre, independiente del estado de entrega.
+  // "esRetiro" distingue una devolución B2B (retiro que Alas paga aparte) de una devolución
+  // B2C normal. "intercambio" marca las órdenes de marcas como Go2store/Infracomerce donde
+  // se retira un envase vacío al momento de entregar.
+  var htmlClasif = '';
+  htmlClasif += '<button class="btn btn-sm" style="flex:1;margin-bottom:0;background:'+(p.esRetiro?'var(--naranja)':'#e2e8f0')+';color:'+(p.esRetiro?'#fff':'#334155')+';" onclick="toggleFlagOrden(\'esRetiro\')">'+(p.esRetiro?'✅ ':'')+'📮 Retiro (B2B)</button>';
+  htmlClasif += '<button class="btn btn-sm" style="flex:1;margin-bottom:0;background:'+(p.intercambio?'var(--azul2)':'#e2e8f0')+';color:'+(p.intercambio?'#fff':'#334155')+';" onclick="toggleFlagOrden(\'intercambio\')">'+(p.intercambio?'✅ ':'')+'🔀 Intercambio</button>';
+  document.getElementById('modal-clasificacion').innerHTML = htmlClasif;
+
   var motivoRow = document.getElementById('modal-motivo-row');
   if((p.estado==='devuelto' || p.estado==='retorno' || p.estado==='daniado') && p.motivo){
     document.getElementById('modal-motivo').textContent = p.motivo;
@@ -1661,6 +1671,24 @@ function abrirModal(id){
   acciones.innerHTML += '<button class="btn btn-rojo solo-comercial" style="flex:1;margin-bottom:0;background:#7f1d1d;" onclick="eliminarPaqueteDesdeModal()">🗑️ Eliminar</button>';
 
   document.getElementById('modal-overlay').classList.add('open');
+}
+
+// Activa/desactiva "Retiro (B2B)" o "Intercambio" en la orden abierta en el modal.
+// Es independiente del estado de entrega — se puede marcar en cualquier momento,
+// antes o después de que la orden se entregue/devuelva.
+function toggleFlagOrden(campo){
+  if(!modalOrdenId) return;
+  var p = paquetes.find(function(x){return x.id===modalOrdenId;});
+  if(!p) return;
+  p[campo] = !p[campo];
+  // Si es multibulto, aplica el mismo cambio a todo el grupo para que no queden mezclados.
+  var grupo = calcularGrupoMultibulto(p);
+  grupo.forEach(function(item){ item[campo] = p[campo]; });
+  guardarStorage();
+  enviarASheets('cambio_estado', {codigo:p.codigo, nombre:p.nombre, estado:p.estado, motivo:p.motivo||'', esRetiro:p.esRetiro?'si':'no', intercambio:p.intercambio?'si':'no', fecha:new Date().toLocaleString('es-CL')});
+  abrirModal(modalOrdenId);
+  renderPaquetes();
+  actualizarResumen();
 }
 
 function cerrarModal(e){
@@ -1963,6 +1991,8 @@ function importarExcel(input){
         if(h==='ESTADO') idx.estado=i;
         if(h==='B2B') idx.b2b=i;
         if(h==='BULTO DE ENTREGA') idx.bulto=i;
+        if(h==='N'||h==='N°'||h==='NRO'||h==='NUMERO'||h==='NÚMERO') idx.numRuta=i;
+        if(h==='INTERCAMBIO') idx.intercambio=i;
       }
       var tipoPorDefecto = 'Principal';
       if(idx.tipo === undefined){
@@ -2036,7 +2066,16 @@ function importarExcel(input){
           estado:'pendiente', ts:Date.now(),
           repetidoDeHistorial: registrosPrevios.length>0,
           intentos: intentoActual,
-          intentosAgotados: intentoActual>3
+          intentosAgotados: intentoActual>3,
+          // Nº de orden de ruta (de Circuit/Spoke, ingresado a mano en el Excel por Kathy)
+          // — cuando viene, se usa para ordenar la ruta directo, sin pasar por el optimizador ORS.
+          numRuta: (idx.numRuta!==undefined && row[idx.numRuta]!==undefined && String(row[idx.numRuta]).trim()!=='') ? Number(row[idx.numRuta]) : null,
+          // Intercambio: se detecta si el Excel trae columna "INTERCAMBIO" marcada, si no,
+          // queda en false y se puede activar a mano desde el detalle de la orden.
+          intercambio: idx.intercambio!==undefined ? /^(si|sí|1|true|x)$/i.test(String(row[idx.intercambio]||'').trim()) : false,
+          // Retiro (B2B): ALAS aún no manda esta columna — siempre parte en false y se marca
+          // a mano cuando corresponda (retiro que ALAS etiqueta como "devolución" en su sistema).
+          esRetiro: false
         };
         paquetes.push(nuevoPaquete);
         nuevos++;
@@ -2402,6 +2441,23 @@ function generarRutaOptimizada(){
       });
     }
   });
+  // Si TODAS las paradas traen Nº de ruta (numeración manual de Circuit/Spoke),
+  // se usa directo ese orden — no hace falta pasar por ORS ni por su límite de 48
+  // direcciones, y respeta el orden real que ya calculó Circuit/Spoke.
+  var paradasConNumero = paradasUnicas.filter(function(p){
+    return p.ordenes.some(function(o){ return o.numRuta !== null && o.numRuta !== undefined && !isNaN(o.numRuta); });
+  });
+  if(paradasUnicas.length > 0 && paradasConNumero.length === paradasUnicas.length){
+    paradasUnicas.forEach(function(p){
+      var nums = p.ordenes.map(function(o){ return o.numRuta; }).filter(function(n){ return n!==null && n!==undefined && !isNaN(n); });
+      p._numRuta = nums.length ? Math.min.apply(null, nums) : 999999;
+    });
+    paradasUnicas.sort(function(a,b){ return a._numRuta - b._numRuta; });
+    rutaOrdenadas = agruparCallesContiguas(paradasUnicas);
+    mostrarListaRutaOptimizada();
+    return;
+  }
+
   paradasUnicas = ordenarParadasPorComuna(paradasUnicas, diaSemana);
 
   // Mostrar indicador de carga
@@ -2472,9 +2528,11 @@ function mostrarListaRutaOptimizada(){
   if(rutaOrdenadas.length === 0){ listaRuta.style.display = 'none'; return; }
 
   var totalParadas = rutaOrdenadas.length;
+  var esOrdenManual = rutaOrdenadas.some(function(p){ return p._numRuta !== undefined; });
   var html = '<div style="background:var(--azul);color:white;border-radius:10px;padding:10px 14px;margin-bottom:8px;">';
-  html += '<div style="font-size:0.8rem;font-weight:700;">🗺 Ruta optimizada — '+totalParadas+' paradas</div>';
+  html += '<div style="font-size:0.8rem;font-weight:700;">🗺 Ruta '+(esOrdenManual?'según Circuit/Spoke':'optimizada')+' — '+totalParadas+' paradas</div>';
   html += '<div style="font-size:0.7rem;color:#a8c4e0;margin-top:3px;">📦 Carga en orden inverso: lo último que entra es lo primero en entregar</div>';
+  if(esOrdenManual) html += '<div style="font-size:0.7rem;color:#a8c4e0;margin-top:2px;">🔢 Orden tomado del Nº ingresado en el Excel</div>';
   html += '</div>';
 
   rutaOrdenadas.forEach(function(p, idx){
@@ -2512,7 +2570,7 @@ function mostrarListaRutaOptimizada(){
     html += '</div>';
     p.ordenes.forEach(function(o){
       var badgeClass = o.estado==='entregado'?'badge-verde':o.estado==='devuelto'?'badge-rojo':o.estado==='retorno'?'badge-naranja':o.estado==='daniado'?'badge-naranja':'badge-gris';
-      var badgeTxt = o.estado==='entregado'?'✅ Entregado':o.estado==='devuelto'?'📮 Devuelta a Alas':o.estado==='retorno'?'🔁 Retorno':o.estado==='daniado'?'⚠️ Dañado':'⏳ Pendiente';
+      var badgeTxt = o.estado==='entregado'?'✅ Entregado':o.estado==='devuelto'?'📮 '+textoBadgeDevuelto(o):o.estado==='retorno'?'🔁 Retorno':o.estado==='daniado'?'⚠️ Dañado':'⏳ Pendiente';
       html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-top:1px solid #f1f5f9;font-size:0.75rem;cursor:pointer;" onclick="abrirModal('+o.id+')">';
       html += '<span style="color:#64748b;">'+(o.folio||o.codigo)+'</span>';
       html += '<span class="badge '+badgeClass+'">'+badgeTxt+'</span>';
@@ -2574,6 +2632,23 @@ function recalcularConOrigen(origenCoords, pendientes){
       paradasUnicas.push({dir:dir, calle:calle, comuna:comuna.toLowerCase(), ordenes:ordenesDir, prioridad:getPrioridadComuna(comuna, diaSemana)});
     }
   });
+
+  // Mismo criterio que en generarRutaOptimizada: si todas las paradas restantes traen
+  // Nº de ruta, se respeta ese orden en vez de recalcular con ORS.
+  var paradasConNumero2 = paradasUnicas.filter(function(p){
+    return p.ordenes.some(function(o){ return o.numRuta !== null && o.numRuta !== undefined && !isNaN(o.numRuta); });
+  });
+  if(paradasUnicas.length > 0 && paradasConNumero2.length === paradasUnicas.length){
+    paradasUnicas.forEach(function(p){
+      var nums = p.ordenes.map(function(o){ return o.numRuta; }).filter(function(n){ return n!==null && n!==undefined && !isNaN(n); });
+      p._numRuta = nums.length ? Math.min.apply(null, nums) : 999999;
+    });
+    paradasUnicas.sort(function(a,b){ return a._numRuta - b._numRuta; });
+    rutaOrdenadas = paradasUnicas;
+    mostrarListaRutaOptimizada();
+    return;
+  }
+
   paradasUnicas = ordenarParadasPorComuna(paradasUnicas, diaSemana);
 
   var MAX_ORS = 48;
@@ -2607,31 +2682,103 @@ function filtrarPaquetes(f, btn){
   renderPaquetes();
 }
 
+// Texto de badge para una orden "devuelta a Alas", distinguiendo B2C (devolución real)
+// de B2B (retiro que Alas también etiqueta como "devolución" en su sistema, pero se
+// paga y se cuenta aparte). Si además es intercambio, lo agrega al texto.
+function textoBadgeDevuelto(p){
+  var base = p.esRetiro ? 'Devuelta a Alas — B2B (retiro)' : 'Devuelta a Alas — B2C';
+  return base + (p.intercambio ? ' 🔀' : '');
+}
+
+// Recuerda si cada sección J05/J06 está desplegada o cerrada entre un render y otro,
+// para no pelear con lo que Kathy/Cristian hayan tocado a mano. Solo se fuerza a
+// cerrar automáticamente la PRIMERA VEZ que una sección pasa de tener pendientes a
+// quedar completa (ver más abajo) — después de eso el toggle manual manda.
+var _seccionTipoAbierta = {};
+var _seccionTipoTuvoPendientes = {};
+function toggleSeccionTipo(tipo){
+  var key = tipo.toLowerCase();
+  _seccionTipoAbierta[key] = !_seccionTipoAbierta[key];
+  renderPaquetes();
+}
+
 function renderPaquetes(){
   var lista = document.getElementById('lista-paquetes');
   var filtered = filtroActual==='todos' ? paquetes : paquetes.filter(function(p){return p.estado===filtroActual;});
   if(filtered.length===0){lista.innerHTML='<div class="alerta alerta-info">No hay órdenes en este filtro.</div>';return;}
-  // agrupar por tipo y comuna
-  var grupos = {};
+  // agrupar por tipo (J05 Principal / J06 Ramal) y dentro de eso por comuna
+  var gruposTipo = {};
   filtered.forEach(function(p){
-    var key = (p.tipo||'Principal') + '|' + (p.comuna||'Sin comuna');
-    if(!grupos[key]) grupos[key]={tipo:p.tipo||'Principal',comuna:p.comuna||'Sin comuna',items:[]};
+    var tipo = p.tipo||'Principal';
+    var key = tipo.toLowerCase();
+    if(!gruposTipo[key]) gruposTipo[key] = {tipo:tipo, items:[]};
+    gruposTipo[key].items.push(p);
+  });
+  var keysTipo = Object.keys(gruposTipo).sort(function(a,b){
+    if(a==='principal'&&b!=='principal') return -1;
+    if(a!=='principal'&&b==='principal') return 1;
+    return a.localeCompare(b);
+  });
+
+  var htmlFinal = '';
+  var diaSemana = new Date().getDay();
+
+  keysTipo.forEach(function(keyTipo){
+    var gTipo = gruposTipo[keyTipo];
+    var totalTipo = gTipo.items.length;
+    var pendientesTipo = gTipo.items.filter(function(p){ return p.estado==='pendiente'; }).length;
+    var hayPendientes = pendientesTipo > 0;
+
+    // Estado inicial de la sección: abierta si tiene pendientes, cerrada si no.
+    if(_seccionTipoAbierta[keyTipo] === undefined){
+      _seccionTipoAbierta[keyTipo] = hayPendientes;
+    }
+    // Auto-cerrar SOLO en el momento en que la sección pasa de "con pendientes" a "completa".
+    if(_seccionTipoTuvoPendientes[keyTipo] && !hayPendientes){
+      _seccionTipoAbierta[keyTipo] = false;
+    }
+    _seccionTipoTuvoPendientes[keyTipo] = hayPendientes;
+
+    var abierta = _seccionTipoAbierta[keyTipo];
+    var colorTipo = keyTipo==='principal' ? 'var(--azul2)' : 'var(--naranja)';
+    var iconoTipo = keyTipo==='principal' ? '🏙' : '🛣';
+
+    htmlFinal += '<div style="border:1px solid var(--borde);border-radius:10px;margin-bottom:10px;overflow:hidden;">';
+    htmlFinal += '<div onclick="toggleSeccionTipo(\''+gTipo.tipo+'\')" style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;cursor:pointer;background:var(--gris);">';
+    htmlFinal += '<div style="font-weight:700;font-size:0.9rem;color:'+colorTipo+';">'+iconoTipo+' '+gTipo.tipo+' <span style="color:#94a3b8;font-weight:400;font-size:0.78rem;">('+totalTipo+')</span></div>';
+    htmlFinal += '<div style="display:flex;align-items:center;gap:8px;">';
+    if(!hayPendientes) htmlFinal += '<span style="font-size:0.7rem;color:var(--verde);font-weight:700;">✅ Completo</span>';
+    else htmlFinal += '<span style="font-size:0.7rem;color:var(--naranja);font-weight:700;">⏳ '+pendientesTipo+' pend.</span>';
+    htmlFinal += '<span style="font-size:0.8rem;color:#94a3b8;">'+(abierta?'▼':'▶')+'</span>';
+    htmlFinal += '</div></div>';
+
+    htmlFinal += '<div style="display:'+(abierta?'block':'none')+';padding:10px 10px 4px 10px;">';
+    htmlFinal += renderComunasDeTipo(gTipo.items, diaSemana);
+    htmlFinal += '</div></div>';
+  });
+
+  lista.innerHTML = htmlFinal;
+}
+
+// Arma el HTML de los grupos por comuna dentro de una sección J05/J06 — es lo que antes
+// hacía renderPaquetes() de punta a punta, ahora factorizado para que cada sección
+// (Principal/Ramal) tenga su propio bloque desplegable por separado.
+function renderComunasDeTipo(items, diaSemana){
+  var grupos = {};
+  items.forEach(function(p){
+    var key = (p.comuna||'Sin comuna');
+    if(!grupos[key]) grupos[key]={comuna:p.comuna||'Sin comuna',items:[]};
     grupos[key].items.push(p);
   });
   var html='';
-  var diaSemana = new Date().getDay();
-  // Ordenar: Principal primero, luego por grilla operacional del día
   var keys = Object.keys(grupos).sort(function(a,b){
-    var ta=grupos[a].tipo.toLowerCase(), tb=grupos[b].tipo.toLowerCase();
-    if(ta==='principal'&&tb!=='principal') return -1;
-    if(ta!=='principal'&&tb==='principal') return 1;
     var pa = getPrioridadComuna(grupos[a].comuna, diaSemana);
     var pb = getPrioridadComuna(grupos[b].comuna, diaSemana);
     return pa - pb;
   });
   keys.forEach(function(key){
     var g=grupos[key];
-    html+='<div class="grupo-titulo">'+g.tipo+' · '+g.comuna+' <span style="color:#94a3b8;font-weight:400;">('+g.items.length+')</span></div>';
+    html+='<div class="grupo-titulo">'+g.comuna+' <span style="color:#94a3b8;font-weight:400;">('+g.items.length+')</span></div>';
     // Detectar multibultos DE VERDAD dentro de este grupo: usa la misma función central
     // que el resto de la app (agruparOrdenes), que ya excluye WOM y respeta "sinAgrupar"
     // — antes esto agrupaba solo por dirección exacta, sin esas reglas, y mostraba el
@@ -2652,7 +2799,7 @@ function renderPaquetes(){
         yaMostrado[gi] = true;
       }
       var badgeClass = p.estado==='entregado'?'badge-verde':p.estado==='devuelto'?'badge-rojo':p.estado==='retorno'?'badge-naranja':p.estado==='daniado'?'badge-naranja':'badge-gris';
-      var badgeTxt = p.estado==='entregado'?'Entregado':p.estado==='devuelto'?'Devuelta a Alas':p.estado==='retorno'?'Retorno':p.estado==='daniado'?'Dañado':'Pendiente';
+      var badgeTxt = p.estado==='entregado'?'Entregado':p.estado==='devuelto'?textoBadgeDevuelto(p):p.estado==='retorno'?'Retorno':p.estado==='daniado'?'Dañado':'Pendiente';
 
       // Dirección: si es URL de Google Maps o muy corta, mostrar solo comuna
       var dir = (p.dir||'').trim();
@@ -2694,7 +2841,7 @@ function renderPaquetes(){
       html+='</div>';
     });
   });
-  lista.innerHTML=html;
+  return html;
 }
 
 // Arma el link de WhatsApp con el teléfono normalizado (formato chileno +56) y el
@@ -2823,7 +2970,7 @@ function procesarQR(texto){
     qrPaqueteActual = p;
     box.innerHTML='<div class="qr-result ok">✅ Orden encontrada: <strong>'+p.nombre+'</strong></div>';
     var badgeClass = p.estado==='entregado'?'badge-verde':p.estado==='devuelto'?'badge-rojo':p.estado==='retorno'?'badge-naranja':p.estado==='daniado'?'badge-naranja':'badge-gris';
-    var badgeTxt = p.estado==='entregado'?'Entregado':p.estado==='devuelto'?'Devuelta a Alas':p.estado==='retorno'?'Retorno':p.estado==='daniado'?'Dañado':'Pendiente';
+    var badgeTxt = p.estado==='entregado'?'Entregado':p.estado==='devuelto'?textoBadgeDevuelto(p):p.estado==='retorno'?'Retorno':p.estado==='daniado'?'Dañado':'Pendiente';
     var dir = (p.dir||'').trim();
     var dirMostrar = (dir.toLowerCase().indexOf('http') !== -1 || dir.length < 5) ? (p.comuna||'') : dir;
 
