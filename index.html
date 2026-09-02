@@ -2862,22 +2862,59 @@ function toggleSeccionComuna(claveComuna){
 }
 
 function renderComunasDeTipo(items, diaSemana, tipo){
-  var grupos = {};
-  items.forEach(function(p){
-    var key = (p.comuna||'Sin comuna');
-    if(!grupos[key]) grupos[key]={comuna:p.comuna||'Sin comuna',items:[]};
-    grupos[key].items.push(p);
-  });
+  // Agrupa multibultos primero (por folio, sin importar comuna — un multibulto ya
+  // comparte dirección/comuna entre sus bultos).
+  var gruposReales = agruparOrdenes(items);
+  function numRutaRepresentativo(grupo){
+    var nums = grupo.map(function(x){ return x.numRuta; }).filter(function(n){ return n!==null && n!==undefined && !isNaN(n); });
+    return nums.length ? Math.min.apply(null, nums) : null;
+  }
+  function comunaRepresentativa(grupo){ return (grupo[0].comuna||'Sin comuna'); }
+
+  var algunoConNumero = gruposReales.some(function(g){ return numRutaRepresentativo(g)!==null; });
+
+  // CORREGIDO: antes se agrupaba TODO lo de una misma comuna en un solo bloque, sin
+  // importar en qué momento de la ruta se visitaba. Eso rompía el orden correlativo real
+  // (Circuit puede volver a pasar por la misma comuna más tarde en la ruta). Ahora, si hay
+  // números de ruta cargados, se ordena TODO por Nº y se corta en un bloque nuevo cada vez
+  // que cambia la comuna — así el orden general queda correlativo de punta a punta, y la
+  // comuna sigue viéndose agrupada, pero respetando el tramo real de la ruta (si vuelve a
+  // Osorno más tarde, aparece como un segundo bloque "Osorno" aparte, no mezclado con el
+  // primero).
+  var segmentos = [];
+  if(algunoConNumero){
+    var conNumero = gruposReales.filter(function(g){ return numRutaRepresentativo(g)!==null; });
+    var sinNumero = gruposReales.filter(function(g){ return numRutaRepresentativo(g)===null; });
+    conNumero.sort(function(a,b){ return numRutaRepresentativo(a)-numRutaRepresentativo(b); });
+    sinNumero.sort(function(a,b){
+      var pa=getPrioridadComuna(comunaRepresentativa(a),diaSemana), pb=getPrioridadComuna(comunaRepresentativa(b),diaSemana);
+      return pa-pb;
+    });
+    conNumero.concat(sinNumero).forEach(function(grupo){
+      var comuna = comunaRepresentativa(grupo);
+      var ultimo = segmentos[segmentos.length-1];
+      if(ultimo && ultimo.comuna===comuna){ ultimo.grupos.push(grupo); }
+      else{ segmentos.push({comuna:comuna, grupos:[grupo]}); }
+    });
+  } else {
+    // Sin Nº de ruta en ningún pedido: 1 solo bloque por comuna, como antes, ordenados
+    // por prioridad de comuna del día.
+    var porComuna = {}; var ordenComunas = [];
+    gruposReales.forEach(function(grupo){
+      var comuna = comunaRepresentativa(grupo);
+      if(!porComuna[comuna]){ porComuna[comuna]=[]; ordenComunas.push(comuna); }
+      porComuna[comuna].push(grupo);
+    });
+    ordenComunas.sort(function(a,b){ return getPrioridadComuna(a,diaSemana)-getPrioridadComuna(b,diaSemana); });
+    ordenComunas.forEach(function(comuna){ segmentos.push({comuna:comuna, grupos:porComuna[comuna]}); });
+  }
+
   var html='';
-  var keys = Object.keys(grupos).sort(function(a,b){
-    var pa = getPrioridadComuna(grupos[a].comuna, diaSemana);
-    var pb = getPrioridadComuna(grupos[b].comuna, diaSemana);
-    return pa - pb;
-  });
-  keys.forEach(function(key){
-    var g=grupos[key];
-    var claveComuna = (tipo||'')+'|'+g.comuna;
-    var pendientesComuna = g.items.filter(function(p){ return p.estado==='pendiente'; }).length;
+  segmentos.forEach(function(seg, si){
+    var claveComuna = (tipo||'')+'|'+seg.comuna+'|'+si;
+    var itemsSegmento = [];
+    seg.grupos.forEach(function(grupo){ grupo.forEach(function(p){ itemsSegmento.push(p); }); });
+    var pendientesComuna = itemsSegmento.filter(function(p){ return p.estado==='pendiente'; }).length;
     var hayPendientesComuna = pendientesComuna > 0;
     if(_seccionComunaAbierta[claveComuna] === undefined){
       _seccionComunaAbierta[claveComuna] = hayPendientesComuna;
@@ -2889,54 +2926,17 @@ function renderComunasDeTipo(items, diaSemana, tipo){
     var abiertaComuna = _seccionComunaAbierta[claveComuna];
 
     html+='<div class="grupo-titulo" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onclick="toggleSeccionComuna(\''+claveComuna.replace(/'/g,"\\'")+'\')">';
-    html+='<span>'+g.comuna+' <span style="color:#94a3b8;font-weight:400;">('+g.items.length+')</span></span>';
+    html+='<span>'+seg.comuna+' <span style="color:#94a3b8;font-weight:400;">('+itemsSegmento.length+')</span></span>';
     html+='<span style="font-size:0.7rem;color:#94a3b8;">'+(hayPendientesComuna?('⏳ '+pendientesComuna+' · '):'✅ ')+(abiertaComuna?'▼':'▶')+'</span>';
     html+='</div>';
-    if(!abiertaComuna) return; // comuna cerrada: no renderiza sus tarjetas, sigue con la próxima
-    // Detectar multibultos DE VERDAD dentro de este grupo: usa la misma función central
-    // que el resto de la app (agruparOrdenes), que ya excluye WOM y respeta "sinAgrupar"
-    // — antes esto agrupaba solo por dirección exacta, sin esas reglas, y mostraba el
-    // banner de "MULTIBULTO" incluso para pedidos WOM que en realidad son entregas
-    // independientes (ej. Erwin Andrés Collao, 2 pedidos WOM en la misma dirección).
-    var gruposReales = agruparOrdenes(g.items);
-    var claveGrupoDePaquete = {};
-    gruposReales.forEach(function(grupo, gi){
-      grupo.forEach(function(p){ claveGrupoDePaquete[p.id] = gi; });
-    });
-    // CORREGIDO (1): antes se recorría g.items en su orden original, así que los bultos de
-    // un mismo multibulto podían quedar SEPARADOS en la lista (ej. bulto 1 acá, bulto 2
-    // más abajo), y el pedido que quedaba justo después del aviso "MULTIBULTO" — sin ser
-    // parte de ese grupo — parecía visualmente ser el segundo bulto. Ahora se arma primero
-    // el orden de despliegue agrupando cada multibulto COMPLETO y contiguo.
-    // CORREGIDO (2): antes esos grupos quedaban en el orden en que aparecían en el Excel
-    // (que no sigue la numeración de Circuit/Spoke dentro de una misma comuna), así que
-    // dentro de una comuna se veían saltos tipo 27, 28, 46, 47... Ahora los grupos se
-    // ordenan por su Nº de ruta (el menor Nº entre sus bultos), para que dentro de cada
-    // comuna las tarjetas queden correlativas según la ruta real.
-    var gruposDeEstaComuna = [];
-    var gruposVistos = {};
-    g.items.forEach(function(p){
-      var gi = claveGrupoDePaquete[p.id];
-      if(gruposVistos[gi]) return;
-      gruposVistos[gi] = true;
-      gruposDeEstaComuna.push(gruposReales[gi]);
-    });
-    function numRutaRepresentativo(grupo){
-      var nums = grupo.map(function(x){ return x.numRuta; }).filter(function(n){ return n!==null && n!==undefined && !isNaN(n); });
-      return nums.length ? Math.min.apply(null, nums) : Infinity; // sin Nº: al final
-    }
-    gruposDeEstaComuna.sort(function(ga, gb){ return numRutaRepresentativo(ga) - numRutaRepresentativo(gb); });
-    var ordenParaMostrar = [];
-    gruposDeEstaComuna.forEach(function(grupo){ grupo.forEach(function(miembro){ ordenParaMostrar.push(miembro); }); });
-    var yaMostrado = {};
-    ordenParaMostrar.forEach(function(p){
-      var gi = claveGrupoDePaquete[p.id];
-      var grupo = gruposReales[gi];
+    if(!abiertaComuna) return; // bloque cerrado: no renderiza sus tarjetas, sigue con el próximo
+
+    seg.grupos.forEach(function(grupo){
       var esMultibulto = grupo.length > 1;
-      if(esMultibulto && !yaMostrado[gi]){
+      if(esMultibulto){
         html+='<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:6px 10px;margin-bottom:4px;font-size:0.72rem;font-weight:700;color:#92400e;">📦 MULTIBULTO — '+grupo.length+' bultos del mismo pedido</div>';
-        yaMostrado[gi] = true;
       }
+      grupo.forEach(function(p){
       // Número de bulto dentro de su grupo (1 de 3, 2 de 3...) — para distinguir tarjetas
       // que se ven idénticas (mismo nombre, mismo folio, mismo código) cuando son varios
       // bultos del mismo pedido.
@@ -2986,6 +2986,7 @@ function renderComunasDeTipo(items, diaSemana, tipo){
         html+='</div>';
       }
       html+='</div>';
+      });
     });
   });
   return html;
