@@ -144,10 +144,18 @@
   <!-- RENTABILIDAD -->
   <div class="seccion" id="tab-rentabilidad">
     <div class="banner-info">Costo y margen por orden entregada, y cuántas órdenes al mes se necesitan para cubrir los costos fijos (punto de equilibrio).</div>
+    <div class="titulo-seccion" style="margin-top:0;">Hasta hoy (mes en curso, acumulado real)</div>
     <div class="grid">
       <div class="card"><div class="card-label">Costo por orden</div><div class="card-value" id="rent-costo-orden">—</div></div>
       <div class="card"><div class="card-label">Margen por orden</div><div class="card-value" id="rent-margen-orden">—</div></div>
       <div class="card"><div class="card-label">Punto de equilibrio</div><div class="card-value" id="rent-pe">—</div><div class="card-sub">órdenes / mes</div></div>
+    </div>
+    <div class="titulo-seccion">Proyectado a fin de mes</div>
+    <div style="font-size:0.75rem;color:#64748b;margin:-6px 0 8px 0;" id="rent-nota-proyeccion"></div>
+    <div class="grid">
+      <div class="card" style="border-top:3px solid #1e3a5f;"><div class="card-label">Costo por orden</div><div class="card-value" id="rent-costo-orden-proy" style="color:#1e3a5f;">—</div></div>
+      <div class="card" style="border-top:3px solid #1e3a5f;"><div class="card-label">Margen por orden</div><div class="card-value" id="rent-margen-orden-proy" style="color:#1e3a5f;">—</div></div>
+      <div class="card" style="border-top:3px solid #1e3a5f;"><div class="card-label">Punto de equilibrio</div><div class="card-value" id="rent-pe-proy" style="color:#1e3a5f;">—</div><div class="card-sub">órdenes / mes</div></div>
     </div>
     <div class="panel">
       <div class="titulo-seccion" style="margin-top:0;">Costos fijos considerados</div>
@@ -161,14 +169,16 @@
     <div class="panel">
       <div class="titulo-seccion" style="margin-top:0;">Supuestos (ajustables)</div>
       <div class="input-row"><label>Órdenes a simular (mes completo)</label><input type="number" id="in-ordenes" value="600"></div>
-      <div class="input-row"><label>Valor supuesto por orden ($)</label><input type="number" id="in-valor" value="2300"></div>
+      <div style="font-size:0.72rem;color:#94a3b8;margin:-4px 0 8px 0;" id="proy-nota-auto"></div>
+      <div class="input-row"><label>Valor supuesto por orden ($)</label><input type="number" id="in-valor" value="2070"></div>
       <button onclick="calcularProyeccion()" style="background:var(--azul2);color:#fff;border:none;padding:9px 16px;border-radius:8px;font-weight:700;cursor:pointer;margin-top:6px;">Recalcular</button>
     </div>
     <div class="grid">
       <div class="card"><div class="card-label">Ingreso proyectado</div><div class="card-value verde" id="proy-ingreso">—</div></div>
-      <div class="card"><div class="card-label">Costos fijos del mes</div><div class="card-value rojo" id="proy-costos">—</div></div>
+      <div class="card"><div class="card-label">Costos totales del mes</div><div class="card-value rojo" id="proy-costos">—</div></div>
       <div class="card"><div class="card-label">Flujo proyectado</div><div class="card-value" id="proy-flujo">—</div></div>
     </div>
+    <div style="font-size:0.72rem;color:#94a3b8;margin-top:6px;" id="proy-nota-costos"></div>
   </div>
 
   <!-- PERSONAL -->
@@ -177,11 +187,15 @@
       🏠 Esto es aparte de Muspel — solo para ordenar la plata de la casa (Katherine y Cristian).
     </div>
     <div class="grid">
-      <div class="card" style="border-top:3px solid #b8860b;"><div class="card-label">Gasto total del mes</div><div class="card-value" id="pers-total" style="color:#b8860b;">—</div></div>
+      <div class="card" style="border-top:3px solid #94a3b8;"><div class="card-label" id="pers-label-anterior">Gasto mes anterior</div><div class="card-value" id="pers-total-anterior" style="color:#94a3b8;">—</div></div>
+      <div class="card" style="border-top:3px solid #b8860b;"><div class="card-label">Gasto mes en curso</div><div class="card-value" id="pers-total" style="color:#b8860b;">—</div></div>
     </div>
     <div class="panel">
-      <div class="titulo-seccion" style="margin-top:0;color:#7c4a03;">Por categoría — mes en curso</div>
-      <table><thead><tr style="background:#b8860b;"><th>Categoría</th><th class="num">Total</th></tr></thead><tbody id="tabla-personal-cat"></tbody></table>
+      <div class="titulo-seccion" style="margin-top:0;color:#7c4a03;cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onclick="togglePersonalCat()">
+        <span>Por categoría — mes en curso vs. mes anterior</span>
+        <span id="pers-cat-flecha" style="font-size:0.8rem;color:#94a3b8;">▶</span>
+      </div>
+      <table id="pers-cat-tabla" style="display:none;"><thead><tr style="background:#b8860b;"><th>Categoría</th><th class="num" id="pers-th-anterior">Mes anterior</th><th class="num">Mes en curso</th></tr></thead><tbody id="tabla-personal-cat"></tbody></table>
     </div>
     <div class="panel">
       <div class="titulo-seccion" style="margin-top:0;color:#7c4a03;">Detalle</div>
@@ -221,6 +235,18 @@ function mesActualTexto(){
   const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   const hoy = new Date();
   return meses[hoy.getMonth()] + ' ' + hoy.getFullYear();
+}
+// Dado un texto de mes tipo "septiembre 2026", devuelve el mes calendario anterior en el
+// mismo formato ("agosto 2026") — para comparar gastos personales mes contra mes.
+function mesAnteriorTexto(mesTexto){
+  const partes = normalizarMes(mesTexto).split(' ');
+  if(partes.length !== 2) return '';
+  const idx = MESES_NOMBRES.indexOf(partes[0]);
+  const anio = parseInt(partes[1], 10);
+  if(idx === -1 || isNaN(anio)) return '';
+  const idxAnterior = (idx - 1 + 12) % 12;
+  const anioAnterior = idx === 0 ? anio - 1 : anio;
+  return MESES_NOMBRES[idxAnterior] + ' ' + anioAnterior;
 }
 function formatoFechaLegible(fechaStr){
   if(!fechaStr) return '';
@@ -352,7 +378,16 @@ async function cargarDatos(){
   pintarFlujoReal();
   pintarRentabilidad(mesTexto);
   pintarPersonal(mesTexto);
+  autocompletarOrdenesProyeccion();
   calcularProyeccion();
+}
+
+function togglePersonalCat(){
+  var tabla = document.getElementById('pers-cat-tabla');
+  var flecha = document.getElementById('pers-cat-flecha');
+  var abierta = tabla.style.display !== 'none';
+  tabla.style.display = abierta ? 'none' : 'table';
+  flecha.textContent = abierta ? '▶' : '▼';
 }
 
 function pintarPersonal(mesTexto){
@@ -360,11 +395,22 @@ function pintarPersonal(mesTexto){
   const total = delMes.reduce((a,g)=>a+g.monto,0);
   document.getElementById('pers-total').textContent = formatoPesos(total);
 
+  const mesAnterior = mesAnteriorTexto(mesTexto);
+  const delMesAnterior = gastosPersonales.filter(g => normalizarMes(g.mes) === normalizarMes(mesAnterior));
+  const totalAnterior = delMesAnterior.reduce((a,g)=>a+g.monto,0);
+  const mesAnteriorCapitalizado = mesAnterior ? (mesAnterior.charAt(0).toUpperCase()+mesAnterior.slice(1)) : 'Mes anterior';
+  document.getElementById('pers-total-anterior').textContent = formatoPesos(totalAnterior);
+  const labelAnterior = document.getElementById('pers-label-anterior');
+  if(labelAnterior) labelAnterior.textContent = 'Gasto ' + mesAnterior;
+  const thAnterior = document.getElementById('pers-th-anterior');
+  if(thAnterior) thAnterior.textContent = mesAnteriorCapitalizado;
+
   const categorias = ['Mercadería','Cigarros','Chicles','Mascotas','Leña','Combustible (Kia)','Peajes','TAG','Autopista','Instituto','Imprevistos','Ahorro','Vestimenta','Otros'];
   document.getElementById('tabla-personal-cat').innerHTML = categorias.map(cat => {
     const totalCat = delMes.filter(g=>normalizarMes(g.categoria)===normalizarMes(cat)).reduce((a,g)=>a+g.monto,0);
-    return `<tr><td>${cat}</td><td class="num">${formatoPesos(totalCat)}</td></tr>`;
-  }).join('');
+    const totalCatAnterior = delMesAnterior.filter(g=>normalizarMes(g.categoria)===normalizarMes(cat)).reduce((a,g)=>a+g.monto,0);
+    return `<tr><td>${cat}</td><td class="num" style="color:#94a3b8;">${formatoPesos(totalCatAnterior)}</td><td class="num">${formatoPesos(totalCat)}</td></tr>`;
+  }).join('') + `<tr style="font-weight:800;background:#f4f6fa;"><td>Total</td><td class="num" style="color:#94a3b8;">${formatoPesos(totalAnterior)}</td><td class="num">${formatoPesos(total)}</td></tr>`;
 
   document.getElementById('tabla-personal-detalle').innerHTML = delMes.map(g => `
     <tr><td>${formatoFechaLegible(g.fecha)}</td><td>${g.categoria}</td><td>${g.descripcion}</td><td class="num">${formatoPesos(g.monto)}</td></tr>
@@ -643,9 +689,78 @@ function pintarRentabilidad(mesTexto){
     peEl.style.fontSize = '1.1rem';
   }
 
+  // Proyectado a fin de mes: usa el mismo ritmo diario (día más reciente cerrado) × días
+  // hábiles (lunes a sábado) del mes en curso, igual que en la pestaña Proyección — así
+  // no se ve una alarma falsa los primeros días del mes, cuando los costos fijos del mes
+  // completo ya están cargados pero casi no hay órdenes entregadas todavía.
+  const ultimo = cierres.length ? cierres[cierres.length-1] : null;
+  const ritmoDiario = ultimo ? (ultimo.entregadosOrdenes||0) : 0;
+  const hoy = new Date();
+  const diasHabiles = diasLunesASabadoDelMes(hoy.getFullYear(), hoy.getMonth());
+  const ordProyectadas = ritmoDiario>0 ? Math.round(ritmoDiario*diasHabiles) : 0;
+  const notaProy = document.getElementById('rent-nota-proyeccion');
+  if(ordProyectadas>0){
+    notaProy.textContent = `Calculado con el ritmo del día más reciente (${ritmoDiario} órdenes) × ${diasHabiles} días hábiles del mes = ${ordProyectadas} órdenes proyectadas.`;
+  } else {
+    notaProy.textContent = 'Aún no hay días cerrados este mes para proyectar.';
+  }
+  const ingresoProyectado = ordProyectadas * (ordMes>0 ? (ingresoMes/ordMes) : (Number(document.getElementById('in-valor').value)||2070));
+  const costoOrdenProy = ordProyectadas>0 ? costosTotalesMes/ordProyectadas : 0;
+  const margenOrdenProy = ordProyectadas>0 ? (ingresoProyectado-costosTotalesMes)/ordProyectadas : 0;
+  const peProy = margenOrdenProy>0 ? Math.round(costosFijos/margenOrdenProy) : 0;
+  document.getElementById('rent-costo-orden-proy').textContent = ordProyectadas>0 ? formatoPesos(costoOrdenProy) : '—';
+  document.getElementById('rent-margen-orden-proy').textContent = ordProyectadas>0 ? formatoPesos(margenOrdenProy) : '—';
+  const peProyEl = document.getElementById('rent-pe-proy');
+  if(ordProyectadas === 0){ peProyEl.textContent = '—'; peProyEl.style.fontSize = ''; }
+  else if(margenOrdenProy > 0){ peProyEl.textContent = peProy; peProyEl.style.fontSize = ''; }
+  else { peProyEl.textContent = 'No aplica'; peProyEl.style.fontSize = '1.1rem'; }
+
   document.getElementById('tabla-fijos').innerHTML = fijosDelMes.map(c => `
     <tr><td>${c.descripcion}</td><td class="num">${formatoPesos(c.monto)}</td></tr>
   `).join('') || '<tr><td colspan="2" style="text-align:center;color:#94a3b8;">Sin costos fijos registrados este mes</td></tr>';
+}
+
+// Proyección automática de órdenes del mes, en base a lo cargado HOY: toma las órdenes
+// del día más reciente cerrado como "ritmo diario" y lo multiplica por la cantidad de
+// días hábiles (lunes a sábado, sin domingo) que tiene el mes en curso completo. Solo
+// rellena el campo la primera vez que hay datos — si Kathy lo edita a mano después, no
+// se lo pisa en los refrescos automáticos siguientes.
+let _ordenesProyeccionAutoCompletada = false;
+function diasLunesASabadoDelMes(anio, mesIndice){
+  const ultimoDia = new Date(anio, mesIndice+1, 0).getDate();
+  let cuenta = 0;
+  for(let d=1; d<=ultimoDia; d++){
+    const diaSemana = new Date(anio, mesIndice, d).getDay(); // 0=domingo
+    if(diaSemana !== 0) cuenta++;
+  }
+  return cuenta;
+}
+function autocompletarOrdenesProyeccion(){
+  if(_ordenesProyeccionAutoCompletada || cierres.length === 0) return;
+  const ultimo = cierres[cierres.length-1];
+  const ritmoDiario = ultimo.entregadosOrdenes || 0;
+  if(ritmoDiario <= 0) return;
+  const hoy = new Date();
+  const diasHabiles = diasLunesASabadoDelMes(hoy.getFullYear(), hoy.getMonth());
+  const proyeccion = Math.round(ritmoDiario * diasHabiles);
+  document.getElementById('in-ordenes').value = proyeccion;
+
+  // CORREGIDO 03-09-2026: el "valor supuesto por orden" NO puede ser un número plano —
+  // las órdenes WOM se pagan SIEMPRE a tarifa base ($2.070), sin bono aunque la
+  // efectividad sea alta, y eso diluye el promedio real hacia abajo. En vez de asumir
+  // $2.070 para todo, se usa la tarifa REAL observada el día más reciente (ingreso ÷
+  // órdenes entregadas ESE día), que ya viene mezclada con WOM incluido.
+  const tarifaRealObservada = ritmoDiario>0 ? Math.round(ultimo.ingresos/ritmoDiario) : 2070;
+  document.getElementById('in-valor').value = tarifaRealObservada;
+
+  const womDelDia = ultimo.entregadosWom || 0;
+  const noWomDelDia = (ultimo.entregadosOrdenesNoWom!=null) ? ultimo.entregadosOrdenesNoWom : (ritmoDiario - womDelDia);
+  let notaWom = '';
+  if(womDelDia > 0){
+    notaWom = ` (de esas, ${womDelDia} eran WOM — pagan tarifa base fija, sin bono — y ${noWomDelDia} no-WOM; por eso el valor por orden quedó en $${tarifaRealObservada.toLocaleString('es-CL')} en vez del bono completo).`;
+  }
+  document.getElementById('proy-nota-auto').textContent = `Calculado con el ritmo de hoy (${ritmoDiario} órdenes) × ${diasHabiles} días hábiles (lunes a sábado) de este mes, y la tarifa real observada ese día ($${tarifaRealObservada.toLocaleString('es-CL')}/orden)${notaWom} Puedes cambiar cualquiera de los dos si quieres simular otro escenario.`;
+  _ordenesProyeccionAutoCompletada = true;
 }
 
 function calcularProyeccion(){
@@ -653,11 +768,20 @@ function calcularProyeccion(){
   const ordenes = Number(document.getElementById('in-ordenes').value)||0;
   const valor = Number(document.getElementById('in-valor').value)||0;
   const ingreso = ordenes * valor;
-  const fijosDelMes = costos.filter(c => normalizarMes(c.mes) === normalizarMes(mesTexto) && c.fijo === 'Sí').reduce((a,c)=>a+c.monto,0);
-  const flujo = ingreso - fijosDelMes;
+  // CORREGIDO 03-09-2026: antes solo restaba los costos marcados como "Fijo" (arriendo,
+  // contador), dejando afuera combustible, peajes y otros costos variables, además de los
+  // gastos personales — con eso el "flujo proyectado" se veía mejor de lo que era en
+  // realidad. Ahora suma TODO lo cargado del mes: costos operativos (fijos + variables) +
+  // gastos personales.
+  const costosOperativosDelMes = costos.filter(c => normalizarMes(c.mes) === normalizarMes(mesTexto)).reduce((a,c)=>a+c.monto,0);
+  const gastosPersonalesDelMes = gastosPersonales.filter(g => normalizarMes(g.mes) === normalizarMes(mesTexto)).reduce((a,g)=>a+g.monto,0);
+  const costosTotales = costosOperativosDelMes + gastosPersonalesDelMes;
+  const flujo = ingreso - costosTotales;
 
   document.getElementById('proy-ingreso').textContent = formatoPesos(ingreso);
-  document.getElementById('proy-costos').textContent = formatoPesos(fijosDelMes);
+  document.getElementById('proy-costos').textContent = formatoPesos(costosTotales);
+  const notaCostos = document.getElementById('proy-nota-costos');
+  if(notaCostos) notaCostos.textContent = `Incluye costos operativos (fijos + variables: $${costosOperativosDelMes.toLocaleString('es-CL')}) + gastos personales ($${gastosPersonalesDelMes.toLocaleString('es-CL')}) cargados este mes.`;
   const flujoEl = document.getElementById('proy-flujo');
   flujoEl.textContent = formatoPesos(flujo);
   flujoEl.className = 'card-value ' + (flujo >= 0 ? 'verde' : 'rojo');
