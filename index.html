@@ -520,7 +520,7 @@
 <!-- TAB: HISTORIAL -->
 <!-- ══════════════════════════════════════════ -->
 <div class="content" id="tab-historial">
-  <div class="card" style="border:1.5px solid var(--naranja);">
+  <div class="card" style="border:1.5px solid var(--borde);">
     <div class="card-title">📍 Observaciones de sector (precaución operativa)</div>
     <div style="font-size:0.78rem;color:#64748b;margin-bottom:10px;">No es una lista de "sectores peligrosos" — es conocimiento real que van ganando con la ruta: difícil estacionar, dirección GPS con errores, pasaje complicado, anegable en lluvia, etc. Cuando una orden caiga en una dirección o comuna que contenga esta palabra, la tarjeta muestra el aviso.</div>
     <label class="form-label">Palabra clave (parte de la dirección o comuna, ej. "Rahue Alto", "Quinto Centenario")</label>
@@ -536,7 +536,7 @@
     </select>
     <label class="form-label">Nota (opcional)</label>
     <input class="form-input" id="sector-nota" type="text" style="margin-bottom:10px;">
-    <button class="btn btn-naranja" onclick="guardarSector()">📍 Guardar observación</button>
+    <button class="btn btn-primary" onclick="guardarSector()">📍 Guardar observación</button>
     <div id="sector-status" style="margin-top:8px;font-size:0.8rem;color:#64748b;"></div>
     <div id="lista-sectores" style="margin-top:12px;"></div>
   </div>
@@ -1290,7 +1290,7 @@ function renderListaSectores(){
   if(sectoresObservados.length === 0){ cont.innerHTML = '<div style="font-size:0.75rem;color:#94a3b8;">Aún no hay observaciones guardadas.</div>'; return; }
   var html = '';
   sectoresObservados.forEach(function(s){
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:7px 10px;margin-bottom:6px;font-size:0.78rem;">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;background:var(--gris);border:1px solid var(--borde);border-radius:8px;padding:7px 10px;margin-bottom:6px;font-size:0.78rem;">';
     html += '<div><strong>'+s.palabra+'</strong> — '+s.tipo+(s.nota?' · '+s.nota:'')+'</div>';
     html += '<button class="btn btn-sm" style="background:transparent;color:var(--rojo);" onclick="eliminarSector('+"'"+s.ts+"'"+')">✕</button>';
     html += '</div>';
