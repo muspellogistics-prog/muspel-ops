@@ -3326,7 +3326,7 @@ function armarLinkWhatsApp(p){
   var esNombrePersona = primerNombre && !/^\.$/.test(primerNombre);
   var saludoNombre = esNombrePersona ? primerNombre : 'estimado/a';
   var marcaPedido = String(p.b2b||'').trim() || 'su pedido';
-  var mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Nos contactamos desde Muspel Distribución y Logística. Desde ahora estaremos a cargo de la entrega de su pedido de *'+marcaPedido+'*, programada para hoy. 🚐\n\n¡Ya vamos en camino! Cuando estemos cerca del domicilio, le llamaremos para coordinar la entrega.\n\nSi no hay nadie disponible, indíquenos si podemos dejarlo en algún lugar seguro del domicilio. Si no es posible, podemos coordinar la entrega en otra dirección o reagendarla para mañana.\n\nQuedamos atentos. ¡Muchas gracias! 😊';
+  var mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Nos contactamos desde Muspel Distribución y Logística. Desde ahora estaremos a cargo de la entrega de su pedido de *'+marcaPedido+'*, programada para hoy. \n\n¡Ya vamos en camino! Cuando estemos cerca del domicilio, le llamaremos para coordinar la entrega.\n\nSi no hay nadie disponible, indíquenos si podemos dejarlo en algún lugar seguro del domicilio. Si no es posible, podemos coordinar la entrega en otra dirección o reagendarla para mañana.\n\nQuedamos atentos. ¡Muchas gracias! 😊';
   return 'https://wa.me/'+telLimpio+'?text='+encodeURIComponent(mensajeWa);
 }
 
