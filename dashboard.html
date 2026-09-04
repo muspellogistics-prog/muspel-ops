@@ -198,8 +198,11 @@
       <table id="pers-cat-tabla" style="display:none;"><thead><tr style="background:#b8860b;"><th>Categoría</th><th class="num" id="pers-th-anterior">Mes anterior</th><th class="num">Mes en curso</th></tr></thead><tbody id="tabla-personal-cat"></tbody></table>
     </div>
     <div class="panel">
-      <div class="titulo-seccion" style="margin-top:0;color:#7c4a03;">Detalle</div>
-      <table><thead><tr style="background:#b8860b;"><th>Fecha</th><th>Categoría</th><th>Descripción</th><th class="num">Monto</th></tr></thead><tbody id="tabla-personal-detalle"></tbody></table>
+      <div class="titulo-seccion" style="margin-top:0;color:#7c4a03;cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onclick="togglePersonalDetalle()">
+        <span>Detalle</span>
+        <span id="pers-detalle-flecha" style="font-size:0.8rem;color:#94a3b8;">▶</span>
+      </div>
+      <table id="pers-detalle-tabla" style="display:none;"><thead><tr style="background:#b8860b;"><th>Fecha</th><th>Categoría</th><th>Descripción</th><th class="num">Monto</th></tr></thead><tbody id="tabla-personal-detalle"></tbody></table>
     </div>
   </div>
 
@@ -380,6 +383,14 @@ async function cargarDatos(){
   pintarPersonal(mesTexto);
   autocompletarOrdenesProyeccion();
   calcularProyeccion();
+}
+
+function togglePersonalDetalle(){
+  var tabla = document.getElementById('pers-detalle-tabla');
+  var flecha = document.getElementById('pers-detalle-flecha');
+  var abierta = tabla.style.display !== 'none';
+  tabla.style.display = abierta ? 'none' : 'table';
+  flecha.textContent = abierta ? '▶' : '▼';
 }
 
 function togglePersonalCat(){
@@ -700,7 +711,7 @@ function pintarRentabilidad(mesTexto){
   const ordProyectadas = ritmoDiario>0 ? Math.round(ritmoDiario*diasHabiles) : 0;
   const notaProy = document.getElementById('rent-nota-proyeccion');
   if(ordProyectadas>0){
-    notaProy.textContent = `Calculado con el ritmo del día más reciente (${ritmoDiario} órdenes) × ${diasHabiles} días hábiles del mes = ${ordProyectadas} órdenes proyectadas.`;
+    notaProy.textContent = `Según el ÚLTIMO DÍA CERRADO (${formatoFechaLegible(ultimo.fecha)}, no hoy): ${ritmoDiario} órdenes × ${diasHabiles} días hábiles del mes = ${ordProyectadas} órdenes proyectadas.`;
   } else {
     notaProy.textContent = 'Aún no hay días cerrados este mes para proyectar.';
   }
@@ -759,7 +770,7 @@ function autocompletarOrdenesProyeccion(){
   if(womDelDia > 0){
     notaWom = ` (de esas, ${womDelDia} eran WOM — pagan tarifa base fija, sin bono — y ${noWomDelDia} no-WOM; por eso el valor por orden quedó en $${tarifaRealObservada.toLocaleString('es-CL')} en vez del bono completo).`;
   }
-  document.getElementById('proy-nota-auto').textContent = `Calculado con el ritmo de hoy (${ritmoDiario} órdenes) × ${diasHabiles} días hábiles (lunes a sábado) de este mes, y la tarifa real observada ese día ($${tarifaRealObservada.toLocaleString('es-CL')}/orden)${notaWom} Puedes cambiar cualquiera de los dos si quieres simular otro escenario.`;
+  document.getElementById('proy-nota-auto').textContent = `Según el ÚLTIMO DÍA CERRADO (${formatoFechaLegible(ultimo.fecha)}, no hoy): ${ritmoDiario} órdenes × ${diasHabiles} días hábiles (lunes a sábado) de este mes, con la tarifa real de ese día ($${tarifaRealObservada.toLocaleString('es-CL')}/orden)${notaWom} Puedes cambiar cualquiera de los dos números si quieres simular otro escenario.`;
   _ordenesProyeccionAutoCompletada = true;
 }
 
