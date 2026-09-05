@@ -3349,7 +3349,7 @@ function armarLinkWhatsApp(p){
   var marcaPedido = String(p.b2b||'').trim() || 'su pedido';
   var proximaRuta = getProximaRutaComuna(p.comuna);
   var textoReagendo = proximaRuta ? ('nuestra próxima ruta por la localidad, el '+proximaRuta) : 'nuestra próxima ruta por la localidad';
-  var mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos Muspel y hoy estaremos realizando la entrega de su pedido de *'+marcaPedido+'*. \u{1F690}\n\nCuando estemos próximos a su domicilio, le llamaremos para que pueda recibirlo. Le agradecemos que pueda atender nuestra llamada. \u{1F4F1}\n\nImportante: Las entregas se realizan durante el día y según el recorrido de la ruta, por lo que si en ese momento no logramos comunicarnos con usted o no hay alguien disponible para recibir el pedido, reagendaremos la entrega para '+textoReagendo+'.\n\n¡Muchas gracias! Nos vemos pronto. \u{1F60A}';
+  var mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos Muspel y hoy estaremos realizando la entrega de su pedido de *'+marcaPedido+'*.\n\nCuando estemos próximos a su domicilio, le llamaremos para que pueda recibirlo. Le agradecemos que pueda atender nuestra llamada.\n\nImportante: Las entregas se realizan durante el día y según el recorrido de la ruta, por lo que si en ese momento no logramos comunicarnos con usted o no hay alguien disponible para recibir el pedido, reagendaremos la entrega para '+textoReagendo+'.\n\n¡Muchas gracias! Nos vemos pronto.';
   return 'https://wa.me/'+telLimpio+'?text='+encodeURIComponent(mensajeWa);
 }
 
