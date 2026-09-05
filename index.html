@@ -2718,12 +2718,12 @@ function normalizarComuna(c){
 // 0=Dom, 1=Lun, 2=Mar, 3=Mie, 4=Jue, 5=Vie, 6=Sab
 var GRILLA_RUTAS = {
   0: [], // Domingo: descanso
-  1: ['osorno','san pablo','la union','rio bueno'],          // Lun: corredor norte + san pablo primero (cerca de base)
-  2: ['osorno','purranque','rio negro','puerto octay'],       // Mar: corredor sur
-  3: ['osorno','la union','lago ranco'],                      // Mie: corredor norte-oriente
-  4: ['osorno','san juan de la costa','rio negro','purranque'], // Jue: oeste primero, sur en regreso
-  5: ['osorno','la union','rio bueno'],                       // Vie: corredor norte
-  6: ['osorno','puyehue']                                     // Sab: corredor oriente
+  1: ['osorno','san pablo','la union','lago ranco'],          // Lunes
+  2: ['osorno'],                                              // Martes
+  3: ['osorno','la union','purranque','rio negro','puerto octay','rio bueno'], // Miércoles
+  4: ['osorno','purranque','rio negro'],                      // Jueves
+  5: ['osorno','la union','rio bueno'],                       // Viernes
+  6: ['osorno','puyehue']                                     // Sábado
 };
 
 // Grilla ampliada para Cyber/Black Weekend
@@ -2738,6 +2738,27 @@ var GRILLA_CYBER = {
 };
 
 var NOMBRES_DIA = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+
+// Calcula el nombre del día más próximo (después de hoy) en que hay ruta a esa comuna,
+// según la grilla vigente (GRILLA_RUTAS o GRILLA_CYBER si esModoEspecial() está activo).
+// Si esa comuna no tiene más días esta semana, toma el primer día de la próxima semana.
+function getProximaRutaComuna(comuna){
+  var c = normalizarComuna(comuna);
+  var grilla = getGrillaActual();
+  var diasConRuta = [];
+  for(var d=1; d<=6; d++){
+    var g = grilla[d]||[];
+    for(var i=0; i<g.length; i++){
+      if(normalizarComuna(g[i]) === c){ diasConRuta.push(d); break; }
+    }
+  }
+  if(diasConRuta.length===0) return null;
+  var hoy = new Date().getDay();
+  for(var k=0; k<diasConRuta.length; k++){
+    if(diasConRuta[k] > hoy) return NOMBRES_DIA[diasConRuta[k]];
+  }
+  return NOMBRES_DIA[diasConRuta[0]];
+}
 
 function getPrioridadComuna(comuna, diaSemana){
   var c = normalizarComuna(comuna);
@@ -3324,9 +3345,11 @@ function armarLinkWhatsApp(p){
   if(!telLimpio) return null;
   var primerNombre = String(p.nombre||'').trim().split(/\s+/)[0] || '';
   var esNombrePersona = primerNombre && !/^\.$/.test(primerNombre);
-  var saludoNombre = esNombrePersona ? primerNombre : 'estimado/a';
+  var saludoNombre = esNombrePersona ? primerNombre : 'estimado cliente';
   var marcaPedido = String(p.b2b||'').trim() || 'su pedido';
-  var mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Nos contactamos desde Muspel Distribución y Logística. Desde ahora estaremos a cargo de la entrega de su pedido de *'+marcaPedido+'*, programada para hoy. \n\n¡Ya vamos en camino! Cuando estén cerca del domicilio, le llamarán para que pueda recibirlo.\n\n¡Muchas gracias!';
+  var proximaRuta = getProximaRutaComuna(p.comuna);
+  var textoReagendo = proximaRuta ? ('nuestra próxima ruta por la localidad, el '+proximaRuta) : 'nuestra próxima ruta por la localidad';
+  var mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos Muspel y hoy estaremos realizando la entrega de su pedido de *'+marcaPedido+'*. \u{1F690}\n\nCuando estemos próximos a su domicilio, le llamaremos para que pueda recibirlo. Le agradecemos que pueda atender nuestra llamada. \u{1F4F1}\n\nImportante: Las entregas se realizan durante el día y según el recorrido de la ruta, por lo que si en ese momento no logramos comunicarnos con usted o no hay alguien disponible para recibir el pedido, reagendaremos la entrega para '+textoReagendo+'.\n\n¡Muchas gracias! Nos vemos pronto. \u{1F60A}';
   return 'https://wa.me/'+telLimpio+'?text='+encodeURIComponent(mensajeWa);
 }
 
