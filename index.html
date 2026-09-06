@@ -138,6 +138,18 @@
   .modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:200;align-items:flex-end;}
   .modal-overlay.open{display:flex;}
   .modal-box{background:var(--blanco);border-radius:16px 16px 0 0;padding:20px 16px 32px;width:100%;max-height:85vh;overflow-y:auto;position:relative;}
+  /* Mobile: todo apilado en 1 columna, con la observación PRIMERO (arriba del nombre). */
+  .modal-layout{display:flex;flex-direction:column;}
+  #modal-observacion-box{order:-1;}
+  .modal-columna-principal{order:1;min-width:0;}
+  /* PC/tablet: 2 columnas — el detalle a la izquierda, la observación a la derecha,
+     usando el espacio que quedaba vacío en vez de dejarlo en blanco. */
+  @media (min-width: 720px){
+    .modal-box{max-width:700px;margin:0 auto;}
+    .modal-layout{flex-direction:row;gap:20px;align-items:flex-start;}
+    .modal-columna-principal{flex:1;order:1;}
+    #modal-observacion-box{width:260px;flex-shrink:0;order:2;margin:0 !important;}
+  }
   .modal-cerrar-btn{position:absolute;top:10px;right:10px;width:44px;height:44px;border-radius:50%;background:var(--gris);border:none;font-size:1.3rem;color:#475569;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:5;}
   .modal-handle{width:40px;height:4px;background:#dde3ed;border-radius:99px;margin:0 auto 16px;}
   .modal-titulo{font-size:1rem;font-weight:700;color:var(--azul);margin-bottom:4px;}
@@ -174,65 +186,69 @@
   <div class="modal-box">
     <button class="modal-cerrar-btn" onclick="cerrarModal()" aria-label="Cerrar">✕</button>
     <div class="modal-handle"></div>
-    <div class="modal-titulo" id="modal-nombre">—</div>
-    <div class="modal-codigo" id="modal-codigo">—</div>
-    <div id="modal-observacion-box" style="display:none;margin:10px 0;padding:10px 12px;background:#fef9c3;border:1.5px solid #eab308;border-radius:8px;">
-      <div style="font-size:0.72rem;font-weight:700;color:#854d0e;margin-bottom:3px;">📝 OBSERVACIÓN DEL CLIENTE</div>
-      <div style="font-size:0.85rem;color:#422006;" id="modal-observacion-texto">—</div>
+    <div class="modal-layout">
+      <div id="modal-observacion-box" style="display:none;margin:10px 0;padding:10px 12px;background:#ede9fe;border:1.5px solid #a855f7;border-radius:8px;">
+        <div style="font-size:0.72rem;font-weight:700;color:#6b21a8;margin-bottom:3px;">📝 OBSERVACIÓN DEL CLIENTE</div>
+        <div style="font-size:0.85rem;color:#3b0764;" id="modal-observacion-texto">—</div>
+      </div>
+      <div class="modal-columna-principal">
+        <div class="modal-titulo" id="modal-nombre">—</div>
+        <div class="modal-codigo" id="modal-codigo">—</div>
+        <div class="modal-campo">
+          <span class="modal-campo-label">🏪 Empresa que envía</span>
+          <span class="modal-campo-valor" id="modal-empresa">—</span>
+        </div>
+        <div class="modal-campo">
+          <span class="modal-campo-label">📋 N° Orden Alas (Folio)</span>
+          <span class="modal-campo-valor" id="modal-folio">—</span>
+        </div>
+        <div class="modal-campo" id="modal-totalpaquetes-row" style="display:none;background:#fff4e0;border-radius:8px;padding:8px 10px;">
+          <span class="modal-campo-label">📦 Paquetes a entregar en esta dirección</span>
+          <span class="modal-campo-valor" id="modal-totalpaquetes" style="font-size:1.1rem;font-weight:800;color:var(--naranja);">—</span>
+          <div id="modal-desglose-paquetes" style="margin-top:6px;font-size:0.72rem;color:#78716c;"></div>
+        </div>
+        <div class="modal-campo" id="modal-bulto-row">
+          <span class="modal-campo-label">📦 N° Bulto de entrega</span>
+          <span class="modal-campo-valor" id="modal-bulto">—</span>
+        </div>
+        <div class="modal-campo">
+          <span class="modal-campo-label">📍 Dirección</span>
+          <span class="modal-campo-valor" id="modal-dir">—</span>
+        </div>
+        <div class="modal-campo">
+          <span class="modal-campo-label">🏙 Comuna</span>
+          <span class="modal-campo-valor" id="modal-comuna">—</span>
+        </div>
+        <div class="modal-campo">
+          <span class="modal-campo-label">📞 Teléfono</span>
+          <span class="modal-campo-valor" id="modal-tel">—</span>
+        </div>
+        <div class="modal-campo-acciones-tel" id="modal-tel-acciones" style="display:none;">
+          <a id="modal-tel-llamar" href="#" style="flex:1;text-decoration:none;"><button class="btn btn-verde" style="width:100%;margin-bottom:0;">📞 Llamar</button></a>
+          <a id="modal-tel-whatsapp" href="#" target="_blank" style="flex:1;text-decoration:none;"><button class="btn btn-primary" style="width:100%;margin-bottom:0;">💬 WhatsApp</button></a>
+        </div>
+        <div class="modal-campo">
+          <span class="modal-campo-label">🚚 Tipo ruta</span>
+          <span class="modal-campo-valor" id="modal-tipo">—</span>
+        </div>
+        <div class="modal-campo">
+          <span class="modal-campo-label">📋 Estado actual</span>
+          <span class="modal-campo-valor" id="modal-estado">—</span>
+        </div>
+        <div id="modal-clasificacion" style="display:flex;gap:8px;margin-top:8px;"></div>
+        <div class="solo-comercial" style="margin-top:10px;">
+          <label class="form-label">📝 Dejar observación para Cristian (indicación del cliente)</label>
+          <textarea class="form-input" id="modal-observacion-input" rows="3" placeholder="Ej: dejar con el vecino del 205, o llamar antes de subir"></textarea>
+          <button class="btn btn-naranja btn-sm" style="margin-top:6px;" onclick="guardarObservacionOrden()">💾 Guardar observación</button>
+        </div>
+        <div class="modal-campo" id="modal-motivo-row" style="display:none;">
+          <span class="modal-campo-label">📝 Motivo</span>
+          <span class="modal-campo-valor" id="modal-motivo">—</span>
+        </div>
+        <div id="modal-repetido" style="display:none;margin-top:8px;padding:8px 12px;background:#fee2e2;border-radius:8px;font-size:0.78rem;color:var(--rojo);font-weight:600;"></div>
+        <div class="modal-acciones" id="modal-acciones"></div>
+      </div>
     </div>
-    <div class="modal-campo">
-      <span class="modal-campo-label">🏪 Empresa que envía</span>
-      <span class="modal-campo-valor" id="modal-empresa">—</span>
-    </div>
-    <div class="modal-campo">
-      <span class="modal-campo-label">📋 N° Orden Alas (Folio)</span>
-      <span class="modal-campo-valor" id="modal-folio">—</span>
-    </div>
-    <div class="modal-campo" id="modal-totalpaquetes-row" style="display:none;background:#fff4e0;border-radius:8px;padding:8px 10px;">
-      <span class="modal-campo-label">📦 Paquetes a entregar en esta dirección</span>
-      <span class="modal-campo-valor" id="modal-totalpaquetes" style="font-size:1.1rem;font-weight:800;color:var(--naranja);">—</span>
-      <div id="modal-desglose-paquetes" style="margin-top:6px;font-size:0.72rem;color:#78716c;"></div>
-    </div>
-    <div class="modal-campo" id="modal-bulto-row">
-      <span class="modal-campo-label">📦 N° Bulto de entrega</span>
-      <span class="modal-campo-valor" id="modal-bulto">—</span>
-    </div>
-    <div class="modal-campo">
-      <span class="modal-campo-label">📍 Dirección</span>
-      <span class="modal-campo-valor" id="modal-dir">—</span>
-    </div>
-    <div class="modal-campo">
-      <span class="modal-campo-label">🏙 Comuna</span>
-      <span class="modal-campo-valor" id="modal-comuna">—</span>
-    </div>
-    <div class="modal-campo">
-      <span class="modal-campo-label">📞 Teléfono</span>
-      <span class="modal-campo-valor" id="modal-tel">—</span>
-    </div>
-    <div class="modal-campo-acciones-tel" id="modal-tel-acciones" style="display:none;">
-      <a id="modal-tel-llamar" href="#" style="flex:1;text-decoration:none;"><button class="btn btn-verde" style="width:100%;margin-bottom:0;">📞 Llamar</button></a>
-      <a id="modal-tel-whatsapp" href="#" target="_blank" style="flex:1;text-decoration:none;"><button class="btn btn-primary" style="width:100%;margin-bottom:0;">💬 WhatsApp</button></a>
-    </div>
-    <div class="modal-campo">
-      <span class="modal-campo-label">🚚 Tipo ruta</span>
-      <span class="modal-campo-valor" id="modal-tipo">—</span>
-    </div>
-    <div class="modal-campo">
-      <span class="modal-campo-label">📋 Estado actual</span>
-      <span class="modal-campo-valor" id="modal-estado">—</span>
-    </div>
-    <div id="modal-clasificacion" style="display:flex;gap:8px;margin-top:8px;"></div>
-    <div class="solo-comercial" style="margin-top:10px;">
-      <label class="form-label">📝 Dejar observación para Cristian (indicación del cliente)</label>
-      <textarea class="form-input" id="modal-observacion-input" rows="3" placeholder="Ej: dejar con el vecino del 205, o llamar antes de subir"></textarea>
-      <button class="btn btn-naranja btn-sm" style="margin-top:6px;" onclick="guardarObservacionOrden()">💾 Guardar observación</button>
-    </div>
-    <div class="modal-campo" id="modal-motivo-row" style="display:none;">
-      <span class="modal-campo-label">📝 Motivo</span>
-      <span class="modal-campo-valor" id="modal-motivo">—</span>
-    </div>
-    <div id="modal-repetido" style="display:none;margin-top:8px;padding:8px 12px;background:#fee2e2;border-radius:8px;font-size:0.78rem;color:var(--rojo);font-weight:600;"></div>
-    <div class="modal-acciones" id="modal-acciones"></div>
   </div>
 </div>
 
