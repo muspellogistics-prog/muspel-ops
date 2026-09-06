@@ -31,6 +31,12 @@
   body.perfil-comercial .solo-operativo{display:none !important;}
   /* CONTENIDO */
   .content{display:none;padding:14px;max-width:700px;margin:0 auto;}
+  /* En pantallas anchas (PC/tablet), el header y las pestañas quedan centrados y con el
+     mismo ancho máximo que el contenido, en vez de estirarse de punta a punta — así se ve
+     como una app compacta y prolija, no una tira angosta desparramada en toda la pantalla. */
+  @media (min-width: 720px){
+    .header, .tabs, #sync-indicator-row{ max-width:700px; margin-left:auto; margin-right:auto; }
+  }
   .content.active{display:block;}
   /* CARDS */
   .card{background:var(--blanco);border-radius:10px;box-shadow:var(--sombra);padding:14px;margin-bottom:12px;border:1px solid var(--borde);}
@@ -3344,7 +3350,7 @@ function renderComunasDeTipo(items, diaSemana, tipo){
         html+='<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:6px;padding:3px 7px;margin-bottom:4px;font-size:0.68rem;font-weight:700;color:#9a3412;">⚠️ '+obsSector.tipo+(obsSector.nota?' — '+obsSector.nota:'')+'</div>';
       }
       if(p.observacion && p.observacion.trim()){
-        html+='<div style="background:#fef9c3;border:1px solid #eab308;border-radius:6px;padding:3px 7px;margin-bottom:4px;font-size:0.68rem;font-weight:700;color:#854d0e;">📝 Observación del cliente — tocar para ver</div>';
+        html+='<div style="display:inline-block;background:#ede9fe;border:1px solid #a855f7;border-radius:6px;padding:3px 8px;margin-bottom:4px;font-size:0.68rem;font-weight:700;color:#6b21a8;">📝 Observación del cliente</div>';
       }
       html+='<div class="paquete-nombre">'+p.nombre+'</div>';
       html+='<div class="paquete-dir">'+dirMostrar+(p.tel?' · '+p.tel:'')+'</div>';
