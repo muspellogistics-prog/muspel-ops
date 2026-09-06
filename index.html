@@ -36,7 +36,6 @@
      se note como un bloque propio, no una franja plana pegada a los bordes. */
   @media (min-width: 520px){
     .header{max-width:700px;margin:0 auto;border-radius:0 0 12px 12px;box-shadow:0 4px 16px rgba(0,0,0,0.28);}
-    #btn-sincronizar-top{display:block;max-width:700px;margin:8px auto 0;border-radius:8px !important;box-shadow:0 4px 12px rgba(2,132,199,0.4) !important;}
     .tabs{max-width:700px;margin:0 auto;box-shadow:0 4px 12px rgba(0,0,0,0.2);}
     #sync-indicator-row{max-width:700px;margin:0 auto;}
   }
@@ -173,6 +172,36 @@
   .sync-badge.pend{background:#ffedd5;color:#c2410c;}
   .sync-badge.err{background:#fee2e2;color:#b91c1c;}
   .sync-badge.sinc{background:#dbeafe;color:#1d4ed8;}
+
+  /* ══════════════════════════════════════════════════════════════════
+     COMPUTADOR (pantalla de escritorio de verdad, no un celular grande).
+     Todo lo de arriba está pensado "mobile-first": una sola columna de
+     máx. 700px, centrada, y el detalle de la orden como una hoja que sube
+     pegada abajo (bottom sheet). Eso es lo que se ve "compacto como
+     celular" aunque estés en el computador. Desde 900px de ancho —un
+     monitor real, no una tablet chica— usamos el espacio disponible como
+     un panel de control: grillas de 4 columnas en vez de 2, pestañas
+     repartidas en todo el ancho sin scroll, y el detalle de la orden se
+     abre centrado como una ventana normal.
+     Este bloque va AL FINAL del <style> a propósito: en CSS, cuando dos
+     reglas tienen la misma especificidad (ej. ".stats-grid" definida acá
+     y ".stats-grid" definida arriba), gana la que aparece más abajo en el
+     archivo — así que si esto no fuera lo último, el celular "ganaría"
+     también en el computador. ═══════════════════════════════════════ */
+  @media (min-width: 900px){
+    .header,.tabs,#sync-indicator-row,.content{max-width:1180px;}
+    .content{padding:26px 32px;}
+    .card{padding:20px 24px;}
+    .tabs{overflow-x:visible;}
+    .tab{flex:1;min-width:0;font-size:0.74rem;padding:14px 8px 12px;}
+    .stats-grid{grid-template-columns:repeat(4,1fr);}
+    .dash-grid{grid-template-columns:repeat(4,1fr);}
+    .filtro-bar{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));}
+    /* Detalle de orden: en el celular sube desde abajo (bottom sheet); en
+       el computador se centra como una ventana normal, más ancha. */
+    .modal-overlay{align-items:center;padding:24px;}
+    .modal-box{border-radius:16px;max-width:920px;max-height:88vh;padding:28px 28px 32px;}
+  }
 </style>
 </head>
 <body>
@@ -272,8 +301,6 @@
 <div id="sync-indicator-row" style="background:var(--azul);padding:0 16px 8px;display:flex;justify-content:flex-end;">
   <div id="sync-indicator"></div>
 </div>
-
-<button id="btn-sincronizar-top" class="btn solo-operativo" onclick="traerOrdenesDesdeNube()" style="width:100%;background:linear-gradient(135deg,#0ea5e9,#0284c7);color:#fff;font-size:0.95rem;font-weight:800;padding:14px;margin:0;border-radius:0;box-shadow:0 2px 8px rgba(2,132,199,0.35);">☁️ Sincronizar ahora</button>
 
 <div class="tabs" id="tabs-nav">
   <div class="tab active" onclick="showTab('resumen')">📊 Resumen</div>
@@ -2304,7 +2331,7 @@ function actualizarHeader(){
   document.getElementById('header-paquetes').textContent = total + ' paquetes';
   // alerta dia
   var ai = document.getElementById('alerta-dia');
-  if(total === 0) ai.textContent = perfilActual==='comercial' ? 'Sin órdenes cargadas. Ve a Importar para cargar el Excel de Alas.' : 'Aún no hay órdenes cargadas. Toca "☁️ Sincronizar ahora" arriba.';
+  if(total === 0) ai.textContent = perfilActual==='comercial' ? 'Sin órdenes cargadas. Ve a Importar para cargar el Excel de Alas.' : 'Aún no hay órdenes cargadas todavía. Se sincronizan solas apenas Comercial las suba.';
   else ai.textContent = 'Operación en curso — ' + ent + ' de ' + total + ' órdenes entregadas.';
   actualizarIndicadorSync();
   if(typeof ajustarPosicionTabs === 'function') setTimeout(ajustarPosicionTabs, 0);
