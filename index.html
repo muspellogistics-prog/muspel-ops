@@ -28,6 +28,7 @@
   .perfil-flotante{display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.14);color:#fff;border:1px solid rgba(255,255,255,0.3);padding:3px 9px;border-radius:20px;font-size:0.62rem;font-weight:700;cursor:pointer;white-space:nowrap;}
   .perfil-flotante:active{background:rgba(255,255,255,0.24);}
   body:not(.perfil-comercial) .solo-comercial{display:none !important;}
+  body.perfil-comercial .solo-operativo{display:none !important;}
   /* CONTENIDO */
   .content{display:none;padding:14px;max-width:700px;margin:0 auto;}
   .content.active{display:block;}
@@ -123,13 +124,15 @@
   .alerta-ok{background:#dcfce7;color:#15803d;border:1px solid #bbf7d0;}
   .alerta-warn{background:#ffedd5;color:#c2410c;border:1px solid #fdba74;}
   /* FILTRO */
-  .filtro-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
+  .filtro-bar{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;}
+  .filtro-btn{width:100%;text-align:center;}
   .filtro-btn{padding:5px 12px;border-radius:99px;font-size:0.72rem;font-weight:600;cursor:pointer;border:1.5px solid var(--borde);background:var(--blanco);color:#64748b;transition:all .2s;}
   .filtro-btn.active{background:var(--azul2);color:var(--blanco);border-color:var(--azul2);}
   /* MODAL DETALLE ORDEN */
   .modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:200;align-items:flex-end;}
   .modal-overlay.open{display:flex;}
-  .modal-box{background:var(--blanco);border-radius:16px 16px 0 0;padding:20px 16px 32px;width:100%;max-height:85vh;overflow-y:auto;}
+  .modal-box{background:var(--blanco);border-radius:16px 16px 0 0;padding:20px 16px 32px;width:100%;max-height:85vh;overflow-y:auto;position:relative;}
+  .modal-cerrar-btn{position:absolute;top:10px;right:10px;width:44px;height:44px;border-radius:50%;background:var(--gris);border:none;font-size:1.3rem;color:#475569;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:5;}
   .modal-handle{width:40px;height:4px;background:#dde3ed;border-radius:99px;margin:0 auto 16px;}
   .modal-titulo{font-size:1rem;font-weight:700;color:var(--azul);margin-bottom:4px;}
   .modal-codigo{font-size:0.72rem;color:#94a3b8;font-family:monospace;margin-bottom:14px;}
@@ -152,6 +155,7 @@
 <!-- MODAL DETALLE RESUMEN -->
 <div class="modal-overlay" id="modal-resumen-overlay" onclick="cerrarResumenDetalle(event)">
   <div class="modal-box">
+    <button class="modal-cerrar-btn" onclick="cerrarResumenDetalle()" aria-label="Cerrar">✕</button>
     <div class="modal-handle"></div>
     <div class="modal-titulo" id="modal-resumen-titulo">—</div>
     <div style="font-size:0.75rem;color:#64748b;margin-bottom:12px;" id="modal-resumen-subtitulo">—</div>
@@ -162,6 +166,7 @@
 <!-- MODAL DETALLE ORDEN -->
 <div class="modal-overlay" id="modal-overlay" onclick="cerrarModal(event)">
   <div class="modal-box">
+    <button class="modal-cerrar-btn" onclick="cerrarModal()" aria-label="Cerrar">✕</button>
     <div class="modal-handle"></div>
     <div class="modal-titulo" id="modal-nombre">—</div>
     <div class="modal-codigo" id="modal-codigo">—</div>
@@ -207,6 +212,15 @@
       <span class="modal-campo-valor" id="modal-estado">—</span>
     </div>
     <div id="modal-clasificacion" style="display:flex;gap:8px;margin-top:8px;"></div>
+    <div id="modal-observacion-box" style="display:none;margin-top:10px;padding:10px 12px;background:#fef9c3;border:1.5px solid #eab308;border-radius:8px;">
+      <div style="font-size:0.72rem;font-weight:700;color:#854d0e;margin-bottom:3px;">📝 OBSERVACIÓN DEL CLIENTE</div>
+      <div style="font-size:0.85rem;color:#422006;" id="modal-observacion-texto">—</div>
+    </div>
+    <div class="solo-comercial" style="margin-top:10px;">
+      <label class="form-label">📝 Dejar observación para Cristian (indicación del cliente)</label>
+      <textarea class="form-input" id="modal-observacion-input" rows="3" placeholder="Ej: dejar con el vecino del 205, o llamar antes de subir"></textarea>
+      <button class="btn btn-naranja btn-sm" style="margin-top:6px;" onclick="guardarObservacionOrden()">💾 Guardar observación</button>
+    </div>
     <div class="modal-campo" id="modal-motivo-row" style="display:none;">
       <span class="modal-campo-label">📝 Motivo</span>
       <span class="modal-campo-valor" id="modal-motivo">—</span>
@@ -219,24 +233,25 @@
 <div class="header" id="app-header">
   <div>
     <div class="header-logo">MUSPEL <span>OPS</span></div>
-    <div style="display:flex;align-items:center;gap:8px;">
-      <div class="header-fecha" id="header-fecha"></div>
-      <div class="perfil-flotante" onclick="cambiarPerfil()" id="perfil-btn">👷 Operativo</div>
-    </div>
+    <div class="header-fecha" id="header-fecha"></div>
   </div>
-  <div style="text-align:right">
+  <div style="text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
     <div style="font-size:0.75rem;color:#a8c4e0;" id="header-paquetes">0 órdenes</div>
-    <div style="font-size:0.72rem;color:#7ec8f4;" id="header-ef">—</div>
-    <div id="sync-indicator" style="margin-top:4px;"></div>
+    <div class="perfil-flotante" onclick="cambiarPerfil()" id="perfil-btn">👷 Operativo</div>
   </div>
 </div>
+<div id="sync-indicator-row" style="background:var(--azul);padding:0 16px 8px;display:flex;justify-content:flex-end;">
+  <div id="sync-indicator"></div>
+</div>
+
+<button class="btn" onclick="traerOrdenesDesdeNube()" style="width:100%;background:linear-gradient(135deg,#0ea5e9,#0284c7);color:#fff;font-size:0.95rem;font-weight:800;padding:14px;margin:0;border-radius:0;box-shadow:0 2px 8px rgba(2,132,199,0.35);">☁️ Sincronizar ahora</button>
 
 <div class="tabs" id="tabs-nav">
   <div class="tab active" onclick="showTab('resumen')">📊 Resumen</div>
   <div class="tab solo-comercial" onclick="showTab('importar')">📥 Importar</div>
   <div class="tab" onclick="showTab('paquetes')">📦 Órdenes</div>
   <div class="tab" onclick="showTab('qr')">📷 QR</div>
-  <div class="tab" onclick="showTab('cierre')">✅ Cierre</div>
+  <div class="tab solo-comercial" onclick="showTab('cierre')">✅ Cierre</div>
   <div class="tab solo-comercial" onclick="showTab('dashboard')">📈 Dashboard</div>
   <div class="tab solo-comercial" onclick="showTab('historial')">🗂 Historial</div>
 </div>
@@ -247,7 +262,16 @@
 <div class="content active" id="tab-resumen">
   <div class="alerta alerta-warn" id="banner-operacional" style="display:none;"></div>
   <div class="alerta alerta-info" id="alerta-dia"></div>
-  <div class="card" style="padding:12px 14px;margin-bottom:12px;">
+
+  <!-- Vista simple para Cristian: SOLO 4 números en órdenes, sin efectividad ni paquetes -->
+  <div class="stats-grid solo-operativo">
+    <div class="stat azul" onclick="abrirResumenDetalle('todos')" style="cursor:pointer;"><div class="stat-n" id="so-recibidas">0</div><div class="stat-label">Órdenes recibidas</div></div>
+    <div class="stat verde" onclick="abrirResumenDetalle('entregado')" style="cursor:pointer;"><div class="stat-n" id="so-entregadas">0</div><div class="stat-label">Órdenes entregadas</div></div>
+    <div class="stat naranja" onclick="abrirResumenDetalle('pendiente')" style="cursor:pointer;"><div class="stat-n" id="so-pendientes">0</div><div class="stat-label">Órdenes pendientes</div></div>
+    <div class="stat rojo" onclick="abrirResumenDetalle('devuelto')" style="cursor:pointer;"><div class="stat-n" id="so-devueltas">0</div><div class="stat-label">Devueltas / retornadas</div></div>
+  </div>
+
+  <div class="card solo-comercial" style="padding:12px 14px;margin-bottom:12px;">
     <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;font-size:0.78rem;">
       <span>📦 <b id="s-total-paquetes">0</b> paquetes</span>
       <span>🧾 <b id="s-total-ordenes">0</b> órdenes</span>
@@ -255,31 +279,30 @@
     </div>
     <div style="font-size:0.68rem;color:#94a3b8;margin-top:4px;">Un multibulto es 1 orden con más de 1 paquete — todos sus paquetes se entregan juntos.</div>
   </div>
-  <div class="stats-grid">
+  <div class="stats-grid solo-comercial">
     <div class="stat azul" onclick="abrirResumenDetalle('todos')" style="cursor:pointer;"><div class="stat-n" id="s-recibidos">0</div><div class="stat-label">Paquetes recibidos</div></div>
     <div class="stat verde" onclick="abrirResumenDetalle('entregado')" style="cursor:pointer;"><div class="stat-n" id="s-entregados">0</div><div class="stat-label">Paquetes entregados</div><div style="font-size:0.68rem;color:#94a3b8;margin-top:2px;" id="s-entregados-ordenes"></div></div>
     <div class="stat rojo" onclick="abrirResumenDetalle('devuelto')" style="cursor:pointer;"><div class="stat-n" id="s-devueltos">0</div><div class="stat-label">Paquetes no entregados</div><div style="font-size:0.68rem;color:#94a3b8;margin-top:2px;" id="s-devueltos-desglose"></div></div>
     <div class="stat naranja" onclick="abrirResumenDetalle('pendiente')" style="cursor:pointer;"><div class="stat-n" id="s-pendientes">0</div><div class="stat-label">Órdenes pendientes</div><div style="font-size:0.68rem;color:#94a3b8;margin-top:2px;" id="s-pendientes-paquetes"></div></div>
   </div>
-  <div class="prog-wrap">
+  <div class="prog-wrap solo-comercial">
     <div class="prog-label">
       <span>Efectividad del día</span>
       <span id="p-efectividad-txt" style="font-weight:700;color:var(--verde);">—</span>
     </div>
     <div class="prog-bar"><div class="prog-fill" id="p-entregados" style="width:0%"></div></div>
   </div>
-  <div class="stats-grid">
+  <div class="stats-grid solo-comercial">
     <div class="stat azul" onclick="abrirResumenDetalle('principal')" style="cursor:pointer;"><div class="stat-n" id="s-principal" style="font-size:1.4rem;">0</div><div class="stat-label">Principal</div></div>
     <div class="stat naranja" onclick="abrirResumenDetalle('ramal')" style="cursor:pointer;"><div class="stat-n" id="s-ramal" style="font-size:1.4rem;">0</div><div class="stat-label">Ramal</div></div>
   </div>
-  <div class="card">
+  <div class="card solo-comercial">
     <div class="card-title">📊 Efectividad del mes</div>
     <div style="font-size:2rem;font-weight:800;color:var(--azul);" id="s-ef-mes-txt">0%</div>
     <div style="font-size:0.72rem;color:#94a3b8;margin-top:4px;">Acumulada del historial de días cerrados</div>
   </div>
   <div class="card">
     <div class="card-title">⚙️ Configuración operacional</div>
-    <div style="font-size:0.75rem;color:#64748b;margin-bottom:10px;">Ajusta el modo de operación del día. Los cambios se sincronizan con Cristian automáticamente.</div>
     <button id="btn-no-operativo" class="btn btn-rojo" onclick="marcarDiaNoOperativo()" style="margin-bottom:6px;">⛔ Marcar día no operativo</button>
     <button id="btn-feriado" class="btn btn-naranja" onclick="marcarFeriado()" style="margin-bottom:6px;">🗓 Marcar feriado</button>
     <div style="font-size:0.72rem;font-weight:700;color:#64748b;margin:8px 0 6px;text-transform:uppercase;letter-spacing:0.5px;">Temporada especial</div>
@@ -294,7 +317,7 @@
     <input type="text" class="form-input" id="del-codigo" placeholder="Código del pedido (ej. CHA-47051-1784811050203)" style="margin-bottom:8px;">
     <button class="btn btn-rojo" style="background:#7f1d1d;" onclick="eliminarPorCodigo()">🗑️ Eliminar este código</button>
   </div>
-  <div class="card">
+  <div class="card solo-comercial">
     <div class="card-title">☁️ Sincronización con Google Sheets</div>
     <div id="sync-status-box" style="font-size:0.8rem;color:#64748b;">Verificando...</div>
     <button class="btn btn-outline" style="margin-top:8px;" onclick="sincronizarTodo()">🔄 Sincronizar ahora</button>
@@ -376,10 +399,9 @@
     <button class="filtro-btn" onclick="filtrarPaquetes('pendiente',this)">Pendientes</button>
     <button class="filtro-btn" onclick="filtrarPaquetes('entregado',this)">Entregados</button>
     <button class="filtro-btn" onclick="filtrarPaquetes('retorno',this)">🔁 Retorno</button>
-    <button class="filtro-btn" onclick="filtrarPaquetes('devuelto',this)">📮 Devueltas a Alas</button>
+    <button class="filtro-btn" onclick="filtrarPaquetes('devuelto',this)" style="grid-column:span 2;">📮 Devueltas a Alas</button>
   </div>
   <button class="btn btn-primary" onclick="generarRutaOptimizada()" style="margin-bottom:6px;">🗺 Generar ruta optimizada del día</button>
-  <button class="btn btn-outline" onclick="traerOrdenesDesdeNube()" style="margin-bottom:10px;">☁️ Traer/actualizar desde la nube</button>
   <button class="btn btn-verde" id="btn-siguiente-tramo" onclick="siguienteTramo()" style="display:none;margin-bottom:10px;">▶ Siguiente tramo</button>
   <div id="lista-ruta-optimizada" style="display:none;margin-bottom:12px;"></div>
   <div id="lista-paquetes"></div>
@@ -2010,6 +2032,19 @@ function abrirModal(id){
   htmlClasif += '<button class="btn btn-sm" style="flex:1;margin-bottom:0;background:'+(p.intercambio?'var(--azul2)':'#e2e8f0')+';color:'+(p.intercambio?'#fff':'#334155')+';" onclick="toggleFlagOrden(\'intercambio\')">'+(p.intercambio?'✅ ':'')+'🔀 Intercambio</button>';
   document.getElementById('modal-clasificacion').innerHTML = htmlClasif;
 
+  // Observación del cliente (dejada por Kathy) — visible para ambos roles si existe,
+  // el cuadro para escribirla/editarla solo se ve en modo Comercial (CSS .solo-comercial).
+  var boxObs = document.getElementById('modal-observacion-box');
+  var txtObs = document.getElementById('modal-observacion-texto');
+  var inputObs = document.getElementById('modal-observacion-input');
+  if(p.observacion && p.observacion.trim()){
+    boxObs.style.display = 'block';
+    txtObs.textContent = p.observacion;
+  } else {
+    boxObs.style.display = 'none';
+  }
+  inputObs.value = p.observacion || '';
+
   var motivoRow = document.getElementById('modal-motivo-row');
   if((p.estado==='devuelto' || p.estado==='retorno' || p.estado==='daniado') && p.motivo){
     document.getElementById('modal-motivo').textContent = p.motivo;
@@ -2048,6 +2083,23 @@ function abrirModal(id){
 // Activa/desactiva "Retiro (B2B)" o "Intercambio" en la orden abierta en el modal.
 // Es independiente del estado de entrega — se puede marcar en cualquier momento,
 // antes o después de que la orden se entregue/devuelva.
+// Guarda la observación que Kathy deja para Cristian (indicación del cliente) — evita
+// tener que mandarla por WhatsApp aparte, que la distrae mientras maneja/entrega.
+// Se aplica a TODO el grupo si es multibulto, igual que Retiro/Intercambio.
+function guardarObservacionOrden(){
+  if(!modalOrdenId) return;
+  var p = paquetes.find(function(x){return x.id===modalOrdenId;});
+  if(!p) return;
+  var texto = document.getElementById('modal-observacion-input').value.trim();
+  p.observacion = texto;
+  var grupo = calcularGrupoMultibulto(p);
+  grupo.forEach(function(item){ item.observacion = texto; });
+  guardarStorage();
+  enviarASheets('cambio_estado', {codigo:p.codigo, nombre:p.nombre, estado:p.estado, motivo:p.motivo||'', observacion:texto, fecha:new Date().toLocaleString('es-CL')});
+  abrirModal(modalOrdenId);
+  renderPaquetes();
+}
+
 function toggleFlagOrden(campo){
   if(!modalOrdenId) return;
   var p = paquetes.find(function(x){return x.id===modalOrdenId;});
@@ -2220,10 +2272,9 @@ function actualizarHeader(){
   var total = paquetes.length;
   var ent = paquetes.filter(function(p){return p.estado==='entregado';}).length;
   document.getElementById('header-paquetes').textContent = total + ' paquetes';
-  document.getElementById('header-ef').textContent = total > 0 ? Math.round(ent/total*100)+'% efectividad' : '—';
   // alerta dia
   var ai = document.getElementById('alerta-dia');
-  if(total === 0) ai.textContent = 'Sin órdenes cargadas. Ve a Importar para cargar el Excel de Alas.';
+  if(total === 0) ai.textContent = perfilActual==='comercial' ? 'Sin órdenes cargadas. Ve a Importar para cargar el Excel de Alas.' : 'Aún no hay órdenes cargadas. Toca "☁️ Sincronizar ahora" arriba.';
   else ai.textContent = 'Operación en curso — ' + ent + ' de ' + total + ' órdenes entregadas.';
   actualizarIndicadorSync();
   if(typeof ajustarPosicionTabs === 'function') setTimeout(ajustarPosicionTabs, 0);
@@ -2302,6 +2353,18 @@ function actualizarResumen(){
   document.getElementById('s-ef-mes-txt').textContent = _efMesR+'%';
   document.getElementById('p-entregados').style.width = ef+'%';
   document.getElementById('p-efectividad-txt').textContent = ef+'%';
+
+  // Vista simple para Cristian: los mismos 4 conceptos, pero en ÓRDENES (no paquetes) y
+  // sin ningún dato de efectividad.
+  var elSoRec = document.getElementById('so-recibidas');
+  if(elSoRec) elSoRec.textContent = ordStatsPorEstado.total;
+  var elSoEnt = document.getElementById('so-entregadas');
+  if(elSoEnt) elSoEnt.textContent = ordStatsPorEstado.entregadas;
+  var elSoPend = document.getElementById('so-pendientes');
+  if(elSoPend) elSoPend.textContent = ordStatsPorEstado.pendientes;
+  var elSoDev = document.getElementById('so-devueltas');
+  if(elSoDev) elSoDev.textContent = ordStatsPorEstado.devueltas + ordStatsPorEstado.retornos;
+
   actualizarHeader();
 }
 
@@ -2718,12 +2781,12 @@ function normalizarComuna(c){
 // 0=Dom, 1=Lun, 2=Mar, 3=Mie, 4=Jue, 5=Vie, 6=Sab
 var GRILLA_RUTAS = {
   0: [], // Domingo: descanso
-  1: ['osorno','san pablo','la union','lago ranco'],          // Lunes
-  2: ['osorno'],                                              // Martes
-  3: ['osorno','la union','purranque','rio negro','puerto octay','rio bueno'], // Miércoles
-  4: ['osorno','purranque','rio negro'],                      // Jueves
-  5: ['osorno','la union','rio bueno'],                       // Viernes
-  6: ['osorno','puyehue']                                     // Sábado
+  1: ['osorno','san pablo','la union','rio bueno'],          // Lun: corredor norte + san pablo primero (cerca de base)
+  2: ['osorno','purranque','rio negro','puerto octay'],       // Mar: corredor sur
+  3: ['osorno','la union','lago ranco'],                      // Mie: corredor norte-oriente
+  4: ['osorno','san juan de la costa','rio negro','purranque'], // Jue: oeste primero, sur en regreso
+  5: ['osorno','la union','rio bueno'],                       // Vie: corredor norte
+  6: ['osorno','puyehue']                                     // Sab: corredor oriente
 };
 
 // Grilla ampliada para Cyber/Black Weekend
@@ -2738,27 +2801,6 @@ var GRILLA_CYBER = {
 };
 
 var NOMBRES_DIA = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
-
-// Calcula el nombre del día más próximo (después de hoy) en que hay ruta a esa comuna,
-// según la grilla vigente (GRILLA_RUTAS o GRILLA_CYBER si esModoEspecial() está activo).
-// Si esa comuna no tiene más días esta semana, toma el primer día de la próxima semana.
-function getProximaRutaComuna(comuna){
-  var c = normalizarComuna(comuna);
-  var grilla = getGrillaActual();
-  var diasConRuta = [];
-  for(var d=1; d<=6; d++){
-    var g = grilla[d]||[];
-    for(var i=0; i<g.length; i++){
-      if(normalizarComuna(g[i]) === c){ diasConRuta.push(d); break; }
-    }
-  }
-  if(diasConRuta.length===0) return null;
-  var hoy = new Date().getDay();
-  for(var k=0; k<diasConRuta.length; k++){
-    if(diasConRuta[k] > hoy) return NOMBRES_DIA[diasConRuta[k]];
-  }
-  return NOMBRES_DIA[diasConRuta[0]];
-}
 
 function getPrioridadComuna(comuna, diaSemana){
   var c = normalizarComuna(comuna);
@@ -2823,6 +2865,7 @@ function traerOrdenesDesdeNube(){
       if(!codigo) return;
       var cloudNumRuta = (row[17]===''||row[17]===null||row[17]===undefined) ? null : Number(row[17]);
       var cloudTs = Number(row[12])||0;
+      var cloudObservacion = row[20]||'';
       var local = paquetes.find(function(p){ return p.codigo === codigo; });
       if(local){
         var cambio = false;
@@ -2830,6 +2873,10 @@ function traerOrdenesDesdeNube(){
         // algo y el celular no lo tenga — esto es justo lo que se estaba perdiendo.
         if((local.numRuta===null || local.numRuta===undefined) && cloudNumRuta!==null){ local.numRuta = cloudNumRuta; cambio = true; }
         if(!local.tipo && row[9]){ local.tipo = row[9]; cambio = true; }
+        // La observación (indicación del cliente que deja Kathy) se actualiza siempre que
+        // la nube traiga algo distinto — no depende del ts, porque Cristian nunca la
+        // edita desde su celular, así que no hay riesgo de pisar un cambio suyo.
+        if(cloudObservacion && cloudObservacion !== (local.observacion||'')){ local.observacion = cloudObservacion; cambio = true; }
         // El estado solo se pisa si la nube tiene un cambio MÁS NUEVO que lo que hay acá
         // (para no borrar, por ejemplo, una entrega que Cristian acaba de marcar en su
         // celular pero que todavía no alcanzó a subir a la nube).
@@ -2843,7 +2890,8 @@ function traerOrdenesDesdeNube(){
           estado: row[11]||'pendiente', ts: cloudTs||Date.now(),
           repetidoDeHistorial: row[13]===true||row[13]==='TRUE', intentos: Number(row[14])||1,
           intentosAgotados: row[15]===true||row[15]==='TRUE', numRuta: cloudNumRuta,
-          esRetiro: row[18]===true||row[18]==='TRUE', intercambio: row[19]===true||row[19]==='TRUE'
+          esRetiro: row[18]===true||row[18]==='TRUE', intercambio: row[19]===true||row[19]==='TRUE',
+          observacion: cloudObservacion
         });
         agregadas++;
       }
@@ -3294,6 +3342,9 @@ function renderComunasDeTipo(items, diaSemana, tipo){
       if(obsSector){
         html+='<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:6px;padding:3px 7px;margin-bottom:4px;font-size:0.68rem;font-weight:700;color:#9a3412;">⚠️ '+obsSector.tipo+(obsSector.nota?' — '+obsSector.nota:'')+'</div>';
       }
+      if(p.observacion && p.observacion.trim()){
+        html+='<div style="background:#fef9c3;border:1px solid #eab308;border-radius:6px;padding:3px 7px;margin-bottom:4px;font-size:0.68rem;font-weight:700;color:#854d0e;">📝 Observación del cliente — tocar para ver</div>';
+      }
       html+='<div class="paquete-nombre">'+p.nombre+'</div>';
       html+='<div class="paquete-dir">'+dirMostrar+(p.tel?' · '+p.tel:'')+'</div>';
       html+='<div class="paquete-codigo">'+p.codigo+' <span class="badge '+badgeClass+'">'+badgeTxt+'</span> <span style="font-size:0.65rem;font-weight:700;color:'+((p.tipo||'Principal').toLowerCase()==='ramal'?'var(--naranja)':'var(--azul2)')+';">'+((p.tipo||'Principal').toLowerCase()==='ramal'?'🛣 J06':'🏙 J05')+'</span></div>';
@@ -3345,11 +3396,9 @@ function armarLinkWhatsApp(p){
   if(!telLimpio) return null;
   var primerNombre = String(p.nombre||'').trim().split(/\s+/)[0] || '';
   var esNombrePersona = primerNombre && !/^\.$/.test(primerNombre);
-  var saludoNombre = esNombrePersona ? primerNombre : 'estimado cliente';
+  var saludoNombre = esNombrePersona ? primerNombre : 'estimado/a';
   var marcaPedido = String(p.b2b||'').trim() || 'su pedido';
-  var proximaRuta = getProximaRutaComuna(p.comuna);
-  var textoReagendo = proximaRuta ? ('nuestra próxima ruta por la localidad, el '+proximaRuta) : 'nuestra próxima ruta por la localidad';
-  var mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos *Muspel* y hoy estaremos realizando la entrega de su pedido de _*'+marcaPedido+'*_.\n\nCuando estemos próximos a su domicilio, le llamaremos para que pueda recibirlo. Le agradecemos que pueda atender nuestra llamada.\n\n*Importante:* Las entregas se realizan durante el día y según el recorrido de la ruta, por lo que si en ese momento no logramos comunicarnos con usted o no hay alguien disponible para recibir el pedido, reagendaremos la entrega para '+textoReagendo+'.\n\n¡Muchas gracias! Nos vemos pronto.';
+  var mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Le escribimos por su pedido de *'+marcaPedido+'*. Ya vamos en camino. Si es posible, por favor, que haya alguien en el domicilio para recibirlo. ¡Muchas gracias!';
   return 'https://wa.me/'+telLimpio+'?text='+encodeURIComponent(mensajeWa);
 }
 
