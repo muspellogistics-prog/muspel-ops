@@ -170,6 +170,10 @@
     <div class="modal-handle"></div>
     <div class="modal-titulo" id="modal-nombre">—</div>
     <div class="modal-codigo" id="modal-codigo">—</div>
+    <div id="modal-observacion-box" style="display:none;margin:10px 0;padding:10px 12px;background:#fef9c3;border:1.5px solid #eab308;border-radius:8px;">
+      <div style="font-size:0.72rem;font-weight:700;color:#854d0e;margin-bottom:3px;">📝 OBSERVACIÓN DEL CLIENTE</div>
+      <div style="font-size:0.85rem;color:#422006;" id="modal-observacion-texto">—</div>
+    </div>
     <div class="modal-campo">
       <span class="modal-campo-label">🏪 Empresa que envía</span>
       <span class="modal-campo-valor" id="modal-empresa">—</span>
@@ -183,7 +187,7 @@
       <span class="modal-campo-valor" id="modal-totalpaquetes" style="font-size:1.1rem;font-weight:800;color:var(--naranja);">—</span>
       <div id="modal-desglose-paquetes" style="margin-top:6px;font-size:0.72rem;color:#78716c;"></div>
     </div>
-    <div class="modal-campo">
+    <div class="modal-campo" id="modal-bulto-row">
       <span class="modal-campo-label">📦 N° Bulto de entrega</span>
       <span class="modal-campo-valor" id="modal-bulto">—</span>
     </div>
@@ -212,10 +216,6 @@
       <span class="modal-campo-valor" id="modal-estado">—</span>
     </div>
     <div id="modal-clasificacion" style="display:flex;gap:8px;margin-top:8px;"></div>
-    <div id="modal-observacion-box" style="display:none;margin-top:10px;padding:10px 12px;background:#fef9c3;border:1.5px solid #eab308;border-radius:8px;">
-      <div style="font-size:0.72rem;font-weight:700;color:#854d0e;margin-bottom:3px;">📝 OBSERVACIÓN DEL CLIENTE</div>
-      <div style="font-size:0.85rem;color:#422006;" id="modal-observacion-texto">—</div>
-    </div>
     <div class="solo-comercial" style="margin-top:10px;">
       <label class="form-label">📝 Dejar observación para Cristian (indicación del cliente)</label>
       <textarea class="form-input" id="modal-observacion-input" rows="3" placeholder="Ej: dejar con el vecino del 205, o llamar antes de subir"></textarea>
@@ -1997,6 +1997,7 @@ function abrirModal(id){
   }
 
   document.getElementById('modal-bulto').textContent = p.bulto || '—';
+  document.getElementById('modal-bulto-row').style.display = p.bulto ? 'flex' : 'none';
   document.getElementById('modal-dir').textContent = dirMostrar || '(sin dirección)';
   document.getElementById('modal-comuna').textContent = (p.comuna||'').trim() || '—';
   document.getElementById('modal-tel').textContent = p.tel || '—';
