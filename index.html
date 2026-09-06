@@ -31,6 +31,15 @@
   body.perfil-comercial .solo-operativo{display:none !important;}
   /* CONTENIDO */
   .content{display:none;padding:14px;max-width:700px;margin:0 auto;}
+  /* En pantallas anchas (PC/tablet), el header y las pestañas quedan centrados con el
+     mismo ancho que el contenido de abajo — y con sombra/bordes redondeados para que
+     se note como un bloque propio, no una franja plana pegada a los bordes. */
+  @media (min-width: 520px){
+    .header{max-width:700px;margin:0 auto;border-radius:0 0 12px 12px;box-shadow:0 4px 16px rgba(0,0,0,0.28);}
+    #btn-sincronizar-top{display:block;max-width:700px;margin:8px auto 0;border-radius:8px !important;box-shadow:0 4px 12px rgba(2,132,199,0.4) !important;}
+    .tabs{max-width:700px;margin:0 auto;box-shadow:0 4px 12px rgba(0,0,0,0.2);}
+    #sync-indicator-row{max-width:700px;margin:0 auto;}
+  }
   .content.active{display:block;}
   /* CARDS */
   .card{background:var(--blanco);border-radius:10px;box-shadow:var(--sombra);padding:14px;margin-bottom:12px;border:1px solid var(--borde);}
@@ -138,7 +147,11 @@
   .modal-columna-principal{order:1;min-width:0;}
   /* PC/tablet: 2 columnas — el detalle a la izquierda, la observación a la derecha,
      usando el espacio que quedaba vacío en vez de dejarlo en blanco. */
-  @media (min-width: 720px){
+  /* PC/tablet: 2 columnas — el detalle a la izquierda, la observación a la derecha,
+     usando el espacio que quedaba vacío en vez de dejarlo en blanco. Umbral bajo (520px)
+     porque el escalado de pantalla en Windows puede hacer que el ancho real disponible
+     sea bastante menor de lo que parece a simple vista. */
+  @media (min-width: 520px){
     .modal-box{max-width:700px;margin:0 auto;}
     .modal-layout{flex-direction:row;gap:20px;align-items:flex-start;}
     .modal-columna-principal{flex:1;order:1;}
@@ -260,7 +273,7 @@
   <div id="sync-indicator"></div>
 </div>
 
-<button class="btn" onclick="traerOrdenesDesdeNube()" style="width:100%;background:linear-gradient(135deg,#0ea5e9,#0284c7);color:#fff;font-size:0.95rem;font-weight:800;padding:14px;margin:0;border-radius:0;box-shadow:0 2px 8px rgba(2,132,199,0.35);">☁️ Sincronizar ahora</button>
+<button id="btn-sincronizar-top" class="btn solo-operativo" onclick="traerOrdenesDesdeNube()" style="width:100%;background:linear-gradient(135deg,#0ea5e9,#0284c7);color:#fff;font-size:0.95rem;font-weight:800;padding:14px;margin:0;border-radius:0;box-shadow:0 2px 8px rgba(2,132,199,0.35);">☁️ Sincronizar ahora</button>
 
 <div class="tabs" id="tabs-nav">
   <div class="tab active" onclick="showTab('resumen')">📊 Resumen</div>
