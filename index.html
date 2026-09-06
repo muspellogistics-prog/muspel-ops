@@ -329,17 +329,20 @@
 
   <div class="card solo-comercial" style="padding:12px 14px;margin-bottom:12px;">
     <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;font-size:0.78rem;">
-      <span>📦 <b id="s-total-paquetes">0</b> paquetes</span>
       <span>🧾 <b id="s-total-ordenes">0</b> órdenes</span>
+      <span>📦 <b id="s-total-paquetes">0</b> paquetes</span>
       <span>🔗 <b id="s-total-multibultos">0</b> multibultos</span>
     </div>
     <div style="font-size:0.68rem;color:#94a3b8;margin-top:4px;">Un multibulto es 1 orden con más de 1 paquete — todos sus paquetes se entregan juntos.</div>
   </div>
+  <!-- Se paga por ORDEN entregada (no por paquete suelto), así que la cifra grande de
+       cada tarjeta es la orden y el detalle en paquetes queda chico debajo, como
+       referencia. Un multibulto (1 orden, varios paquetes) cuenta como 1 sola orden. -->
   <div class="stats-grid solo-comercial">
-    <div class="stat azul" onclick="abrirResumenDetalle('todos')" style="cursor:pointer;"><div class="stat-n" id="s-recibidos">0</div><div class="stat-label">Paquetes recibidos</div></div>
-    <div class="stat verde" onclick="abrirResumenDetalle('entregado')" style="cursor:pointer;"><div class="stat-n" id="s-entregados">0</div><div class="stat-label">Paquetes entregados</div><div style="font-size:0.68rem;color:#94a3b8;margin-top:2px;" id="s-entregados-ordenes"></div></div>
-    <div class="stat rojo" onclick="abrirResumenDetalle('devuelto')" style="cursor:pointer;"><div class="stat-n" id="s-devueltos">0</div><div class="stat-label">Paquetes no entregados</div><div style="font-size:0.68rem;color:#94a3b8;margin-top:2px;" id="s-devueltos-desglose"></div></div>
-    <div class="stat naranja" onclick="abrirResumenDetalle('pendiente')" style="cursor:pointer;"><div class="stat-n" id="s-pendientes">0</div><div class="stat-label">Órdenes pendientes</div><div style="font-size:0.68rem;color:#94a3b8;margin-top:2px;" id="s-pendientes-paquetes"></div></div>
+    <div class="stat azul" onclick="abrirResumenDetalle('todos')" style="cursor:pointer;"><div class="stat-n" id="s-recibidos">0</div><div class="stat-label">Órdenes recibidas</div><div style="font-size:0.68rem;color:#94a3b8;margin-top:2px;" id="s-recibidos-sub"></div></div>
+    <div class="stat verde" onclick="abrirResumenDetalle('entregado')" style="cursor:pointer;"><div class="stat-n" id="s-entregados">0</div><div class="stat-label">Órdenes entregadas</div><div style="font-size:0.68rem;color:#94a3b8;margin-top:2px;" id="s-entregados-sub"></div></div>
+    <div class="stat rojo" onclick="abrirResumenDetalle('devuelto')" style="cursor:pointer;"><div class="stat-n" id="s-devueltos">0</div><div class="stat-label">Órdenes no entregadas</div><div style="font-size:0.68rem;color:#94a3b8;margin-top:2px;" id="s-devueltos-sub"></div></div>
+    <div class="stat naranja" onclick="abrirResumenDetalle('pendiente')" style="cursor:pointer;"><div class="stat-n" id="s-pendientes">0</div><div class="stat-label">Órdenes pendientes</div><div style="font-size:0.68rem;color:#94a3b8;margin-top:2px;" id="s-pendientes-sub"></div></div>
   </div>
   <div class="prog-wrap solo-comercial">
     <div class="prog-label">
@@ -2394,15 +2397,20 @@ function actualizarResumen(){
   if(elTO) elTO.textContent = ordStatsResumen.total;
   if(elTM) elTM.textContent = totalMultibultos;
   var ef = total > 0 ? Math.round(ent/total*100) : 0;
-  document.getElementById('s-recibidos').textContent = total;
-  document.getElementById('s-entregados').textContent = ent;
-  var elEO = document.getElementById('s-entregados-ordenes');
-  if(elEO) elEO.textContent = ordStatsPorEstado.entregadas + (ordStatsPorEstado.entregadas===1?' orden entregada':' órdenes entregadas');
-  document.getElementById('s-devueltos').textContent = dev;
-  var elDevDesglose = document.getElementById('s-devueltos-desglose');
-  if(elDevDesglose) elDevDesglose.textContent = retornoCount+' retorno · '+devueltoCount+' devuelta a Alas';
+  // Tarjetas grandes en ÓRDENES (se paga por orden, no por paquete suelto); el paquete
+  // queda como detalle chico debajo de cada número, igual que antes pero al revés.
+  var noEntregadasOrdenes = ordStatsPorEstado.devueltas + ordStatsPorEstado.retornos + ordStatsPorEstado.daniadas;
+  document.getElementById('s-recibidos').textContent = ordStatsResumen.total;
+  var elRS = document.getElementById('s-recibidos-sub');
+  if(elRS) elRS.textContent = total + (total===1?' paquete':' paquetes');
+  document.getElementById('s-entregados').textContent = ordStatsPorEstado.entregadas;
+  var elEO = document.getElementById('s-entregados-sub');
+  if(elEO) elEO.textContent = ent + (ent===1?' paquete entregado':' paquetes entregados');
+  document.getElementById('s-devueltos').textContent = noEntregadasOrdenes;
+  var elDevDesglose = document.getElementById('s-devueltos-sub');
+  if(elDevDesglose) elDevDesglose.textContent = dev + (dev===1?' paquete':' paquetes') + ' — '+retornoCount+' retorno · '+devueltoCount+' devuelta a Alas';
   document.getElementById('s-pendientes').textContent = ordStatsPorEstado.pendientes;
-  var elPP = document.getElementById('s-pendientes-paquetes');
+  var elPP = document.getElementById('s-pendientes-sub');
   if(elPP) elPP.textContent = pend + (pend===1?' paquete por entregar':' paquetes por entregar');
   document.getElementById('s-principal').textContent = prin;
   document.getElementById('s-ramal').textContent = ram;
