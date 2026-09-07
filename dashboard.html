@@ -136,6 +136,22 @@
       <table><thead><tr><th>Mes</th><th class="num">Entra</th><th class="num">Sale</th><th class="num">Flujo del mes</th><th class="num">Saldo acumulado</th></tr></thead><tbody id="tabla-flujo-real"></tbody></table>
     </div>
     <div class="panel">
+      <div class="titulo-seccion" style="margin-top:0;">🤝 Retiro de Socios (60% Kathy / 40% Cristian)</div>
+      <div class="panel-nota">
+        Antes de repartir entre ustedes, se aparta primero un % para reserva de la empresa y un % para el fondo de crecimiento (próxima camioneta, etc.) — tú decides los porcentajes, estos son solo un punto de partida:
+        la metodología <em>Profit First</em> (Michalowicz) sugiere ~5% de utilidad como reserva/ganancia para negocios recién comenzando, y las guías generales de reserva de caja para pymes recomiendan juntar entre 3 y 6 meses de costos fijos como colchón antes de repartir todo. Usamos 10% y 10% como default — ajústalos abajo cuando quieras, no son una recomendación fija para Muspel.
+      </div>
+      <div class="input-row"><label>% Reserva de la empresa</label><input type="number" id="in-reserva-pct" value="10" min="0" max="100" step="1"></div>
+      <div class="input-row"><label>% Fondo de crecimiento</label><input type="number" id="in-crecimiento-pct" value="10" min="0" max="100" step="1"></div>
+      <button onclick="calcularRetiroSocios()" style="background:var(--azul2);color:#fff;border:none;padding:9px 16px;border-radius:8px;font-weight:700;cursor:pointer;margin-top:6px;">Recalcular</button>
+      <div class="grid" style="margin-top:14px;">
+        <div class="card"><div class="card-label">Utilidad contable del mes</div><div class="card-value" id="ret-utilidad-mes">—</div><div class="card-sub">Ingreso neto − Costos del mes (lo que ganó la empresa "en papel")</div></div>
+        <div class="card"><div class="card-label">Caja real disponible hoy</div><div class="card-value" id="ret-caja-hoy">—</div><div class="card-sub">Según Flujo de Caja Real acumulado hasta el mes en curso</div></div>
+      </div>
+      <div style="font-size:0.72rem;color:#94a3b8;margin:-4px 0 10px;">El reparto de abajo se calcula sobre la <strong>caja real disponible hoy</strong>, no sobre la utilidad "en papel" — así no se sugiere retirar plata que ALAS todavía no ha pagado.</div>
+      <table><thead><tr><th>Concepto</th><th class="num">Monto</th></tr></thead><tbody id="tabla-retiro-socios"></tbody></table>
+    </div>
+    <div class="panel">
       <div class="titulo-seccion" style="margin-top:0;">Detalle de costos del mes</div>
       <table><thead><tr><th>Categoría</th><th>Descripción</th><th>Tipo</th><th class="num">Monto</th></tr></thead><tbody id="tabla-costos"></tbody></table>
     </div>
@@ -216,6 +232,12 @@ let costos = [];
 let incidenciasReales = [];
 let resumenPorCodigo = [];
 let gastosPersonales = [];
+// Para el panel "Retiro de Socios": la utilidad contable del mes (Ingreso - Costos,
+// tal como ya se muestra en Finanzas) y la caja real acumulada hasta HOY (no el total
+// de la tabla completa, que incluye meses futuros que todavía no llegan) — la calcula
+// pintarFlujoReal() y las usa calcularRetiroSocios() más abajo.
+let utilidadMesActual = 0;
+let cajaRealHoy = 0;
 
 function formatoPesos(n){
   return '$' + Math.round(n).toLocaleString('es-CL');
@@ -617,12 +639,18 @@ function pintarFlujoReal(){
   });
 
   const todosMeses = [...new Set([...Object.keys(salePorMes), ...Object.keys(entraPorMes)])].sort((a,b)=>ordenMes(a)-ordenMes(b));
+  // La caja real "de hoy" es el saldo acumulado SOLO hasta el mes en curso — la tabla
+  // completa sigue de largo hasta meses futuros (pagos de ALAS que todavía no llegan),
+  // y esa plata futura no es plata que se pueda retirar hoy.
+  const ordenMesActual = ordenMes(mesActualTexto());
   let saldoAcum = 0;
+  let saldoHoy = 0;
   const filas = todosMeses.map(m => {
     const entra = entraPorMes[m]||0;
     const sale = salePorMes[m]||0;
     const flujo = entra - sale;
     saldoAcum += flujo;
+    if(ordenMes(m) <= ordenMesActual) saldoHoy = saldoAcum;
     return `<tr><td style="text-transform:capitalize;">${m}</td>
       <td class="num verde-txt">${formatoPesos(entra)}</td>
       <td class="num rojo-txt">${formatoPesos(sale)}</td>
@@ -630,6 +658,8 @@ function pintarFlujoReal(){
       <td class="num" style="font-weight:800;color:${saldoAcum>=0?'var(--verde)':'var(--rojo)'};">${formatoPesos(saldoAcum)}</td></tr>`;
   }).join('');
   document.getElementById('tabla-flujo-real').innerHTML = filas || '<tr><td colspan="5" style="text-align:center;color:#94a3b8;">Sin datos suficientes todavía</td></tr>';
+  cajaRealHoy = saldoHoy;
+  calcularRetiroSocios();
 }
 
 function pintarFinanzas(mesTexto){
@@ -644,6 +674,7 @@ function pintarFinanzas(mesTexto){
   const flujoEl = document.getElementById('fin-flujo');
   flujoEl.textContent = formatoPesos(flujo);
   flujoEl.className = 'card-value ' + (flujo >= 0 ? 'verde' : 'rojo');
+  utilidadMesActual = flujo;
 
   document.getElementById('tabla-costos').innerHTML = costosDelMes.map(c => `
     <tr><td>${c.categoria}</td><td>${c.descripcion}</td>
@@ -672,6 +703,57 @@ function pintarFinanzas(mesTexto){
         <td class="num">${formatoPesos(d.ingreso)}</td><td class="num verde-txt">${formatoPesos(conIva)}</td></tr>`;
     }).join('');
   document.getElementById('tabla-facturacion').innerHTML = filasFactura || '<tr><td colspan="4" style="text-align:center;color:#94a3b8;">Sin días cerrados todavía</td></tr>';
+}
+
+// Recuerda los % de reserva/crecimiento que Kathy deje cargados, para no tener que
+// escribirlos de nuevo cada vez que abre el panel. Si localStorage falla (navegador
+// privado, etc.) simplemente se usan los valores por defecto del HTML (10% y 10%).
+function cargarPctRetiroGuardados(){
+  try{
+    const guardado = JSON.parse(localStorage.getItem('muspel_retiro_socios_pct')||'{}');
+    if(guardado.reserva != null) document.getElementById('in-reserva-pct').value = guardado.reserva;
+    if(guardado.crecimiento != null) document.getElementById('in-crecimiento-pct').value = guardado.crecimiento;
+  }catch(e){ /* sin localStorage disponible, se queda con los valores por defecto */ }
+}
+function guardarPctRetiro(reservaPct, crecimientoPct){
+  try{ localStorage.setItem('muspel_retiro_socios_pct', JSON.stringify({reserva:reservaPct, crecimiento:crecimientoPct})); }catch(e){}
+}
+
+// Calcula cuánto se puede retirar como socios: aparta primero el % de reserva y el %
+// de fondo de crecimiento (ambos ajustables) SOBRE LA CAJA REAL DISPONIBLE HOY, no
+// sobre la utilidad contable del mes — porque no se puede retirar plata que ALAS
+// todavía no ha pagado. Reparte lo que queda 60% Kathy / 40% Cristian, según su
+// participación societaria.
+function calcularRetiroSocios(){
+  const tabla = document.getElementById('tabla-retiro-socios');
+  if(!tabla) return; // el panel todavía no está en el DOM (primera carga)
+
+  const reservaPct = Math.max(0, Number(document.getElementById('in-reserva-pct').value) || 0);
+  const crecimientoPct = Math.max(0, Number(document.getElementById('in-crecimiento-pct').value) || 0);
+  guardarPctRetiro(reservaPct, crecimientoPct);
+
+  document.getElementById('ret-utilidad-mes').textContent = formatoPesos(utilidadMesActual);
+  const cajaHoyEl = document.getElementById('ret-caja-hoy');
+  cajaHoyEl.textContent = formatoPesos(cajaRealHoy);
+  cajaHoyEl.className = 'card-value ' + (cajaRealHoy >= 0 ? 'verde' : 'rojo');
+
+  // Si la caja real disponible es negativa o cero, no hay nada que repartir — se
+  // muestra en 0 en vez de un número negativo confuso para retirar.
+  const base = Math.max(0, cajaRealHoy);
+  const reservaMonto = base * (reservaPct/100);
+  const crecimientoMonto = base * (crecimientoPct/100);
+  const distribuible = Math.max(0, base - reservaMonto - crecimientoMonto);
+  const retiroKathy = distribuible * 0.6;
+  const retiroCristian = distribuible * 0.4;
+
+  document.getElementById('tabla-retiro-socios').innerHTML = `
+    <tr><td>Caja real disponible hoy</td><td class="num">${formatoPesos(base)}</td></tr>
+    <tr><td>(−) Reserva empresa (${reservaPct}%)</td><td class="num rojo-txt">${formatoPesos(reservaMonto)}</td></tr>
+    <tr><td>(−) Fondo de crecimiento (${crecimientoPct}%)</td><td class="num rojo-txt">${formatoPesos(crecimientoMonto)}</td></tr>
+    <tr style="font-weight:800;border-top:2px solid var(--borde);"><td>= Distribuible entre socios</td><td class="num verde-txt">${formatoPesos(distribuible)}</td></tr>
+    <tr style="background:#fff;"><td style="font-weight:700;">&nbsp;&nbsp;→ Retiro sugerido Kathy (60%)</td><td class="num" style="font-weight:700;">${formatoPesos(retiroKathy)}</td></tr>
+    <tr style="background:#fff;"><td style="font-weight:700;">&nbsp;&nbsp;→ Retiro sugerido Cristian (40%)</td><td class="num" style="font-weight:700;">${formatoPesos(retiroCristian)}</td></tr>
+  `;
 }
 
 function pintarRentabilidad(mesTexto){
@@ -807,6 +889,7 @@ document.querySelectorAll('.tab').forEach(tab => {
   });
 });
 
+cargarPctRetiroGuardados();
 cargarDatos();
 setInterval(cargarDatos, 30000); // se refresca solo cada 30 segundos
 </script>
