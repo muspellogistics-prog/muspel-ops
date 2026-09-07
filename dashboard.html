@@ -136,7 +136,7 @@
       <table><thead><tr><th>Mes</th><th class="num">Entra</th><th class="num">Sale</th><th class="num">Flujo del mes</th><th class="num">Saldo acumulado</th></tr></thead><tbody id="tabla-flujo-real"></tbody></table>
     </div>
     <div class="panel">
-      <div class="titulo-seccion" style="margin-top:0;">🤝 Retiro de Socios (60% Kathy / 40% Cristian)</div>
+      <div class="titulo-seccion" style="margin-top:0;">🤝 Retiro de Socios (50% Kathy / 50% Cristian)</div>
       <div class="panel-nota">
         Antes de repartir entre ustedes, se aparta primero un % para reserva de la empresa y un % para el fondo de crecimiento (próxima camioneta, etc.) — tú decides los porcentajes, estos son solo un punto de partida:
         la metodología <em>Profit First</em> (Michalowicz) sugiere ~5% de utilidad como reserva/ganancia para negocios recién comenzando, y las guías generales de reserva de caja para pymes recomiendan juntar entre 3 y 6 meses de costos fijos como colchón antes de repartir todo. Usamos 10% y 10% como default — ajústalos abajo cuando quieras, no son una recomendación fija para Muspel.
@@ -722,8 +722,8 @@ function guardarPctRetiro(reservaPct, crecimientoPct){
 // Calcula cuánto se puede retirar como socios: aparta primero el % de reserva y el %
 // de fondo de crecimiento (ambos ajustables) SOBRE LA CAJA REAL DISPONIBLE HOY, no
 // sobre la utilidad contable del mes — porque no se puede retirar plata que ALAS
-// todavía no ha pagado. Reparte lo que queda 60% Kathy / 40% Cristian, según su
-// participación societaria.
+// todavía no ha pagado. Reparte lo que queda 50% Kathy / 50% Cristian — como socios y
+// esposos lo dividen parejo, sin importar el % de participación societaria (60/40).
 function calcularRetiroSocios(){
   const tabla = document.getElementById('tabla-retiro-socios');
   if(!tabla) return; // el panel todavía no está en el DOM (primera carga)
@@ -743,16 +743,16 @@ function calcularRetiroSocios(){
   const reservaMonto = base * (reservaPct/100);
   const crecimientoMonto = base * (crecimientoPct/100);
   const distribuible = Math.max(0, base - reservaMonto - crecimientoMonto);
-  const retiroKathy = distribuible * 0.6;
-  const retiroCristian = distribuible * 0.4;
+  const retiroKathy = distribuible * 0.5;
+  const retiroCristian = distribuible * 0.5;
 
   document.getElementById('tabla-retiro-socios').innerHTML = `
     <tr><td>Caja real disponible hoy</td><td class="num">${formatoPesos(base)}</td></tr>
     <tr><td>(−) Reserva empresa (${reservaPct}%)</td><td class="num rojo-txt">${formatoPesos(reservaMonto)}</td></tr>
     <tr><td>(−) Fondo de crecimiento (${crecimientoPct}%)</td><td class="num rojo-txt">${formatoPesos(crecimientoMonto)}</td></tr>
     <tr style="font-weight:800;border-top:2px solid var(--borde);"><td>= Distribuible entre socios</td><td class="num verde-txt">${formatoPesos(distribuible)}</td></tr>
-    <tr style="background:#fff;"><td style="font-weight:700;">&nbsp;&nbsp;→ Retiro sugerido Kathy (60%)</td><td class="num" style="font-weight:700;">${formatoPesos(retiroKathy)}</td></tr>
-    <tr style="background:#fff;"><td style="font-weight:700;">&nbsp;&nbsp;→ Retiro sugerido Cristian (40%)</td><td class="num" style="font-weight:700;">${formatoPesos(retiroCristian)}</td></tr>
+    <tr style="background:#fff;"><td style="font-weight:700;">&nbsp;&nbsp;→ Retiro sugerido Kathy (50%)</td><td class="num" style="font-weight:700;">${formatoPesos(retiroKathy)}</td></tr>
+    <tr style="background:#fff;"><td style="font-weight:700;">&nbsp;&nbsp;→ Retiro sugerido Cristian (50%)</td><td class="num" style="font-weight:700;">${formatoPesos(retiroCristian)}</td></tr>
   `;
 }
 
