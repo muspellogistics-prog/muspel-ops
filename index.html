@@ -3459,13 +3459,14 @@ function saludoSegunHora(){
 // Próximo día en que la ruta vuelve a pasar por esta comuna, según GRILLA_RUTAS
 // (la misma grilla que ya se usa para ordenar las paradas del día). Empieza a mirar
 // desde MAÑANA, no desde hoy, y da la vuelta completa a la semana si hace falta.
-// Si la comuna no aparece en ningún día de la grilla, devuelve null (caso raro).
+// Devuelve {dia, esManana} — esManana es true si ese próximo día cae justo mañana
+// (i===1 en el conteo). Si la comuna no aparece en ningún día de la grilla, null.
 function proximoDiaRutaComuna(comuna){
   if(!comuna) return null;
   var hoy = new Date().getDay();
   for(var i=1; i<=7; i++){
     var d = (hoy+i) % 7;
-    if(getPrioridadComuna(comuna, d) !== 999) return NOMBRES_DIA[d];
+    if(getPrioridadComuna(comuna, d) !== 999) return {dia: NOMBRES_DIA[d], esManana: i===1};
   }
   return null;
 }
@@ -3476,14 +3477,21 @@ function armarLinkWhatsApp(p){
   var esNombrePersona = primerNombre && !/^\.$/.test(primerNombre);
   var saludoNombre = esNombrePersona ? primerNombre : 'estimado/a';
   var marcaPedido = String(p.b2b||'').trim() || 'su pedido';
-  var proximoDia = proximoDiaRutaComuna(p.comuna);
+  var proximaRuta = proximoDiaRutaComuna(p.comuna);
   // El punto va DENTRO del subrayado (para que quede "_Lunes._" en cursiva, tal como
   // lo pidió Kathy) cuando sí hay día calculado; si no hay día (comuna fuera de la
   // grilla), la frase de respaldo no lleva cursiva y el punto va afuera, normal.
-  var fraseProximaRuta = proximoDia ? ('el _'+proximoDia+'._') : 'en la próxima fecha que tengamos ruta agendada por esa zona.';
-  var mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos *Muspel* y hoy estaremos realizando la entrega de su pedido de '+marcaPedido+'.\n'
-    + 'Cuando estemos próximos a su domicilio, le llamaremos para que pueda recibirlo. Le agradecemos que pueda atender nuestra llamada.\n'
-    + '*Importante:* Las entregas se realizan durante el día y según el recorrido de la ruta, por lo que si en ese momento no logramos comunicarnos con usted o no hay alguien disponible para recibir el pedido, reagendaremos la entrega para nuestra próxima ruta por la localidad, '+fraseProximaRuta+'\n'
+  // SOLO para Osorno (ruta prácticamente diaria): si el próximo día calculado es
+  // justo mañana, se dice "mañana" en vez del nombre del día — a pedido de Kathy,
+  // esto NO aplica a las demás comunas, que siempre muestran el día puntual.
+  var esOsorno = normalizarComuna(p.comuna) === normalizarComuna('Osorno');
+  var fraseProximaRuta;
+  if(proximaRuta && esOsorno && proximaRuta.esManana) fraseProximaRuta = '_mañana._';
+  else if(proximaRuta) fraseProximaRuta = 'el _'+proximaRuta.dia+'._';
+  else fraseProximaRuta = 'en la próxima fecha que tengamos ruta agendada por esa zona.';
+  var mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos *Muspel* y hoy estaremos realizando la entrega de su pedido de *'+marcaPedido+'*.\n\n'
+    + 'Cuando estemos próximos a su domicilio, le llamaremos para que pueda recibirlo. Le agradecemos que pueda atender nuestra llamada.\n\n'
+    + '*Importante:* Las entregas se realizan durante el día y según el recorrido de la ruta, por lo que si en ese momento no logramos comunicarnos con usted o no hay alguien disponible para recibir el pedido, reagendaremos la entrega para nuestra próxima ruta por la localidad, '+fraseProximaRuta+'\n\n'
     + '¡Muchas gracias! Nos vemos pronto.';
   return 'https://wa.me/'+telLimpio+'?text='+encodeURIComponent(mensajeWa);
 }
