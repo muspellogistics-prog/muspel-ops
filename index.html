@@ -3456,6 +3456,19 @@ function saludoSegunHora(){
   if(minutosDelDia < 20*60+30) return 'buenas tardes';       // 12:00 a 20:29
   return 'buenas noches';                                     // desde las 20:30
 }
+// Próximo día en que la ruta vuelve a pasar por esta comuna, según GRILLA_RUTAS
+// (la misma grilla que ya se usa para ordenar las paradas del día). Empieza a mirar
+// desde MAÑANA, no desde hoy, y da la vuelta completa a la semana si hace falta.
+// Si la comuna no aparece en ningún día de la grilla, devuelve null (caso raro).
+function proximoDiaRutaComuna(comuna){
+  if(!comuna) return null;
+  var hoy = new Date().getDay();
+  for(var i=1; i<=7; i++){
+    var d = (hoy+i) % 7;
+    if(getPrioridadComuna(comuna, d) !== 999) return NOMBRES_DIA[d];
+  }
+  return null;
+}
 function armarLinkWhatsApp(p){
   var telLimpio = normalizarTelChile(p.tel);
   if(!telLimpio) return null;
@@ -3463,7 +3476,15 @@ function armarLinkWhatsApp(p){
   var esNombrePersona = primerNombre && !/^\.$/.test(primerNombre);
   var saludoNombre = esNombrePersona ? primerNombre : 'estimado/a';
   var marcaPedido = String(p.b2b||'').trim() || 'su pedido';
-  var mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Le escribimos por su pedido de *'+marcaPedido+'*. Ya vamos en camino. Si es posible, por favor, que haya alguien en el domicilio para recibirlo. ¡Muchas gracias!';
+  var proximoDia = proximoDiaRutaComuna(p.comuna);
+  // El punto va DENTRO del subrayado (para que quede "_Lunes._" en cursiva, tal como
+  // lo pidió Kathy) cuando sí hay día calculado; si no hay día (comuna fuera de la
+  // grilla), la frase de respaldo no lleva cursiva y el punto va afuera, normal.
+  var fraseProximaRuta = proximoDia ? ('el _'+proximoDia+'._') : 'en la próxima fecha que tengamos ruta agendada por esa zona.';
+  var mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos *Muspel* y hoy estaremos realizando la entrega de su pedido de '+marcaPedido+'.\n'
+    + 'Cuando estemos próximos a su domicilio, le llamaremos para que pueda recibirlo. Le agradecemos que pueda atender nuestra llamada.\n'
+    + '*Importante:* Las entregas se realizan durante el día y según el recorrido de la ruta, por lo que si en ese momento no logramos comunicarnos con usted o no hay alguien disponible para recibir el pedido, reagendaremos la entrega para nuestra próxima ruta por la localidad, '+fraseProximaRuta+'\n'
+    + '¡Muchas gracias! Nos vemos pronto.';
   return 'https://wa.me/'+telLimpio+'?text='+encodeURIComponent(mensajeWa);
 }
 
