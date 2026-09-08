@@ -88,7 +88,7 @@
   .paquete-nombre{font-weight:600;font-size:0.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .paquete-dir{font-size:0.72rem;color:#64748b;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .paquete-codigo{font-size:0.68rem;color:#94a3b8;font-family:monospace;}
-  .paquete-acciones{display:flex;gap:4px;flex-shrink:0;}
+  .paquete-acciones{display:flex;gap:6px;flex-shrink:0;}
   /* INPUT / SELECT */
   .form-group{margin-bottom:10px;}
   .form-label{font-size:0.75rem;font-weight:600;color:var(--azul);margin-bottom:4px;display:block;}
@@ -1068,7 +1068,7 @@ function descargarOrdenesDesdeSheets(onFin){
       if(onFin) onFin(0);
       return;
     }
-    // fila 0 es encabezado: id,codigo,folio,bulto,nombre,tel,dir,comuna,region,tipo,b2b,estado,ts,repetidoDeHistorial,intentos,intentosAgotados,sinAgrupar
+    // fila 0 es encabezado: id,codigo,folio,bulto,nombre,tel,dir,comuna,region,tipo,b2b,estado,ts,repetidoDeHistorial,intentos,intentosAgotados,sinAgrupar,numRuta,esRetiro,intercambio,observacion
     var importadas = 0;
     var actualizadas = 0;
     // Cuenta cuántas veces aparece cada código LOCALMENTE (para no confundir multibulto
@@ -1083,6 +1083,11 @@ function descargarOrdenesDesdeSheets(onFin){
       vistosEnSheets[codigo] = (vistosEnSheets[codigo]||0) + 1;
       var yaLocal = localCount[codigo] || 0;
       var sinAgruparNube = row[16] === true || row[16] === 'true';
+      // CORREGIDO 08-09-2026: esta función (la del auto-sync cada 30s) nunca leía el Nº de
+      // ruta desde la nube — por eso el celular que NO hizo el import (ej. el de Cristian)
+      // recibía los pedidos sin numeración y sin poder ordenarlos igual que el que sí
+      // importó el Excel. row[17] es el mismo índice que ya usa traerOrdenesDesdeNube().
+      var cloudNumRuta = (row[17]===''||row[17]===null||row[17]===undefined) ? null : Number(row[17]);
 
       if(vistosEnSheets[codigo] <= yaLocal){
         // Esta ocurrencia ya existe localmente (por código y por posición) — solo revisamos
@@ -1100,6 +1105,13 @@ function descargarOrdenesDesdeSheets(onFin){
             // sinAgrupar es de una sola vía (una vez separado, queda separado) — no
             // necesita comparar ts, solo propagar si Sheets lo tiene marcado y local no.
             if(sinAgruparNube && !existente.sinAgrupar) existente.sinAgrupar = true;
+            // Nº de ruta: se completa si este equipo todavía no lo tiene y la nube sí
+            // (mismo criterio que traerOrdenesDesdeNube) — así, si Kathy importa el Excel
+            // DESPUÉS de que Cristian ya tenía el pedido cargado, igual le llega el número.
+            if((existente.numRuta===null || existente.numRuta===undefined) && cloudNumRuta!==null){
+              existente.numRuta = cloudNumRuta;
+              actualizadas++;
+            }
           }
         });
         return;
@@ -1122,7 +1134,8 @@ function descargarOrdenesDesdeSheets(onFin){
         repetidoDeHistorial: row[13] === true || row[13] === 'true',
         intentos: row[14]!=null && row[14]!=='' ? Number(row[14]) : 1,
         intentosAgotados: row[15] === true || row[15] === 'true',
-        sinAgrupar: sinAgruparNube
+        sinAgrupar: sinAgruparNube,
+        numRuta: cloudNumRuta
       });
       importadas++;
     });
