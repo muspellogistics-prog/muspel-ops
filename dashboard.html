@@ -150,6 +150,24 @@
       </div>
       <div style="font-size:0.72rem;color:#94a3b8;margin:-4px 0 10px;">El reparto de abajo se calcula sobre la <strong>caja real disponible hoy</strong>, no sobre la utilidad "en papel" — así no se sugiere retirar plata que ALAS todavía no ha pagado.</div>
       <table><thead><tr><th>Concepto</th><th class="num">Monto</th></tr></thead><tbody id="tabla-retiro-socios"></tbody></table>
+
+      <div class="titulo-seccion" style="font-size:0.92rem;">💰 Cuánto llevamos acumulado</div>
+      <div class="panel-nota">Esto es distinto a la tabla de arriba: arriba se ve lo que correspondería apartar <strong>este mes</strong>; acá se ve el <strong>total acumulado</strong> mes a mes, sin tocarlo nunca al calcular un retiro.</div>
+      <div class="grid">
+        <div class="card"><div class="card-label">🏦 Acumulado en Reserva</div><div class="card-value verde" id="acum-reserva">—</div></div>
+        <div class="card"><div class="card-label">🚀 Acumulado en Fondo de Crecimiento</div><div class="card-value verde" id="acum-crecimiento">—</div></div>
+      </div>
+      <button onclick="registrarAporteDelMes()" id="btn-registrar-aporte" style="background:var(--verde);color:#fff;border:none;padding:9px 16px;border-radius:8px;font-weight:700;cursor:pointer;margin-top:4px;">✅ Registrar aporte de este mes</button>
+      <div id="registrar-aporte-nota" style="font-size:0.74rem;color:var(--gris);margin-top:8px;line-height:1.4;"></div>
+
+      <details style="margin-top:14px;">
+        <summary style="cursor:pointer;font-size:0.8rem;font-weight:700;color:var(--gris);">Ajuste manual (solo si ya tenían plata guardada antes de usar este panel)</summary>
+        <div style="margin-top:10px;">
+          <div class="input-row"><label>Monto inicial ya guardado — Reserva</label><input type="number" id="in-ajuste-reserva" placeholder="0"></div>
+          <div class="input-row"><label>Monto inicial ya guardado — Crecimiento</label><input type="number" id="in-ajuste-crecimiento" placeholder="0"></div>
+          <button onclick="guardarAjusteManual()" style="background:var(--gris);color:#fff;border:none;padding:7px 14px;border-radius:8px;font-weight:700;cursor:pointer;font-size:0.8rem;">Guardar ajuste inicial</button>
+        </div>
+      </details>
     </div>
     <div class="panel">
       <div class="titulo-seccion" style="margin-top:0;">Detalle de costos del mes</div>
@@ -719,11 +737,74 @@ function guardarPctRetiro(reservaPct, crecimientoPct){
   try{ localStorage.setItem('muspel_retiro_socios_pct', JSON.stringify({reserva:reservaPct, crecimiento:crecimientoPct})); }catch(e){}
 }
 
+// ACUMULADO DE RESERVA Y FONDO DE CRECIMIENTO — a diferencia del cálculo de retiro
+// (que solo muestra lo que correspondería apartar ESTE mes), esto guarda mes a mes lo
+// que efectivamente se fue apartando, para saber el total acumulado. Se guarda en
+// este navegador (localStorage) mientras el panel no tiene login propio; cuando se
+// migre al sistema seguro, este acumulado pasa a la base de datos para que lo vean
+// tanto Kathy como Cristian desde cualquier dispositivo.
+let _ultimoReservaMonto = 0, _ultimoCrecimientoMonto = 0;
+function cargarAcumuladoFondos(){
+  try{
+    const datos = JSON.parse(localStorage.getItem('muspel_fondos_acumulados')||'{}');
+    return { aportes: datos.aportes || {} };
+  }catch(e){ return { aportes:{} }; }
+}
+function guardarAcumuladoFondos(datos){
+  try{ localStorage.setItem('muspel_fondos_acumulados', JSON.stringify(datos)); }catch(e){}
+}
+function totalesAcumulados(datos){
+  let reserva=0, crecimiento=0;
+  Object.values(datos.aportes).forEach(a=>{ reserva += (a.reserva||0); crecimiento += (a.crecimiento||0); });
+  return {reserva, crecimiento};
+}
+function pintarAcumuladoFondos(){
+  const datos = cargarAcumuladoFondos();
+  const totales = totalesAcumulados(datos);
+  document.getElementById('acum-reserva').textContent = formatoPesos(totales.reserva);
+  document.getElementById('acum-crecimiento').textContent = formatoPesos(totales.crecimiento);
+
+  const mesTexto = mesActualTexto();
+  const nota = document.getElementById('registrar-aporte-nota');
+  const btn = document.getElementById('btn-registrar-aporte');
+  if(datos.aportes[mesTexto]){
+    nota.textContent = `Ya registraste el aporte de ${mesTexto} (Reserva: ${formatoPesos(datos.aportes[mesTexto].reserva)} · Crecimiento: ${formatoPesos(datos.aportes[mesTexto].crecimiento)}). Si vuelves a tocar "Registrar", se reemplaza por el monto actual — no se suma dos veces.`;
+    btn.textContent = '↻ Actualizar aporte de este mes';
+  } else {
+    nota.textContent = `Aún no has registrado el aporte de ${mesTexto} en el acumulado.`;
+    btn.textContent = '✅ Registrar aporte de este mes';
+  }
+}
+// Guarda (o reemplaza, si ya se había registrado) el aporte de reserva y crecimiento
+// del mes en curso — por eso nunca se duplica aunque se registre varias veces el
+// mismo mes.
+function registrarAporteDelMes(){
+  const mesTexto = mesActualTexto();
+  const datos = cargarAcumuladoFondos();
+  datos.aportes[mesTexto] = { reserva: _ultimoReservaMonto, crecimiento: _ultimoCrecimientoMonto };
+  guardarAcumuladoFondos(datos);
+  pintarAcumuladoFondos();
+}
+// Para cargar un monto inicial que ya tenían guardado antes de usar este panel (una
+// sola vez). Se guarda bajo una clave especial "_ajuste_manual" que se suma al resto.
+function guardarAjusteManual(){
+  const r = Number(document.getElementById('in-ajuste-reserva').value)||0;
+  const c = Number(document.getElementById('in-ajuste-crecimiento').value)||0;
+  const datos = cargarAcumuladoFondos();
+  datos.aportes['_ajuste_manual'] = {reserva:r, crecimiento:c};
+  guardarAcumuladoFondos(datos);
+  pintarAcumuladoFondos();
+  document.getElementById('in-ajuste-reserva').value='';
+  document.getElementById('in-ajuste-crecimiento').value='';
+}
+
 // Calcula cuánto se puede retirar como socios: aparta primero el % de reserva y el %
 // de fondo de crecimiento (ambos ajustables) SOBRE LA CAJA REAL DISPONIBLE HOY, no
 // sobre la utilidad contable del mes — porque no se puede retirar plata que ALAS
 // todavía no ha pagado. Reparte lo que queda 50% Kathy / 50% Cristian — como socios y
 // esposos lo dividen parejo, sin importar el % de participación societaria (60/40).
+// El % de reserva y el % de crecimiento NUNCA se tocan para aumentar el retiro: se
+// restan primero, siempre, y solo se reparte lo que sobra después de eso.
 function calcularRetiroSocios(){
   const tabla = document.getElementById('tabla-retiro-socios');
   if(!tabla) return; // el panel todavía no está en el DOM (primera carga)
@@ -746,6 +827,11 @@ function calcularRetiroSocios(){
   const retiroKathy = distribuible * 0.5;
   const retiroCristian = distribuible * 0.5;
 
+  // Se guardan para que "Registrar aporte de este mes" (botón del acumulado, abajo)
+  // use exactamente estos montos, sin recalcularlos por separado.
+  _ultimoReservaMonto = reservaMonto;
+  _ultimoCrecimientoMonto = crecimientoMonto;
+
   document.getElementById('tabla-retiro-socios').innerHTML = `
     <tr><td>Caja real disponible hoy</td><td class="num">${formatoPesos(base)}</td></tr>
     <tr><td>(−) Reserva empresa (${reservaPct}%)</td><td class="num rojo-txt">${formatoPesos(reservaMonto)}</td></tr>
@@ -754,6 +840,8 @@ function calcularRetiroSocios(){
     <tr style="background:#fff;"><td style="font-weight:700;">&nbsp;&nbsp;→ Retiro sugerido Kathy (50%)</td><td class="num" style="font-weight:700;">${formatoPesos(retiroKathy)}</td></tr>
     <tr style="background:#fff;"><td style="font-weight:700;">&nbsp;&nbsp;→ Retiro sugerido Cristian (50%)</td><td class="num" style="font-weight:700;">${formatoPesos(retiroCristian)}</td></tr>
   `;
+
+  pintarAcumuladoFondos();
 }
 
 function pintarRentabilidad(mesTexto){
