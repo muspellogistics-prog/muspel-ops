@@ -3516,17 +3516,17 @@ function armarLinkWhatsApp(p){
     // Ya se agotaron los intentos del mes — sin decirle al cliente el número, se le
     // avisa igual que esta es prácticamente la última oportunidad antes de que el
     // pedido vuelva a la marca (esa parte sí es información útil para el cliente).
-    mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos *Muspel* y hoy estaremos nuevamente en camino con la entrega de su pedido de *'+marcaPedido+'*.\n\n'
+    mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos *Muspel* y por encargo de Alas, hoy estaremos nuevamente en camino con la entrega de su pedido de *'+marcaPedido+'*.\n\n'
       + 'Cuando estemos próximos a su domicilio, le llamaremos para que pueda recibirlo. Le agradecemos mucho que pueda atender nuestra llamada.\n\n'
       + '*Importante:* Si en este intento tampoco logramos comunicarnos con usted o no hay alguien disponible para recibir el pedido, su pedido quedará sin entregar y será devuelto a *'+marcaPedido+'*.\n\n'
       + '¡Muchas gracias! Esperamos poder hacerle llegar su pedido hoy.';
   } else if(esReintento){
-    mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos *Muspel* y hoy estaremos nuevamente en camino con la entrega de su pedido de *'+marcaPedido+'*.\n\n'
+    mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos *Muspel* y por encargo de Alas, hoy estaremos nuevamente en camino con la entrega de su pedido de *'+marcaPedido+'*.\n\n'
       + 'Cuando estemos próximos a su domicilio, le llamaremos para que pueda recibirlo. Le agradecemos que pueda atender nuestra llamada.\n\n'
       + '*Importante:* Las entregas se realizan durante el día y según el recorrido de la ruta, por lo que si en ese momento no logramos comunicarnos con usted o no hay alguien disponible para recibir el pedido, reagendaremos la entrega para nuestra próxima ruta por la localidad, '+fraseProximaRuta+'\n\n'
       + '¡Muchas gracias! Nos vemos pronto.';
   } else {
-    mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos *Muspel* y hoy estaremos realizando la entrega de su pedido de *'+marcaPedido+'*.\n\n'
+    mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos *Muspel* y por encargo de Alas, hoy estaremos realizando la entrega de su pedido de *'+marcaPedido+'*.\n\n'
       + 'Cuando estemos próximos a su domicilio, le llamaremos para que pueda recibirlo. Le agradecemos que pueda atender nuestra llamada.\n\n'
       + '*Importante:* Las entregas se realizan durante el día y según el recorrido de la ruta, por lo que si en ese momento no logramos comunicarnos con usted o no hay alguien disponible para recibir el pedido, reagendaremos la entrega para nuestra próxima ruta por la localidad, '+fraseProximaRuta+'\n\n'
       + '¡Muchas gracias! Nos vemos pronto.';
