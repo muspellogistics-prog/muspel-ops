@@ -1107,8 +1107,8 @@ function descargarOrdenesDesdeSheets(onFin){
             // necesita comparar ts, solo propagar si Sheets lo tiene marcado y local no.
             if(sinAgruparNube && !existente.sinAgrupar) existente.sinAgrupar = true;
             // avisoWaEnviado también es de una sola vía — así, si Kathy manda el aviso
-            // desde su celular, el de Cristian se entera solo (sin que él tenga que
-            // tocar nada) en el próximo auto-sync de 30s.
+            // desde su computador, el celular de Cristian se entera solo (sin que él tenga que
+            // tocar nada) en el próximo auto-sync de 10s.
             if(avisoWaEnviadoNube && !existente.avisoWaEnviado){ existente.avisoWaEnviado = true; actualizadas++; }
             // Nº de ruta: se completa si este equipo todavía no lo tiene y la nube sí
             // (mismo criterio que traerOrdenesDesdeNube) — así, si Kathy importa el Excel
