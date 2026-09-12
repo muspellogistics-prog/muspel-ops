@@ -1088,6 +1088,7 @@ function descargarOrdenesDesdeSheets(onFin){
       // recibía los pedidos sin numeración y sin poder ordenarlos igual que el que sí
       // importó el Excel. row[17] es el mismo índice que ya usa traerOrdenesDesdeNube().
       var cloudNumRuta = (row[17]===''||row[17]===null||row[17]===undefined) ? null : Number(row[17]);
+      var avisoWaEnviadoNube = row[21]===true || row[21]==='TRUE';
 
       if(vistosEnSheets[codigo] <= yaLocal){
         // Esta ocurrencia ya existe localmente (por código y por posición) — solo revisamos
@@ -1105,6 +1106,10 @@ function descargarOrdenesDesdeSheets(onFin){
             // sinAgrupar es de una sola vía (una vez separado, queda separado) — no
             // necesita comparar ts, solo propagar si Sheets lo tiene marcado y local no.
             if(sinAgruparNube && !existente.sinAgrupar) existente.sinAgrupar = true;
+            // avisoWaEnviado también es de una sola vía — así, si Kathy manda el aviso
+            // desde su celular, el de Cristian se entera solo (sin que él tenga que
+            // tocar nada) en el próximo auto-sync de 30s.
+            if(avisoWaEnviadoNube && !existente.avisoWaEnviado){ existente.avisoWaEnviado = true; actualizadas++; }
             // Nº de ruta: se completa si este equipo todavía no lo tiene y la nube sí
             // (mismo criterio que traerOrdenesDesdeNube) — así, si Kathy importa el Excel
             // DESPUÉS de que Cristian ya tenía el pedido cargado, igual le llega el número.
@@ -1135,7 +1140,8 @@ function descargarOrdenesDesdeSheets(onFin){
         intentos: row[14]!=null && row[14]!=='' ? Number(row[14]) : 1,
         intentosAgotados: row[15] === true || row[15] === 'true',
         sinAgrupar: sinAgruparNube,
-        numRuta: cloudNumRuta
+        numRuta: cloudNumRuta,
+        avisoWaEnviado: avisoWaEnviadoNube
       });
       importadas++;
     });
@@ -1607,16 +1613,19 @@ function reclasificarDevolucionesHistoricas(){
 }
 
 // Trae automáticamente los cambios de estado de otros teléfonos/computadores
-// cada 30 segundos, para que el Resumen/Dashboard se mantengan al día solos.
+// cada 10 segundos (antes 30s — a pedido de Kathy, para que el aviso de WhatsApp
+// enviado y demás cambios se vean más rápido entre el celular de ella y el de Cristian),
+// para que el Resumen/Dashboard se mantengan al día solos.
 setInterval(function(){
   descargarOrdenesDesdeSheets();
   descargarCierresDesdeSheets();
-}, 30000);
+}, 10000);
 
-// reintenta automáticamente cada 20 segundos si quedan pendientes
+// reintenta automáticamente cada 10 segundos si quedan pendientes (antes 20s — a
+// pedido de Kathy, para que TODA la sincronización quede al mismo ritmo de 10s)
 setInterval(function(){
   if(SYNC_PENDIENTE.length>0) procesarColaSync();
-}, 20000);
+}, 10000);
 
 // ════════════════════════════════════════
 // ESTADO GLOBAL
@@ -2077,10 +2086,19 @@ function abrirModal(id){
   // formato chileno (+56) para que ambos links funcionen bien, sin importar si el
   // teléfono venía con o sin el 9 inicial o el +56 (ALAS lo trae en formatos mixtos).
   var telAcciones = document.getElementById('modal-tel-acciones');
-  var linkWa = armarLinkWhatsApp(p);
+  var btnModalWa = document.getElementById('modal-tel-whatsapp');
+  var linkWa = p.avisoWaEnviado ? armarLinkWhatsAppLlamada(p) : armarLinkWhatsApp(p);
   if(linkWa){
     document.getElementById('modal-tel-llamar').href = 'tel:+'+normalizarTelChile(p.tel);
-    document.getElementById('modal-tel-whatsapp').href = linkWa;
+    btnModalWa.href = linkWa;
+    if(p.avisoWaEnviado){
+      btnModalWa.innerHTML = '<button class="btn" style="width:100%;margin-bottom:0;background:#128C7E;color:#fff;">✅💬 Llamar por WhatsApp</button>';
+      btnModalWa.onclick = null;
+    } else {
+      btnModalWa.innerHTML = '<button class="btn btn-primary" style="width:100%;margin-bottom:0;">💬 WhatsApp</button>';
+      var idParaAviso = p.id;
+      btnModalWa.onclick = function(){ marcarAvisoWaEnviado(idParaAviso); };
+    }
     telAcciones.style.display = 'flex';
   }else{
     telAcciones.style.display = 'none';
@@ -2955,6 +2973,9 @@ function traerOrdenesDesdeNube(){
         // la nube traiga algo distinto — no depende del ts, porque Cristian nunca la
         // edita desde su celular, así que no hay riesgo de pisar un cambio suyo.
         if(cloudObservacion && cloudObservacion !== (local.observacion||'')){ local.observacion = cloudObservacion; cambio = true; }
+        // avisoWaEnviado es de una sola vía (como sinAgrupar): una vez que cualquier
+        // celular lo marcó true, se propaga a los demás y ya no vuelve a false.
+        if(row[21]===true || row[21]==='TRUE'){ if(!local.avisoWaEnviado){ local.avisoWaEnviado = true; cambio = true; } }
         // El estado solo se pisa si la nube tiene un cambio MÁS NUEVO que lo que hay acá
         // (para no borrar, por ejemplo, una entrega que Cristian acaba de marcar en su
         // celular pero que todavía no alcanzó a subir a la nube).
@@ -2969,7 +2990,7 @@ function traerOrdenesDesdeNube(){
           repetidoDeHistorial: row[13]===true||row[13]==='TRUE', intentos: Number(row[14])||1,
           intentosAgotados: row[15]===true||row[15]==='TRUE', numRuta: cloudNumRuta,
           esRetiro: row[18]===true||row[18]==='TRUE', intercambio: row[19]===true||row[19]==='TRUE',
-          observacion: cloudObservacion
+          observacion: cloudObservacion, avisoWaEnviado: row[21]===true||row[21]==='TRUE'
         });
         agregadas++;
       }
@@ -3432,9 +3453,18 @@ function renderComunasDeTipo(items, diaSemana, tipo){
         html+='<button class="btn btn-verde btn-sm" onclick="marcar('+p.id+',\'entregado\')">✅</button>';
         html+='<button class="btn btn-naranja btn-sm" onclick="marcar('+p.id+',\'retorno\')">🔁</button>';
         html+='<button class="btn btn-rojo btn-sm" onclick="marcar('+p.id+',\'daniado\')">⚠️</button>';
-        var linkWaTarjeta = armarLinkWhatsApp(p);
-        if(linkWaTarjeta){
-          html+='<a href="'+linkWaTarjeta+'" target="_blank"><button class="btn btn-sm" style="background:#25D366;color:#fff;">💬</button></a>';
+        if(p.avisoWaEnviado){
+          // Ya se mandó el aviso: el botón cambia a "llamar por WhatsApp" (sin texto
+          // precargado) — distinto color + check para que se note de un vistazo.
+          var linkWaLlamada = armarLinkWhatsAppLlamada(p);
+          if(linkWaLlamada){
+            html+='<a href="'+linkWaLlamada+'" target="_blank"><button class="btn btn-sm" style="background:#128C7E;color:#fff;" title="Aviso ya enviado — abre el chat para llamar">✅💬</button></a>';
+          }
+        } else {
+          var linkWaTarjeta = armarLinkWhatsApp(p);
+          if(linkWaTarjeta){
+            html+='<a href="'+linkWaTarjeta+'" target="_blank" onclick="marcarAvisoWaEnviado('+p.id+')"><button class="btn btn-sm" style="background:#25D366;color:#fff;" title="Enviar aviso de entrega">💬</button></a>';
+          }
         }
         html+='</div>';
       } else if(p.estado==='retorno'){
@@ -3516,22 +3546,46 @@ function armarLinkWhatsApp(p){
     // Ya se agotaron los intentos del mes — sin decirle al cliente el número, se le
     // avisa igual que esta es prácticamente la última oportunidad antes de que el
     // pedido vuelva a la marca (esa parte sí es información útil para el cliente).
-    mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos *Muspel* y por encargo de Alas, hoy estaremos nuevamente en camino con la entrega de su pedido de *'+marcaPedido+'*.\n\n'
+    mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos *Muspel* y hoy estaremos nuevamente en camino con la entrega de su pedido de *'+marcaPedido+'*.\n\n'
       + 'Cuando estemos próximos a su domicilio, le llamaremos para que pueda recibirlo. Le agradecemos mucho que pueda atender nuestra llamada.\n\n'
       + '*Importante:* Si en este intento tampoco logramos comunicarnos con usted o no hay alguien disponible para recibir el pedido, su pedido quedará sin entregar y será devuelto a *'+marcaPedido+'*.\n\n'
       + '¡Muchas gracias! Esperamos poder hacerle llegar su pedido hoy.';
   } else if(esReintento){
-    mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos *Muspel* y por encargo de Alas, hoy estaremos nuevamente en camino con la entrega de su pedido de *'+marcaPedido+'*.\n\n'
+    mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos *Muspel* y hoy estaremos nuevamente en camino con la entrega de su pedido de *'+marcaPedido+'*.\n\n'
       + 'Cuando estemos próximos a su domicilio, le llamaremos para que pueda recibirlo. Le agradecemos que pueda atender nuestra llamada.\n\n'
       + '*Importante:* Las entregas se realizan durante el día y según el recorrido de la ruta, por lo que si en ese momento no logramos comunicarnos con usted o no hay alguien disponible para recibir el pedido, reagendaremos la entrega para nuestra próxima ruta por la localidad, '+fraseProximaRuta+'\n\n'
       + '¡Muchas gracias! Nos vemos pronto.';
   } else {
-    mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos *Muspel* y por encargo de Alas, hoy estaremos realizando la entrega de su pedido de *'+marcaPedido+'*.\n\n'
+    mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos *Muspel* y hoy estaremos realizando la entrega de su pedido de *'+marcaPedido+'*.\n\n'
       + 'Cuando estemos próximos a su domicilio, le llamaremos para que pueda recibirlo. Le agradecemos que pueda atender nuestra llamada.\n\n'
       + '*Importante:* Las entregas se realizan durante el día y según el recorrido de la ruta, por lo que si en ese momento no logramos comunicarnos con usted o no hay alguien disponible para recibir el pedido, reagendaremos la entrega para nuestra próxima ruta por la localidad, '+fraseProximaRuta+'\n\n'
       + '¡Muchas gracias! Nos vemos pronto.';
   }
   return 'https://wa.me/'+telLimpio+'?text='+encodeURIComponent(mensajeWa);
+}
+
+// Link para LLAMAR por WhatsApp (sin mensaje precargado) — se usa una vez que el primer
+// aviso de "hoy se entrega su pedido" ya se mandó, para que al tocar el botón se abra
+// directo el chat y desde ahí se pueda llamar, en vez de usar el teléfono normal (mucha
+// gente en Chile no contesta números desconocidos por las empresas de cobranza).
+function armarLinkWhatsAppLlamada(p){
+  var telLimpio = normalizarTelChile(p.tel);
+  if(!telLimpio) return null;
+  return 'https://wa.me/'+telLimpio;
+}
+
+// Marca que el primer aviso por WhatsApp ya se envió para este pedido (y todo su grupo
+// si es multibulto) — cambia el botón a "ya avisado" y sincroniza el cambio a Sheets para
+// que se vea igual en todos los celulares (el de Kathy y el de Cristian).
+// Es de una sola vía: una vez en true, no se vuelve a poner en false desde acá.
+function marcarAvisoWaEnviado(id){
+  var p = paquetes.find(function(x){ return x.id === id; });
+  if(!p || p.avisoWaEnviado) return;
+  var grupo = calcularGrupoMultibulto(p);
+  grupo.forEach(function(item){ item.avisoWaEnviado = true; });
+  guardarStorage();
+  enviarASheets('cambio_estado', {codigo:p.codigo, nombre:p.nombre, estado:p.estado, motivo:p.motivo||'', avisoWaEnviado:'si', fecha:new Date().toLocaleString('es-CL')});
+  renderPaquetes();
 }
 
 var _ultimoMarcarTs = {}; // por id de paquete, para no bloquear marcar 2 pedidos distintos seguidos
