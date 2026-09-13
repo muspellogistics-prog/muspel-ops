@@ -1107,8 +1107,8 @@ function descargarOrdenesDesdeSheets(onFin){
             // necesita comparar ts, solo propagar si Sheets lo tiene marcado y local no.
             if(sinAgruparNube && !existente.sinAgrupar) existente.sinAgrupar = true;
             // avisoWaEnviado también es de una sola vía — así, si Kathy manda el aviso
-            // desde su computador, el celular de Cristian se entera solo (sin que él tenga que
-            // tocar nada) en el próximo auto-sync de 10s.
+            // desde su celular, el de Cristian se entera solo (sin que él tenga que
+            // tocar nada) en el próximo auto-sync de 30s.
             if(avisoWaEnviadoNube && !existente.avisoWaEnviado){ existente.avisoWaEnviado = true; actualizadas++; }
             // Nº de ruta: se completa si este equipo todavía no lo tiene y la nube sí
             // (mismo criterio que traerOrdenesDesdeNube) — así, si Kathy importa el Excel
@@ -2877,12 +2877,12 @@ function normalizarComuna(c){
 // 0=Dom, 1=Lun, 2=Mar, 3=Mie, 4=Jue, 5=Vie, 6=Sab
 var GRILLA_RUTAS = {
   0: [], // Domingo: descanso
-  1: ['osorno','san pablo','la union','rio bueno'],          // Lun: corredor norte + san pablo primero (cerca de base)
-  2: ['osorno','purranque','rio negro','puerto octay'],       // Mar: corredor sur
-  3: ['osorno','la union','lago ranco'],                      // Mie: corredor norte-oriente
-  4: ['osorno','san juan de la costa','rio negro','purranque'], // Jue: oeste primero, sur en regreso
-  5: ['osorno','la union','rio bueno'],                       // Vie: corredor norte
-  6: ['osorno','puyehue']                                     // Sab: corredor oriente
+  1: ['san pablo','la union','lago ranco'],                   // Lun: Osorno NO circula este día (matriz Alas 13-09-2026); se suma Lago Ranco (antes miércoles)
+  2: ['osorno','purranque','rio negro','puerto octay'],       // Mar: corredor sur (sin cambios)
+  3: ['osorno','la union','rio bueno'],                       // Mie: Rio Bueno reemplaza a Lago Ranco (antes lunes/viernes, ahora miércoles/viernes)
+  4: ['osorno','san juan de la costa','rio negro','purranque'], // Jue: oeste primero, sur en regreso (sin cambios)
+  5: ['osorno','la union','rio bueno'],                       // Vie: corredor norte (sin cambios)
+  6: ['osorno','puyehue']                                     // Sab: corredor oriente (sin cambios)
 };
 
 // Grilla ampliada para Cyber/Black Weekend
