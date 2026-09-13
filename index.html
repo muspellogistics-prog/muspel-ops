@@ -1093,6 +1093,11 @@ function descargarOrdenesDesdeSheets(onFin){
       // importó el Excel. row[17] es el mismo índice que ya usa traerOrdenesDesdeNube().
       var cloudNumRuta = (row[17]===''||row[17]===null||row[17]===undefined) ? null : Number(row[17]);
       var avisoWaEnviadoNube = row[21]===true || row[21]==='TRUE';
+      // CORREGIDO 14-09-2026: esta función tampoco traía la observación (indicación del
+      // cliente que Kathy deja para Cristian) — por eso quedaba escrita en Sheets pero
+      // nunca le llegaba al celular de Cristian, que depende del auto-sync de 10s y no
+      // del botón manual "traer de la nube" (el único lugar donde sí se leía antes).
+      var cloudObservacion = row[20]||'';
 
       if(vistosEnSheets[codigo] <= yaLocal){
         // Esta ocurrencia ya existe localmente (por código y por posición) — solo revisamos
@@ -1121,6 +1126,13 @@ function descargarOrdenesDesdeSheets(onFin){
               existente.numRuta = cloudNumRuta;
               actualizadas++;
             }
+            // La observación se actualiza siempre que la nube traiga algo distinto — igual
+            // que en traerOrdenesDesdeNube — no depende del ts porque Cristian nunca la
+            // edita desde su celular, así que no hay riesgo de pisar un cambio suyo.
+            if(cloudObservacion && cloudObservacion !== (existente.observacion||'')){
+              existente.observacion = cloudObservacion;
+              actualizadas++;
+            }
           }
         });
         return;
@@ -1145,6 +1157,9 @@ function descargarOrdenesDesdeSheets(onFin){
         intentosAgotados: row[15] === true || row[15] === 'true',
         sinAgrupar: sinAgruparNube,
         numRuta: cloudNumRuta,
+        esRetiro: row[18]===true||row[18]==='TRUE',
+        intercambio: row[19]===true||row[19]==='TRUE',
+        observacion: cloudObservacion,
         avisoWaEnviado: avisoWaEnviadoNube
       });
       importadas++;
@@ -3474,6 +3489,9 @@ function renderComunasDeTipo(items, diaSemana, tipo){
       }
       if(p.observacion && p.observacion.trim()){
         html+='<div style="display:inline-block;background:#ede9fe;border:1px solid #a855f7;border-radius:6px;padding:3px 8px;margin-bottom:4px;font-size:0.68rem;font-weight:700;color:#6b21a8;">📝 Observación del cliente</div>';
+      }
+      if(p.intercambio){
+        html+='<div style="display:inline-block;background:#fff7ed;border:1px solid #fdba74;border-radius:6px;padding:3px 8px;margin-bottom:4px;font-size:0.68rem;font-weight:700;color:#9a3412;">🔀 Intercambio — retirar envase vacío</div>';
       }
       html+='<div class="paquete-nombre">'+p.nombre+'</div>';
       if(p.b2b && p.b2b.trim()){
