@@ -228,6 +228,9 @@
         <div style="font-size:0.85rem;color:#3b0764;" id="modal-observacion-texto">—</div>
       </div>
       <div class="modal-columna-principal">
+        <div id="modal-numruta-row" style="display:none;margin-bottom:6px;">
+          <span style="display:inline-block;background:var(--azul);color:#fff;border-radius:8px;padding:4px 10px;font-size:0.85rem;font-weight:800;">📍 Parada N° <span id="modal-numruta">—</span></span>
+        </div>
         <div class="modal-titulo" id="modal-nombre">—</div>
         <div class="modal-codigo" id="modal-codigo">—</div>
         <div class="modal-campo">
@@ -2049,6 +2052,13 @@ function abrirModal(id){
 
   document.getElementById('modal-nombre').textContent = p.nombre || 'Sin nombre';
   document.getElementById('modal-codigo').textContent = p.codigo || '';
+  var numRutaRow = document.getElementById('modal-numruta-row');
+  if(p.numRuta !== null && p.numRuta !== undefined && !isNaN(p.numRuta)){
+    document.getElementById('modal-numruta').textContent = p.numRuta;
+    numRutaRow.style.display = 'block';
+  } else {
+    numRutaRow.style.display = 'none';
+  }
   document.getElementById('modal-empresa').textContent = p.b2b || '(no especificada)';
   document.getElementById('modal-folio').textContent = p.folio || '—';
 
@@ -3445,6 +3455,9 @@ function renderComunasDeTipo(items, diaSemana, tipo){
         html+='<div style="display:inline-block;background:#ede9fe;border:1px solid #a855f7;border-radius:6px;padding:3px 8px;margin-bottom:4px;font-size:0.68rem;font-weight:700;color:#6b21a8;">📝 Observación del cliente</div>';
       }
       html+='<div class="paquete-nombre">'+p.nombre+'</div>';
+      if(p.b2b && p.b2b.trim()){
+        html+='<div style="font-size:0.7rem;font-weight:800;color:var(--azul2);margin-bottom:1px;">🏪 '+p.b2b.trim()+'</div>';
+      }
       html+='<div class="paquete-dir">'+dirMostrar+(p.tel?' · '+p.tel:'')+'</div>';
       html+='<div class="paquete-codigo">'+p.codigo+' <span class="badge '+badgeClass+'">'+badgeTxt+'</span> <span style="font-size:0.65rem;font-weight:700;color:'+((p.tipo||'Principal').toLowerCase()==='ramal'?'var(--naranja)':'var(--azul2)')+';">'+((p.tipo||'Principal').toLowerCase()==='ramal'?'🛣 J06':'🏙 J05')+'</span></div>';
       html+='</div>';
