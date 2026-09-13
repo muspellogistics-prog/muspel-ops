@@ -2052,6 +2052,17 @@ function cerrarResumenDetalle(e){
 // ════════════════════════════════════════
 var modalOrdenId = null;
 
+// Convierte una URL suelta dentro de un texto en un link tocable — para cuando Kathy pega
+// un link (ej. de Google Maps) dentro de la observación que deja para Cristian. Escapa el
+// resto del texto primero para que no se pueda inyectar HTML raro desde la observación.
+function linkificarTexto(texto){
+  var escapado = String(texto||'')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return escapado.replace(/(https?:\/\/[^\s<]+)/g, function(url){
+    return '<a href="'+url+'" target="_blank" onclick="event.stopPropagation()" style="color:#6b21a8;text-decoration:underline;word-break:break-all;">'+url+'</a>';
+  });
+}
+
 function abrirModal(id){
   var p = paquetes.find(function(x){return x.id===id;});
   if(!p) return;
@@ -2156,7 +2167,7 @@ function abrirModal(id){
   var inputObs = document.getElementById('modal-observacion-input');
   if(p.observacion && p.observacion.trim()){
     boxObs.style.display = 'block';
-    txtObs.textContent = p.observacion;
+    txtObs.innerHTML = linkificarTexto(p.observacion);
   } else {
     boxObs.style.display = 'none';
   }
