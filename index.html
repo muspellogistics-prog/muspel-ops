@@ -228,8 +228,9 @@
         <div style="font-size:0.85rem;color:#3b0764;" id="modal-observacion-texto">—</div>
       </div>
       <div class="modal-columna-principal">
-        <div id="modal-numruta-row" style="display:none;margin-bottom:6px;">
-          <span style="display:inline-block;background:var(--azul);color:#fff;border-radius:8px;padding:4px 10px;font-size:0.85rem;font-weight:800;">📍 Parada N° <span id="modal-numruta">—</span></span>
+        <div id="modal-numruta-row" style="display:none;align-items:center;gap:8px;margin-bottom:10px;">
+          <div style="flex-shrink:0;background:var(--azul);color:#fff;border-radius:8px;min-width:38px;height:38px;display:flex;align-items:center;justify-content:center;font-size:1.15rem;font-weight:800;" id="modal-numruta">—</div>
+          <span style="font-size:0.8rem;font-weight:700;color:#475569;">Parada de la ruta</span>
         </div>
         <div class="modal-titulo" id="modal-nombre">—</div>
         <div class="modal-codigo" id="modal-codigo">—</div>
@@ -2055,7 +2056,7 @@ function abrirModal(id){
   var numRutaRow = document.getElementById('modal-numruta-row');
   if(p.numRuta !== null && p.numRuta !== undefined && !isNaN(p.numRuta)){
     document.getElementById('modal-numruta').textContent = p.numRuta;
-    numRutaRow.style.display = 'block';
+    numRutaRow.style.display = 'flex';
   } else {
     numRutaRow.style.display = 'none';
   }
@@ -2577,10 +2578,10 @@ function importarExcel(input){
       // anteriores). Solo esos cuentan como "duplicado real". Si el mismo código se repite
       // varias veces DENTRO de este mismo archivo, es un multibulto (varios paquetes con el
       // mismo código, incluso mismo folio) — no se descarta.
-      var codigosPreExistentes = {};
-      paquetes.forEach(function(p){ codigosPreExistentes[p.codigo] = true; });
+      var paquetesPorCodigo = {};
+      paquetes.forEach(function(p){ paquetesPorCodigo[p.codigo] = p; });
 
-      var nuevos=0, dup=0, ocultasSalteadas=0, alertas=[];
+      var nuevos=0, dup=0, ocultasSalteadas=0, alertas=[], actualizadosNumRuta=0;
       for(var r=headerRowIdx+1;r<data.length;r++){
         if(filasOcultas[r]){ ocultasSalteadas++; continue; }
         var row=data[r];
@@ -2588,7 +2589,23 @@ function importarExcel(input){
         var codigo=String(row[idx.codigo]).trim();
         if(!codigo) continue;
         // revisa duplicado real (de una importación anterior), no dentro de este mismo archivo
-        if(codigosPreExistentes[codigo]){dup++;continue;}
+        if(paquetesPorCodigo[codigo]){
+          dup++;
+          // Si este archivo trae número de parada (columna "N°", el que asigna Spoke) y el
+          // pedido ya existía SIN ese número o con uno distinto, lo actualiza en vez de
+          // solo descartarlo — pasa cuando Kathy importa primero el Excel de Alas y más
+          // tarde reimporta el mismo archivo ya con los números de ruta agregados por Spoke.
+          if(idx.numRuta!==undefined && row[idx.numRuta]!==undefined && String(row[idx.numRuta]).trim()!==''){
+            var nuevoNum = Number(row[idx.numRuta]);
+            var existentePrevio = paquetesPorCodigo[codigo];
+            if(!isNaN(nuevoNum) && existentePrevio.numRuta !== nuevoNum){
+              existentePrevio.numRuta = nuevoNum;
+              actualizadosNumRuta++;
+              enviarASheets('cambio_estado', {codigo:existentePrevio.codigo, nombre:existentePrevio.nombre, estado:existentePrevio.estado, numRuta:nuevoNum, fecha:new Date().toLocaleString('es-CL')});
+            }
+          }
+          continue;
+        }
         // revisa si ese código ya fue entregado/procesado en días anteriores (historial)
         var registrosPrevios = calcularIntentos(codigo);
         var intentosFallidos = registrosPrevios.filter(function(r){return r.estado==='devuelto'||r.estado==='retorno'||r.estado==='daniado';}).length;
@@ -2636,8 +2653,12 @@ function importarExcel(input){
       }
       guardarStorage();
       actualizarResumen();
+      if(actualizadosNumRuta>0) renderPaquetes();
       status.style.color='var(--azul2)';
       status.textContent = '✅ ' + nuevos + ' órdenes cargadas localmente. Subiendo a la nube...';
+      if(actualizadosNumRuta>0){
+        status.innerHTML += '<br><span style="color:var(--azul);font-weight:600;">🔢 '+actualizadosNumRuta+' pedido(s) ya existentes actualizaron su número de parada.</span>';
+      }
       if(ocultasSalteadas>0){
         status.innerHTML += '<br><span style="color:var(--naranja);font-weight:600;">👁️‍🗨️ '+ocultasSalteadas+' fila(s) ocultas en el Excel se saltaron (no se importaron).</span>';
       }
