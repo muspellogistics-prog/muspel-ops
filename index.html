@@ -3623,17 +3623,50 @@ function saludoSegunHora(){
   if(minutosDelDia < 20*60+30) return 'buenas tardes';       // 12:00 a 20:29
   return 'buenas noches';                                     // desde las 20:30
 }
+// Feriados en que Muspel NO opera, aunque ese día de la semana normalmente sí tenga
+// ruta según GRILLA_RUTAS (ej. un viernes feriado, cuando los viernes normales sí
+// llevan ruta a Osorno). Son los 5 feriados IRRENUNCIABLES del calendario chileno
+// (Ley 19.973 y Ley 20.629, vía BCN) — los únicos en que, por ley, no se puede obligar
+// a un trabajador del comercio a trabajar. El resto de los feriados del año NO están
+// acá porque Muspel sí opera esos días (decisión de Kathy, 17-09-2026).
+// AUTO-VIGENTE, sin mantención anual: estos 5 son de FECHA FIJA todos los años en
+// Chile (nunca se trasladan a otro día, a diferencia de feriados como San Pedro y San
+// Pablo o Encuentro de Dos Mundos, que sí se mueven al lunes más cercano) — por eso se
+// guardan como {mes, dia} y se reconocen automáticamente cada año, sin año incluido.
+// LÍMITE: si en el futuro Muspel decide dejar de operar en un feriado que SÍ se
+// traslada de fecha, ese no se puede poner aquí de esta forma — habría que agregarlo
+// como fecha completa AAAA-MM-DD de ese año puntual.
+var FERIADOS_FIJOS_NO_OPERATIVOS = [
+  {mes:1,  dia:1},  // Año Nuevo
+  {mes:5,  dia:1},  // Día del Trabajo
+  {mes:9,  dia:18}, // Independencia Nacional (Fiestas Patrias)
+  {mes:9,  dia:19}, // Día de las Glorias del Ejército
+  {mes:12, dia:25}  // Navidad
+];
+function esFechaFeriadoNoOperativo(fecha){
+  var mes = fecha.getMonth()+1, dia = fecha.getDate();
+  return FERIADOS_FIJOS_NO_OPERATIVOS.some(function(f){ return f.mes===mes && f.dia===dia; });
+}
 // Próximo día en que la ruta vuelve a pasar por esta comuna, según GRILLA_RUTAS
-// (la misma grilla que ya se usa para ordenar las paradas del día). Empieza a mirar
-// desde MAÑANA, no desde hoy, y da la vuelta completa a la semana si hace falta.
-// Devuelve {dia, esManana} — esManana es true si ese próximo día cae justo mañana
-// (i===1 en el conteo). Si la comuna no aparece en ningún día de la grilla, null.
+// (la misma grilla que ya se usa para ordenar las paradas del día) Y según
+// FERIADOS_NO_OPERATIVOS (fechas concretas en que no se opera aunque el día de la
+// semana normalmente sí lleve ruta). Empieza a mirar desde MAÑANA, no desde hoy, y
+// avanza fecha por fecha real (no solo día de semana) para poder saltarse feriados
+// puntuales sin desordenar el resto de la semana.
+// CORREGIDO: antes esto solo ciclaba por día de la semana (0-6), sin conocer fechas
+// reales — así que nunca podía saber que un viernes o sábado puntual era feriado.
+// Devuelve {dia, esManana} — esManana es true si ese próximo día cae justo mañana.
+// Si no se encuentra ningún día operativo en las próximas 2 semanas, null.
 function proximoDiaRutaComuna(comuna){
   if(!comuna) return null;
-  var hoy = new Date().getDay();
-  for(var i=1; i<=7; i++){
-    var d = (hoy+i) % 7;
-    if(getPrioridadComuna(comuna, d) !== 999) return {dia: NOMBRES_DIA[d], esManana: i===1};
+  var hoy = new Date();
+  for(var i=1; i<=14; i++){
+    var fecha = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()+i);
+    var diaSemana = fecha.getDay();
+    if(esFechaFeriadoNoOperativo(fecha)) continue; // feriado puntual: se salta esta fecha
+    if(getPrioridadComuna(comuna, diaSemana) !== 999){
+      return {dia: NOMBRES_DIA[diaSemana], esManana: i===1};
+    }
   }
   return null;
 }
@@ -3681,7 +3714,7 @@ function armarLinkWhatsApp(p){
       + '¡Muchas gracias! Nos vemos pronto.';
   } else {
     mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos *Muspel* y por encargo de Alas, hoy estaremos realizando la entrega de su pedido de *'+marcaPedido+'*.\n\n'
-      + 'Cuando estemos próximos a su domicilio, le llamaremos* para que pueda recibirlo. Le agradecemos que pueda atender nuestra llamada.\n\n'
+      + '*Cuando estemos próximos a su domicilio, le llamaremos* para que pueda recibirlo. Le agradecemos que pueda atender nuestra llamada.\n\n'
       + '*Importante:* *No hay horario especifico. Las entregas se realizan durante el día y según el recorrido de la ruta*, por lo que si no logramos comunicarnos con usted o no hay alguien disponible para recibir el pedido, reagendaremos la entrega para nuestra próxima ruta por la localidad, '+fraseProximaRuta+'\n\n'
       + '¡Muchas gracias! Nos vemos pronto.';
   }
@@ -4353,9 +4386,20 @@ function cargarResumenPorCodigo(callback){
 function actualizarDashboard(){
   var historialDelMes = historialUnicoPorFecha().filter(function(h){ return perteneceAMesActual(h.fecha); });
   var totalEntOrd=0, totalRecOrd=0, dias=historialDelMes.length;
+  // CORREGIDO (parche efectividad/ingreso, septiembre 2026): "ingresoNetoDash" se
+  // calculaba como totalEntOrd * el tramo de bono ACTUAL (el de hoy), aplicado a TODAS
+  // las entregas del mes — incluyendo las WOM, que nunca reciben bono y siempre son
+  // $2.070 planos. Eso infla el ingreso mostrado (ej. 633 entregas × $2.185 aunque
+  // varias sean WOM a $2.070, y aunque el tramo de bono haya sido distinto días
+  // anteriores del mes). El ingreso real de cada día YA quedó bien calculado al cerrar
+  // ese día (ver cerrarDia → calcularIngresoOrdenes), así que ahora simplemente se SUMAN
+  // esos ingresos reales guardados día por día — el mismo número que ya muestra la
+  // tabla "Detalle para facturar" más abajo.
+  var ingresoRealMes = 0;
   historialDelMes.forEach(function(h){
     totalEntOrd += (h.entregadosOrdenes!=null ? h.entregadosOrdenes : h.entregados);
     totalRecOrd += (h.totalOrdenes!=null ? h.totalOrdenes : h.total);
+    ingresoRealMes += (h.ingresos||0);
   });
   // Efectividad, Retorno, Devueltas a Alas e Incidencias: por código único y estado
   // final (ver cargarResumenPorCodigo arriba) — el mismo método que usa Control de
@@ -4370,7 +4414,7 @@ function actualizarDashboard(){
   var totalDev = retornosMesOPS+devueltasMesOPS+daniadasMesOPS;
   var tasaDev = totalOrdMesOPS>0 ? Math.round(totalDev/totalOrdMesOPS*100) : 0;
   var valorEntregaDash=valorPorEntregaNeto(ef);
-  var ingresoNetoDash=totalEntOrd*valorEntregaDash;
+  var ingresoNetoDash=ingresoRealMes;
   var ingresoConIvaDash=Math.round(ingresoNetoDash*(1+IVA_TASA));
   document.getElementById('d-entregas-mes').textContent=totalEntOrd.toLocaleString('es-CL');
   document.getElementById('d-dias-mes').textContent=dias+' días operados';
