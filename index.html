@@ -946,6 +946,63 @@ function efectividadMesActual(){
   return totalRec>0?Math.round(totalEnt/totalRec*100):0;
 }
 
+// Efectividad correcta del mes: excluye WOM y cuenta cada pedido UNA VEZ según su
+// estado más reciente (no suma el total de cada día por separado). Reemplaza a
+// efectividadMesActual(), que contaba doble los pedidos reintentados en varios días
+// — mismo método que ya usan Control de Gestión y la pestaña Dashboard de esta app.
+// AGREGADO por corrección de efectividad (parche solicitado por Kathy, septiembre 2026).
+var _efMesCorrectaCache = null;
+var _efMesCorrectaCargando = false;
+function calcularEfectividadMesCorrecta(callback){
+  _efMesCorrectaCargando = true;
+  fetch(SHEETS_URL + '?tipo=detalle_historico').then(function(r){ return r.json(); }).then(function(rows){
+    function claveFechaOrden(f){
+      var p = String(f||'').trim().split('-');
+      if(p.length!==3) return '00000000';
+      return p[2]+p[1].padStart(2,'0')+p[0].padStart(2,'0');
+    }
+    var porCodigo = {};
+    (rows||[]).slice(1).forEach(function(row){
+      var fecha = formatoFechaLegible(String(row[0]||'').trim());
+      var codigo = row[1];
+      var estado = row[7];
+      var b2b = row[9]||'';
+      if(!codigo || !fecha) return;
+      if(!perteneceAMesActual(fecha)) return;
+      if(!porCodigo[codigo]) porCodigo[codigo] = [];
+      porCodigo[codigo].push({fecha:fecha, estado:estado, b2b:b2b});
+    });
+    // Suma también los pedidos de HOY que aún no se cerraron (no están en
+    // DetalleHistorico todavía), igual que hacía efectividadMesActual().
+    var hoyLegible = formatoFechaLegible(new Date().toLocaleDateString('es-CL'));
+    paquetes.forEach(function(p){
+      var clave = 'HOY_'+p.codigo;
+      if(!porCodigo[clave]) porCodigo[clave] = [];
+      porCodigo[clave].push({fecha:hoyLegible, estado:p.estado, b2b:p.b2b||''});
+    });
+    var totalEnt=0, totalRec=0;
+    Object.keys(porCodigo).forEach(function(codigo){
+      var registros = porCodigo[codigo].sort(function(a,b){ return claveFechaOrden(a.fecha) < claveFechaOrden(b.fecha) ? -1 : 1; });
+      var ultimo = registros[registros.length-1];
+      var esWom = String(ultimo.b2b||'').toUpperCase().indexOf('WOM') !== -1;
+      if(esWom) return;
+      totalRec++;
+      if(ultimo.estado === 'entregado') totalEnt++;
+    });
+    _efMesCorrectaCache = totalRec>0 ? Math.round(totalEnt/totalRec*100) : 0;
+    _efMesCorrectaCargando = false;
+    if(callback) callback(_efMesCorrectaCache);
+  }).catch(function(){
+    _efMesCorrectaCargando = false;
+    if(callback) callback(_efMesCorrectaCache!=null ? _efMesCorrectaCache : efectividadMesActual());
+  });
+}
+// Devuelve el mejor valor disponible AHORA MISMO (sin esperar el fetch): el corregido
+// si ya se cargó, o el viejo como respaldo mientras se carga por primera vez.
+function efectividadMesMejorDisponible(){
+  return _efMesCorrectaCache!=null ? _efMesCorrectaCache : efectividadMesActual();
+}
+
 function formatoPesos(n){ return '$'+Math.round(n).toLocaleString('es-CL'); }
 
 var SYNC_PENDIENTE = [];
@@ -1832,6 +1889,7 @@ cargarStorage();
 cargarConfigOp();
 cargarColaSync();
 cargarSectores();
+calcularEfectividadMesCorrecta(); // precarga la efectividad correcta al abrir, para que esté lista antes de cerrar un día
 
 // ════════════════════════════════════════
 // CÓDIGOS CONFIRMADOS COMO DEVOLUCIÓN EFECTIVA A ALAS (precarga de la herramienta de
@@ -2482,8 +2540,11 @@ function actualizarResumen(){
   if(elPP) elPP.textContent = pend + (pend===1?' paquete por entregar':' paquetes por entregar');
   document.getElementById('s-principal').textContent = prin;
   document.getElementById('s-ramal').textContent = ram;
-  var _efMesR = efectividadMesActual();
+  var _efMesR = efectividadMesMejorDisponible();
   document.getElementById('s-ef-mes-txt').textContent = _efMesR+'%';
+  if(_efMesCorrectaCache===null && !_efMesCorrectaCargando){
+    calcularEfectividadMesCorrecta(function(){ actualizarResumen(); });
+  }
   document.getElementById('p-entregados').style.width = ef+'%';
   document.getElementById('p-efectividad-txt').textContent = ef+'%';
 
@@ -3612,16 +3673,16 @@ function armarLinkWhatsApp(p){
     mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos *Muspel* y hoy estaremos nuevamente en camino con la entrega de su pedido de *'+marcaPedido+'*.\n\n'
       + 'Cuando estemos próximos a su domicilio, le llamaremos para que pueda recibirlo. Le agradecemos mucho que pueda atender nuestra llamada.\n\n'
       + '*Importante:* Si en este intento tampoco logramos comunicarnos con usted o no hay alguien disponible para recibir el pedido, su pedido quedará sin entregar y será devuelto a *'+marcaPedido+'*.\n\n'
-      + 'Esperamos poder concretar la entrega hoy. ¡Muchas gracias!';
+      + '¡Muchas gracias! Esperamos poder hacerle llegar su pedido hoy.';
   } else if(esReintento){
     mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos *Muspel* y hoy estaremos nuevamente en camino con la entrega de su pedido de *'+marcaPedido+'*.\n\n'
       + 'Cuando estemos próximos a su domicilio, le llamaremos para que pueda recibirlo. Le agradecemos que pueda atender nuestra llamada.\n\n'
-      + '*Importante:* *Las entregas se realizan durante el día y según el recorrido de la ruta*, por lo que si en ese momento no logramos comunicarnos con usted o no hay alguien disponible para recibir el pedido, reagendaremos la entrega para nuestra próxima ruta por la localidad, *'+fraseProximaRuta+'*\n\n'
+      + '*Importante:* Las entregas se realizan durante el día y según el recorrido de la ruta, por lo que si en ese momento no logramos comunicarnos con usted o no hay alguien disponible para recibir el pedido, reagendaremos la entrega para nuestra próxima ruta por la localidad, '+fraseProximaRuta+'\n\n'
       + '¡Muchas gracias! Nos vemos pronto.';
   } else {
-    mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos *Muspel* y por encargo de Alas, hoy estaremos realizando la entrega de su pedido de *'+marcaPedido+'*.\n\n'
+    mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos *Muspel* y hoy estaremos realizando la entrega de su pedido de *'+marcaPedido+'*.\n\n'
       + 'Cuando estemos próximos a su domicilio, le llamaremos para que pueda recibirlo. Le agradecemos que pueda atender nuestra llamada.\n\n'
-      + '*Importante:* *Las entregas se realizan durante el día y según el recorrido de la ruta*, por lo que si en ese momento no logramos comunicarnos con usted o no hay alguien disponible para recibir el pedido, reagendaremos la entrega para nuestra próxima ruta por la localidad, *'+fraseProximaRuta+'*\n\n'
+      + '*Importante:* Las entregas se realizan durante el día y según el recorrido de la ruta, por lo que si en ese momento no logramos comunicarnos con usted o no hay alguien disponible para recibir el pedido, reagendaremos la entrega para nuestra próxima ruta por la localidad, '+fraseProximaRuta+'\n\n'
       + '¡Muchas gracias! Nos vemos pronto.';
   }
   return 'https://wa.me/'+telLimpio+'?text='+encodeURIComponent(mensajeWa);
@@ -3926,7 +3987,7 @@ function actualizarCierre(){
 
   var ordStatsCierre=contarOrdenesPorEstado(paquetes);
   var ef=ordStatsCierre.total>0?Math.round(ordStatsCierre.entregadas/ordStatsCierre.total*100):0;
-  var efMesActual=efectividadMesActual();
+  var efMesActual=efectividadMesMejorDisponible();
   var valorEntrega=valorPorEntregaNeto(efMesActual);
   // WOM se paga a tarifa base fija, sin bono, y no cuenta para calcular efMesActual.
   var _ingresoCierreBox = calcularIngresoOrdenes(paquetes, efMesActual);
@@ -3955,7 +4016,7 @@ function actualizarCierre(){
 
 function exportarExcelDia(){
   var fecha=new Date().toLocaleDateString('es-CL').replace(/\//g,'-');
-  var _efExp=efectividadMesActual();
+  var _efExp=efectividadMesMejorDisponible();
   var _valExp=valorPorEntregaNeto(_efExp);
   var _grupos={};
   agruparOrdenes(paquetes).forEach(function(g){
@@ -3991,7 +4052,7 @@ function enviarWhatsApp(){
   var fecha=new Date().toLocaleDateString('es-CL');
   var ordStatsWa=contarOrdenesPorEstado(paquetes);
   var ef=ordStatsWa.total>0?Math.round(ordStatsWa.entregadas/ordStatsWa.total*100):0;
-  var _efWa=efectividadMesActual();
+  var _efWa=efectividadMesMejorDisponible();
   var _ingresoWa=calcularIngresoOrdenes(paquetes, _efWa);
   var msg='*MUSPEL OPS — Cierre '+fecha+'*\n\n'+
     '📦 Órdenes recibidas: '+ordStatsWa.total+'\n'+
@@ -4041,7 +4102,7 @@ function cerrarDia(){
     var total=detalleActualizado.length;
     var ordStats = contarOrdenes(detalleActualizado);
     var ordStatsNoWom = contarOrdenesNoWom(detalleActualizado);
-    var _efCierre=efectividadMesActual();
+    var _efCierre=efectividadMesMejorDisponible();
     var _valCierre=valorPorEntregaNeto(_efCierre);
     var _ingresoCierre = calcularIngresoOrdenes(detalleActualizado, _efCierre);
     var registroActualizado = {
@@ -4101,7 +4162,7 @@ function cerrarDia(){
   var fechaIngresada = prompt('¿Qué fecha corresponde a esta ruta? (formato DD-MM-AAAA)\n\nSi cerraste después de medianoche, seguramente sigue siendo la fecha de AYER, no la de hoy.', fechaSugerida);
   if(fechaIngresada === null) return; // canceló
   var fecha = fechaIngresada.trim() || fechaSugerida;
-  var _efCierre=efectividadMesActual();
+  var _efCierre=efectividadMesMejorDisponible();
   var _valCierre=valorPorEntregaNeto(_efCierre);
   // Ingreso real: WOM se paga a tarifa base fija (sin bono), el resto según el tramo
   // de efectividad del mes (que ya excluye WOM en su cálculo).
