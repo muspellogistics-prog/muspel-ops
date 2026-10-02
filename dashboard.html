@@ -245,6 +245,60 @@
 <script>
 const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbx6aAlb99tMoR2leEQep0V7k3fBFh2JxvpjWXdwKuY1n4NUptpO6stNSc4gFU0xEalG/exec';
 
+// ════════════════════════════════════════
+// LLAVE DE ACCESO (AGREGADO 24-09-2026)
+// Cada persona abre la app UNA vez con su link personal (…?k=SU_CLAVE). La clave queda
+// guardada en ese celular/PC y viaja en cada consulta a Google Sheets. El Apps Script
+// revisa la clave en la hoja "Accesos": si está vencida o desactivada, no entrega datos.
+// Las claves NO están escritas en este archivo (el código de GitHub es público).
+// ════════════════════════════════════════
+(function(){
+  try{
+    var m = /[?&]k=([^&]+)/.exec(location.search);
+    if(m) localStorage.setItem('muspel_clave', decodeURIComponent(m[1]));
+  }catch(e){}
+  var fetchOriginal = window.fetch.bind(window);
+  function claveActual(){ try{ return localStorage.getItem('muspel_clave')||''; }catch(e){ return ''; } }
+  function mostrarBloqueo(msg){
+    if(document.getElementById('bloqueo-acceso')) return;
+    var d = document.createElement('div');
+    d.id = 'bloqueo-acceso';
+    d.style.cssText = 'position:fixed;inset:0;background:#0f172a;color:#fff;z-index:100000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;font-family:sans-serif;';
+    d.innerHTML = '<div style="font-size:2.5rem;margin-bottom:12px;">🔒</div><div style="font-size:1.1rem;font-weight:800;margin-bottom:8px;">Acceso no disponible</div><div style="font-size:0.9rem;color:#cbd5e1;max-width:320px;">'+(msg||'Tu acceso a Muspel OPS terminó o fue desactivado.')+'</div>';
+    (document.body||document.documentElement).appendChild(d);
+    try{ localStorage.removeItem('muspel_paquetes'); localStorage.removeItem('muspel_historial'); localStorage.removeItem('muspel_asignaciones'); }catch(e){}
+  }
+  window.fetch = function(url, opts){
+    var u = String(url||'');
+    if(u.indexOf(SHEETS_URL)!==0) return fetchOriginal(url, opts);
+    var clave = claveActual();
+    if(clave){
+      if(opts && opts.method && String(opts.method).toUpperCase()==='POST' && typeof opts.body==='string'){
+        try{ var cuerpo = JSON.parse(opts.body); cuerpo.clave = clave; opts = Object.assign({}, opts, {body: JSON.stringify(cuerpo)}); }catch(e){}
+      } else {
+        u += (u.indexOf('?')===-1?'?':'&') + 'clave=' + encodeURIComponent(clave);
+      }
+    }
+    return fetchOriginal(u, opts).then(function(resp){
+      return resp.clone().json().then(function(j){
+        if(j && j.status==='error' && j.codigo==='acceso_vencido'){
+          mostrarBloqueo(j.message);
+          return Promise.reject(new Error('acceso vencido'));
+        }
+        if(j && j.status==='error' && j.codigo==='no_permitido'){
+          // Algo que este usuario no puede ver/hacer: se trata como "sin internet" (no
+          // rompe nada) y, si era un envío, se descarta para que no tranque la cola.
+          if(opts && opts.method && String(opts.method).toUpperCase()==='POST'){
+            return new Response(JSON.stringify({status:'ok', ignorado:true}), {headers:{'Content-Type':'application/json'}});
+          }
+          return Promise.reject(new Error('no permitido'));
+        }
+        return resp;
+      }, function(){ return resp; });
+    });
+  };
+})();
+
 let cierres = [];
 let costos = [];
 let incidenciasReales = [];
@@ -386,7 +440,13 @@ async function cargarDatos(){
       // CORREGIDO: antes se agrupaba por "codigo" (único por CADA bulto físico). Ahora
       // se agrupa por el folio base (compartido entre los bultos de un mismo pedido),
       // igual que en Muspel OPS — así un pedido de 3 bultos cuenta como 1 orden, no 3.
-      const clave = getFolioBaseLocal(folio) || codigo;
+      let clave = getFolioBaseLocal(folio) || codigo;
+      // AGREGADO 02-10-2026 — misma regla que Muspel OPS: un sobre WOM con el mismo folio
+      // solo cuenta como multibulto si es la MISMA persona y la MISMA dirección.
+      if(String(b2b||'').toUpperCase().indexOf('WOM') !== -1){
+        const norm = t => String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim();
+        clave += '|' + norm(nombre) + '|' + norm(row[4]);
+      }
       if(!porCodigo[clave]) porCodigo[clave] = [];
       porCodigo[clave].push({fecha, estado, b2b, nombre, motivo, codigo, esRetiro, intercambio});
     });
