@@ -27,6 +27,7 @@
   .tab:hover:not(.active){color:rgba(255,255,255,0.8);}
   .perfil-flotante{display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.14);color:#fff;border:1px solid rgba(255,255,255,0.3);padding:3px 9px;border-radius:20px;font-size:0.62rem;font-weight:700;cursor:pointer;white-space:nowrap;}
   .perfil-flotante:active{background:rgba(255,255,255,0.24);}
+  #usuario-btn option{color:#0f172a;background:#fff;}
   body:not(.perfil-comercial) .solo-comercial{display:none !important;}
   body.perfil-comercial .solo-operativo{display:none !important;}
   /* CONTENIDO */
@@ -271,6 +272,10 @@
           <span class="modal-campo-label">🚚 Tipo ruta</span>
           <span class="modal-campo-valor" id="modal-tipo">—</span>
         </div>
+        <div class="modal-campo solo-comercial">
+          <span class="modal-campo-label">🚚 Repartidor</span>
+          <select class="form-select" id="modal-repartidor" style="width:auto;min-width:130px;padding:4px 8px;font-size:0.8rem;" onchange="asignarDesdeModal(this.value)"></select>
+        </div>
         <div class="modal-campo">
           <span class="modal-campo-label">📋 Estado actual</span>
           <span class="modal-campo-valor" id="modal-estado">—</span>
@@ -300,6 +305,7 @@
   <div style="text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
     <div style="font-size:0.75rem;color:#a8c4e0;" id="header-paquetes">0 órdenes</div>
     <div class="perfil-flotante" onclick="cambiarPerfil()" id="perfil-btn">👷 Operativo</div>
+    <select class="perfil-flotante solo-operativo" id="usuario-btn" onchange="cambiarUsuarioSelect(this.value)" style="appearance:auto;-webkit-appearance:menulist;color:#fff;background:rgba(255,255,255,0.14);"></select>
   </div>
 </div>
 <div id="sync-indicator-row" style="background:var(--azul);padding:0 16px 8px;display:flex;justify-content:flex-end;">
@@ -464,6 +470,8 @@
     <button class="filtro-btn" onclick="filtrarPaquetes('retorno',this)">🔁 Retorno</button>
     <button class="filtro-btn" onclick="filtrarPaquetes('devuelto',this)" style="grid-column:span 2;">📮 Devueltas a Alas</button>
   </div>
+  <div id="panel-asignacion"></div>
+  <button class="btn btn-outline solo-operativo" id="btn-ver-todas" onclick="toggleVerTodas()" style="margin-bottom:6px;display:none;">👀 Ver todas las órdenes</button>
   <button class="btn btn-primary" onclick="generarRutaOptimizada()" style="margin-bottom:6px;">🗺 Generar ruta optimizada del día</button>
   <button class="btn btn-verde" id="btn-siguiente-tramo" onclick="siguienteTramo()" style="display:none;margin-bottom:10px;">▶ Siguiente tramo</button>
   <div id="lista-ruta-optimizada" style="display:none;margin-bottom:12px;"></div>
@@ -605,6 +613,15 @@
 <!-- TAB: HISTORIAL -->
 <!-- ══════════════════════════════════════════ -->
 <div class="content" id="tab-historial">
+  <div class="card" style="border:1.5px solid var(--azul);">
+    <div class="card-title">🔎 Buscar cliente en el historial</div>
+    <div style="font-size:0.78rem;color:#64748b;margin-bottom:8px;">Escribe nombre, teléfono, folio o dirección. Muestra todo lo que le hemos repartido (entregado, retorno, rechazo) desde el 29-07. El teléfono solo aparece en el historial desde el 02-10-2026.</div>
+    <div style="display:flex;gap:8px;">
+      <input class="form-input" id="buscar-cliente-input" type="text" placeholder="Ej: Danitza Ortega · 962860423 · SHP-116356" style="margin-bottom:0;" onkeydown="if(event.key==='Enter')buscarCliente()">
+      <button class="btn btn-primary" style="width:auto;margin-bottom:0;" onclick="buscarCliente()">Buscar</button>
+    </div>
+    <div id="buscar-cliente-resultado" style="margin-top:10px;font-size:0.8rem;"></div>
+  </div>
   <div class="card" style="border:1.5px solid var(--borde);">
     <div class="card-title">📍 Observaciones de sector (precaución operativa)</div>
     <div style="font-size:0.78rem;color:#64748b;margin-bottom:10px;">No es una lista de "sectores peligrosos" — es conocimiento real que van ganando con la ruta: difícil estacionar, dirección GPS con errores, pasaje complicado, anegable en lluvia, etc. Cuando una orden caiga en una dirección o comuna que contenga esta palabra, la tarjeta muestra el aviso.</div>
@@ -722,6 +739,60 @@
 var SHEETS_URL = 'https://script.google.com/macros/s/AKfycbx6aAlb99tMoR2leEQep0V7k3fBFh2JxvpjWXdwKuY1n4NUptpO6stNSc4gFU0xEalG/exec';
 
 // ════════════════════════════════════════
+// LLAVE DE ACCESO (AGREGADO 24-09-2026)
+// Cada persona abre la app UNA vez con su link personal (…?k=SU_CLAVE). La clave queda
+// guardada en ese celular/PC y viaja en cada consulta a Google Sheets. El Apps Script
+// revisa la clave en la hoja "Accesos": si está vencida o desactivada, no entrega datos.
+// Las claves NO están escritas en este archivo (el código de GitHub es público).
+// ════════════════════════════════════════
+(function(){
+  try{
+    var m = /[?&]k=([^&]+)/.exec(location.search);
+    if(m) localStorage.setItem('muspel_clave', decodeURIComponent(m[1]));
+  }catch(e){}
+  var fetchOriginal = window.fetch.bind(window);
+  function claveActual(){ try{ return localStorage.getItem('muspel_clave')||''; }catch(e){ return ''; } }
+  function mostrarBloqueo(msg){
+    if(document.getElementById('bloqueo-acceso')) return;
+    var d = document.createElement('div');
+    d.id = 'bloqueo-acceso';
+    d.style.cssText = 'position:fixed;inset:0;background:#0f172a;color:#fff;z-index:100000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;font-family:sans-serif;';
+    d.innerHTML = '<div style="font-size:2.5rem;margin-bottom:12px;">🔒</div><div style="font-size:1.1rem;font-weight:800;margin-bottom:8px;">Acceso no disponible</div><div style="font-size:0.9rem;color:#cbd5e1;max-width:320px;">'+(msg||'Tu acceso a Muspel OPS terminó o fue desactivado.')+'</div>';
+    (document.body||document.documentElement).appendChild(d);
+    try{ localStorage.removeItem('muspel_paquetes'); localStorage.removeItem('muspel_historial'); localStorage.removeItem('muspel_asignaciones'); }catch(e){}
+  }
+  window.fetch = function(url, opts){
+    var u = String(url||'');
+    if(u.indexOf(SHEETS_URL)!==0) return fetchOriginal(url, opts);
+    var clave = claveActual();
+    if(clave){
+      if(opts && opts.method && String(opts.method).toUpperCase()==='POST' && typeof opts.body==='string'){
+        try{ var cuerpo = JSON.parse(opts.body); cuerpo.clave = clave; opts = Object.assign({}, opts, {body: JSON.stringify(cuerpo)}); }catch(e){}
+      } else {
+        u += (u.indexOf('?')===-1?'?':'&') + 'clave=' + encodeURIComponent(clave);
+      }
+    }
+    return fetchOriginal(u, opts).then(function(resp){
+      return resp.clone().json().then(function(j){
+        if(j && j.status==='error' && j.codigo==='acceso_vencido'){
+          mostrarBloqueo(j.message);
+          return Promise.reject(new Error('acceso vencido'));
+        }
+        if(j && j.status==='error' && j.codigo==='no_permitido'){
+          // Algo que este usuario no puede ver/hacer: se trata como "sin internet" (no
+          // rompe nada) y, si era un envío, se descarta para que no tranque la cola.
+          if(opts && opts.method && String(opts.method).toUpperCase()==='POST'){
+            return new Response(JSON.stringify({status:'ok', ignorado:true}), {headers:{'Content-Type':'application/json'}});
+          }
+          return Promise.reject(new Error('no permitido'));
+        }
+        return resp;
+      }, function(){ return resp; });
+    });
+  };
+})();
+
+// ════════════════════════════════════════
 // TARIFAS REALES (Anexo Nº1 - Contrato ALAS)
 // ════════════════════════════════════════
 var TARIFA_BASE = 2070;   // Valor NETO por entrega (sin IVA)
@@ -754,10 +825,23 @@ function valorPorEntregaNeto(efPct){
 function esWomPaquete(p){
   return String((p&&p.b2b)||'').trim().toUpperCase().indexOf('WOM') !== -1;
 }
+// AGREGADO 02-10-2026 — clave de agrupación de multibulto.
+// Normal: folio base. WOM: folio base + MISMA persona + MISMA dirección (WOM manda
+// sobres con 2 órdenes como multibulto, pero solo cuentan como uno si son de la
+// misma persona y dirección; si no, son entregas independientes).
+function normTexto(t){
+  return String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim();
+}
+function claveGrupoOrden(p){
+  var fb = getFolioBase(p && p.folio);
+  if(!fb) return fb;
+  if(esWomPaquete(p)) return fb + '|' + normTexto(p.nombre) + '|' + normTexto(p.dir);
+  return fb;
+}
 function agruparOrdenes(arr){
   var porFolio = {};
   arr.forEach(function(p){
-    var fb = getFolioBase(p.folio);
+    var fb = claveGrupoOrden(p);
     if(fb){
       if(!porFolio[fb]) porFolio[fb] = [];
       porFolio[fb].push(p);
@@ -767,7 +851,7 @@ function agruparOrdenes(arr){
   var grupos = [];
   arr.forEach(function(p){
     if(asignado[p.id]) return;
-    var fb = getFolioBase(p.folio);
+    var fb = claveGrupoOrden(p);
     if(fb && porFolio[fb] && porFolio[fb].length > 1){
       porFolio[fb].forEach(function(x){ asignado[x.id] = true; });
       grupos.push(porFolio[fb]);
@@ -892,9 +976,105 @@ function actualizarHistorialRemotoIntentos(callback){
       });
     }
     historialRemotoPorClave = mapa;
+    if(Array.isArray(rows)) historialFilasRemotas = rows.slice(1);
     if(callback) callback();
   }).catch(function(){ if(callback) callback(); }); // sin internet: sigue con lo que haya local
 }
+
+// ════════════════════════════════════════
+// AGREGADO 02-10-2026 — CLIENTES CON PROBLEMAS ANTES + BUSCADOR DE CLIENTES
+// Usa el historial permanente (DetalleHistorico, todos los meses). Columnas:
+// 0 fecha, 1 codigo, 2 folio, 3 nombre, 4 dir, 5 comuna, 6 tipo, 7 estado, 8 motivo,
+// 9 b2b, 10 esRetiro, 11 intercambio, 12 tel, 13 bulto ... 19 repartidor (las de la 12
+// en adelante solo existen desde el 02-10-2026; antes el historial no guardaba teléfono).
+// ════════════════════════════════════════
+var historialFilasRemotas = [];
+function soloDigitos9(t){ var d = String(t||'').replace(/\D/g,''); return d.length > 9 ? d.slice(-9) : d; }
+function fechaOrdenable(f){ var m = /^(\d{1,2})-(\d{1,2})-(\d{4})/.exec(String(f||'')); return m ? (m[3]+('0'+m[2]).slice(-2)+('0'+m[1]).slice(-2)) : String(f||''); }
+function textoEstado(e){ return e==='entregado'?'Entregado':e==='retorno'?'Retorno':e==='devuelto'?'Devuelta a Alas':e==='daniado'?'Dañado':e==='pendiente'?'Pendiente':(e||'—'); }
+
+// ¿Este cliente (mismo nombre o mismo teléfono) tuvo pedidos NO entregados antes, con
+// OTRO folio? Sirve sobre todo para WOM, que reenvía al mismo cliente con folio nuevo.
+function problemasCliente(p){
+  if(!p || !historialFilasRemotas.length) return null;
+  var nom = normTexto(p.nombre), tel = soloDigitos9(p.tel), folio = String(p.folio||'').trim();
+  if(nom.length < 8 && tel.length < 8) return null;
+  var malos = historialFilasRemotas.filter(function(f){
+    if(!f || String(f[2]||'').trim() === folio) return false;
+    var mismoNombre = nom.length >= 8 && normTexto(f[3]) === nom;
+    var mismoTel = tel.length >= 8 && soloDigitos9(f[12]) === tel;
+    if(!mismoNombre && !mismoTel) return false;
+    var e = String(f[7]||'').trim();
+    return e==='retorno' || e==='devuelto' || e==='daniado';
+  });
+  if(!malos.length) return null;
+  malos.sort(function(a,b){ return fechaOrdenable(a[0]) < fechaOrdenable(b[0]) ? -1 : 1; });
+  var ult = malos[malos.length-1];
+  return {
+    n: malos.length,
+    rechazo: malos.some(function(f){ return /rechaz/i.test(String(f[8]||'')); }),
+    ultimaFecha: String(ult[0]||''),
+    ultimoMotivo: String(ult[8]||'')
+  };
+}
+function textoProblemasCliente(pr){
+  if(!pr) return '';
+  return (pr.rechazo ? '🚩 YA RECHAZÓ antes' : '🚩 Antes quedó '+pr.n+' vez/veces sin entregar')
+    + ' — último: '+pr.ultimaFecha+(pr.ultimoMotivo ? ' ('+pr.ultimoMotivo+')' : '');
+}
+
+// Buscador: por nombre, teléfono, folio o dirección. Mira el historial completo + lo
+// que está cargado hoy en este equipo.
+function buscarCliente(){
+  var input = document.getElementById('buscar-cliente-input');
+  var out = document.getElementById('buscar-cliente-resultado');
+  var q = (input && input.value || '').trim();
+  if(!out) return;
+  if(q.length < 3){ out.innerHTML = '<div style="color:#64748b;">Escribe al menos 3 letras o números.</div>'; return; }
+  out.innerHTML = '🔄 Buscando en el historial...';
+  fetch(SHEETS_URL + '?tipo=detalle_historico').then(function(r){ return r.json(); }).then(function(rows){
+    if(!Array.isArray(rows)){ out.innerHTML = '<div style="color:var(--rojo);">⚠️ Este usuario no tiene acceso al historial.</div>'; return; }
+    historialFilasRemotas = rows.slice(1);
+    var qd = String(q).replace(/\D/g,'');
+    var esNumero = qd.length >= 6 && qd.length >= q.replace(/\s/g,'').length - 1;
+    var palabras = normTexto(q).split(' ').filter(Boolean);
+    function calza(nombre, tel, folio, codigo, dir){
+      if(esNumero){
+        return soloDigitos9(tel).indexOf(qd.slice(-9)) !== -1 || String(folio||'').indexOf(qd) !== -1 || String(codigo||'').indexOf(qd) !== -1 || normTexto(dir).indexOf(qd) !== -1;
+      }
+      var texto = normTexto(nombre+' '+folio+' '+codigo+' '+dir);
+      return palabras.every(function(w){ return texto.indexOf(w) !== -1; });
+    }
+    var res = [];
+    paquetes.forEach(function(p){
+      if(calza(p.nombre, p.tel, p.folio, p.codigo, p.dir)) res.push({hoy:true, fecha:'HOY', nombre:p.nombre, folio:p.folio||p.codigo, dir:p.dir, estado:p.estado, motivo:p.motivo||'', tel:p.tel||'', b2b:p.b2b||''});
+    });
+    historialFilasRemotas.forEach(function(f){
+      if(!f) return;
+      if(calza(f[3], f[12], f[2], f[1], f[4])) res.push({fecha:String(f[0]||''), nombre:f[3]||'', folio:f[2]||f[1]||'', dir:f[4]||'', estado:String(f[7]||''), motivo:f[8]||'', tel:f[12]||'', b2b:f[9]||'', repartidor:f[19]||''});
+    });
+    if(!res.length){ out.innerHTML = '<div style="color:#64748b;">❌ No aparece en el historial ni en las órdenes de hoy. Es cliente nuevo.</div>'; return; }
+    res.sort(function(a,b){ if(a.hoy) return -1; if(b.hoy) return 1; return fechaOrdenable(a.fecha) < fechaOrdenable(b.fecha) ? 1 : -1; });
+    var malos = res.filter(function(r){ return r.estado==='retorno'||r.estado==='devuelto'||r.estado==='daniado'; }).length;
+    var html = '<div style="font-weight:700;margin-bottom:6px;">'+res.length+' resultado(s)'+(malos?' — <span style="color:var(--rojo);">'+malos+' sin entregar</span>':'')+'</div>';
+    res.slice(0,60).forEach(function(r){
+      var color = r.estado==='entregado'?'var(--verde)':(r.estado==='pendiente'?'#64748b':'var(--rojo)');
+      html += '<div style="border:1px solid var(--borde);border-radius:8px;padding:7px 9px;margin-bottom:5px;font-size:0.76rem;">'
+        + '<div style="display:flex;justify-content:space-between;gap:6px;"><strong>'+r.nombre+'</strong><span style="color:'+color+';font-weight:700;white-space:nowrap;">'+textoEstado(r.estado)+'</span></div>'
+        + '<div style="color:#475569;">📅 '+r.fecha+' · 📋 '+r.folio+(r.b2b?' · 🏪 '+r.b2b:'')+'</div>'
+        + '<div style="color:#475569;">📍 '+r.dir+'</div>'
+        + (r.tel?'<div style="color:#475569;">📞 '+r.tel+'</div>':'')
+        + (r.motivo?'<div style="color:var(--rojo);">Motivo: '+r.motivo+'</div>':'')
+        + (r.repartidor?'<div style="color:#475569;">🚚 '+r.repartidor+'</div>':'')
+        + '</div>';
+    });
+    if(res.length > 60) html += '<div style="color:#64748b;">… y '+(res.length-60)+' más. Escribe algo más específico.</div>';
+    out.innerHTML = html;
+  }).catch(function(){ out.innerHTML = '<div style="color:var(--rojo);">❌ No se pudo conectar con la nube.</div>'; });
+}
+// Carga inicial + cada 10 minutos, para que las tarjetas muestren el aviso 🚩.
+setTimeout(function(){ actualizarHistorialRemotoIntentos(function(){ if(typeof renderPaquetes==='function') renderPaquetes(); }); }, 3000);
+setInterval(function(){ actualizarHistorialRemotoIntentos(); }, 600000);
 
 function calcularIntentos(codigo){
   var registros = [];
@@ -1038,6 +1218,22 @@ function actualizarIndicadorSync(){
   }
 }
 
+// AGREGADO 02-10-2026 — ayudas de sincronización.
+// Códigos distintos de un grupo (multibulto con códigos por bulto distintos).
+function codigosUnicos(lista){
+  var vistos = {}, out = [];
+  (lista||[]).forEach(function(x){ var c = x && x.codigo; if(c && !vistos[c]){ vistos[c]=true; out.push(c); } });
+  return out;
+}
+// ¿Este celular tiene un cambio de ESTADO de este código esperando subir a la nube?
+// Si lo tiene, lo que diga la nube todavía es viejo y NO debe pisar lo local
+// (antes una entrega recién marcada podía volver a "pendiente" por esto).
+function cambioEstadoEnCola(codigo){
+  return SYNC_PENDIENTE.some(function(it){
+    return it && it.tipo==='cambio_estado' && it.contenido && String(it.contenido.codigo)===String(codigo) && !it.contenido.soloDatos;
+  });
+}
+
 // Envía un registro a Sheets; si falla, lo deja en cola para reintentar
 function enviarASheets(tipo, contenido){
   var registro = {tipo:tipo, contenido:contenido, intentos:0};
@@ -1161,10 +1357,11 @@ function descargarOrdenesDesdeSheets(onFin){
         // si el estado en Sheets es más nuevo, y si es así, actualizamos TODOS los paquetes
         // locales con este código (multibulto: siempre se marcan juntos).
         var estadoNube = String(row[11]||'').trim();
-        var tsNube = row[12] || 0;
+        var tsNube = Number(row[12]) || 0;
+        var hayCambioLocalEnCola = cambioEstadoEnCola(codigo);
         paquetes.forEach(function(existente){
           if(existente.codigo === codigo){
-            if(estadoNube && estadoNube !== existente.estado && tsNube > (existente.ts_estado || existente.ts || 0)){
+            if(estadoNube && estadoNube !== existente.estado && !hayCambioLocalEnCola && tsNube > (existente.ts_estado || existente.ts || 0)){
               existente.estado = estadoNube;
               existente.ts_estado = tsNube;
               actualizadas++;
@@ -1745,6 +1942,254 @@ function cambiarPerfil(){
   }
   localStorage.setItem('muspel_perfil', perfilActual);
   aplicarPerfil();
+  renderPaquetes();
+  actualizarResumen();
+}
+
+// ════════════════════════════════════════
+// REPARTIDORES: rutas diferenciadas por persona (AGREGADO 24-09-2026, para el Cyber
+// oct-2026, cuando el primo de Cristian apoya con una segunda ruta).
+// - Kathy (modo Comercial) ve TODO y asigna cada orden (o comuna completa) a un repartidor.
+// - Cada celular en modo Operativo se identifica como UN repartidor y ve solo lo suyo.
+// - Cristian es "jefe": ve lo suyo + lo que no tiene dueño, y puede tocar "Ver todas".
+// - El apoyo ve SOLO lo que se le asignó (si Kathy no le asigna nada, no ve nada).
+// Las asignaciones viajan a Sheets (hoja "Asignaciones", vía Apps Script) para que se
+// vean en todos los celulares. Para cambiar nombres o agregar alguien, edita esta lista.
+// ════════════════════════════════════════
+var REPARTIDORES = [
+  {id:'cristian', nombre:'OP. Principal', jefe:true},   // Cristian
+  {id:'op2',      nombre:'Operativo 2 (Luchín)', jefe:false}   // Luis "Luchín", primo de Cristian (Cyber)
+];
+// Link para el celular del primo: agregar ?op=2 al final (ej. .../muspel-ops/?op=2).
+// La primera vez que lo abre, el celular queda como "Operativo 2" automáticamente.
+(function(){
+  try{
+    var m = /[?&]op=([^&]+)/.exec(location.search);
+    if(m && m[1]==='2') localStorage.setItem('muspel_usuario','op2');
+  }catch(e){}
+})();
+var usuarioActual = localStorage.getItem('muspel_usuario') || 'cristian';
+if(!REPARTIDORES.some(function(r){ return r.id===usuarioActual; })) usuarioActual = 'cristian';
+var verTodasOperativo = false;       // solo aplica si el usuario es jefe
+var filtroRepartidorComercial = 'todos'; // 'todos' | id repartidor | 'sin'
+var asignaciones = {};               // codigo -> {r: idRepartidor ('' = sin asignar), ts}
+
+function cargarAsignaciones(){
+  try{ asignaciones = JSON.parse(localStorage.getItem('muspel_asignaciones')||'{}') || {}; }catch(e){ asignaciones = {}; }
+}
+function guardarAsignaciones(){
+  localStorage.setItem('muspel_asignaciones', JSON.stringify(asignaciones));
+}
+cargarAsignaciones();
+
+function getRepartidorInfo(id){ return REPARTIDORES.find(function(r){ return r.id===id; }) || null; }
+function nombreRepartidor(id){ var r = getRepartidorInfo(id); return r ? r.nombre : 'Sin asignar'; }
+function getRepartidor(p){ var a = p && asignaciones[p.codigo]; return (a && a.r) ? a.r : ''; }
+function usuarioEsJefe(){ var r = getRepartidorInfo(usuarioActual); return !!(r && r.jefe); }
+
+// Lista de paquetes que ESTE equipo debe ver ahora, según perfil y repartidor.
+// OJO: esto es solo para MOSTRAR. El arreglo "paquetes" completo sigue intacto (el
+// cierre del día, el Excel y los totales de Comercial siempre usan TODO).
+function paquetesVisibles(){
+  if(perfilActual==='comercial'){
+    if(filtroRepartidorComercial==='todos') return paquetes;
+    if(filtroRepartidorComercial==='sin') return paquetes.filter(function(p){ return !getRepartidor(p); });
+    return paquetes.filter(function(p){ return getRepartidor(p)===filtroRepartidorComercial; });
+  }
+  if(usuarioEsJefe()){
+    if(verTodasOperativo) return paquetes;
+    return paquetes.filter(function(p){ var r = getRepartidor(p); return !r || r===usuarioActual; });
+  }
+  return paquetes.filter(function(p){ return getRepartidor(p)===usuarioActual; });
+}
+function esPaqueteDeOtro(p){
+  if(perfilActual==='comercial') return false;
+  var r = getRepartidor(p);
+  return !!r && r!==usuarioActual;
+}
+
+// Asigna varios códigos de una vez y lo manda a Sheets en UN solo envío.
+function asignarCodigos(codigos, idRep){
+  var ts = Date.now();
+  var lista = [];
+  codigos.forEach(function(c){
+    if(!c) return;
+    asignaciones[c] = {r:idRep||'', ts:ts};
+    lista.push({codigo:c, repartidor:idRep||'', ts:ts});
+  });
+  if(!lista.length) return;
+  guardarAsignaciones();
+  enviarASheets('asignar_repartidor', {asignaciones:lista});
+  renderPaquetes();
+  actualizarResumen();
+}
+
+// Trae las asignaciones desde Sheets. Gana siempre la más reciente (por ts), así un
+// cambio local que aún no sube no se pisa con uno viejo de la nube.
+function descargarAsignaciones(){
+  fetch(SHEETS_URL + '?tipo=asignaciones').then(function(r){ return r.json(); }).then(function(resp){
+    if(!resp || resp.status!=='ok' || !Array.isArray(resp.asignaciones)) return; // Apps Script aún sin actualizar
+    var cambio = false;
+    resp.asignaciones.forEach(function(a){
+      if(!a || !a.codigo) return;
+      var ts = Number(a.ts)||0;
+      var local = asignaciones[a.codigo];
+      if(!local || ts > (local.ts||0)){
+        var nuevo = String(a.repartidor||'');
+        if(!local || local.r!==nuevo) cambio = true;
+        asignaciones[a.codigo] = {r:nuevo, ts:ts};
+      }
+    });
+    if(cambio){ guardarAsignaciones(); renderPaquetes(); actualizarResumen(); }
+  }).catch(function(){ /* sin internet: reintenta en el próximo ciclo */ });
+}
+setInterval(descargarAsignaciones, 10000);
+setTimeout(descargarAsignaciones, 1500);
+
+// Elegir quién usa este celular (pide la misma clave de Comercial, para que el
+// apoyo no pueda cambiarse a otro usuario por su cuenta).
+function elegirUsuario(){
+  var viejo = document.getElementById('overlay-usuario');
+  if(viejo) viejo.remove();
+  var ov = document.createElement('div');
+  ov.id = 'overlay-usuario';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  var html = '<div style="background:#fff;border-radius:14px;padding:18px;max-width:340px;width:100%;">'
+    + '<div style="font-weight:800;font-size:1rem;margin-bottom:4px;">🚚 ¿Quién usa este celular?</div>'
+    + '<div style="font-size:0.75rem;color:#64748b;margin-bottom:12px;">Cada repartidor ve solo las órdenes que tiene asignadas.</div>';
+  REPARTIDORES.forEach(function(r){
+    html += '<button class="btn '+(r.id===usuarioActual?'btn-verde':'btn-outline')+'" style="margin-bottom:6px;" onclick="confirmarUsuario(\''+r.id+'\')">'+(r.id===usuarioActual?'✅ ':'')+r.nombre+(r.rol?' — '+r.rol:'')+'</button>';
+  });
+  html += '<button class="btn btn-outline" style="margin-top:4px;" onclick="document.getElementById(\'overlay-usuario\').remove()">Cancelar</button></div>';
+  ov.innerHTML = html;
+  document.body.appendChild(ov);
+}
+// Desplegable del encabezado. Pasar a "Operativo 2" es libre; volver a OP. Principal
+// (que ve todas las órdenes) pide la clave, para que el Operativo 2 no vea lo de Cristian.
+function cambiarUsuarioSelect(id){
+  var info = getRepartidorInfo(id);
+  if(id!==usuarioActual && info && info.jefe){
+    var pin = prompt('Clave para entrar como '+info.nombre+':');
+    if(pin===null || pin.trim()!==PIN_COMERCIAL){
+      if(pin!==null) alert('Clave incorrecta.');
+      aplicarUsuario(); // devuelve el desplegable a como estaba
+      return;
+    }
+  }
+  usuarioActual = id;
+  verTodasOperativo = false;
+  localStorage.setItem('muspel_usuario', usuarioActual);
+  aplicarUsuario();
+  renderPaquetes();
+  actualizarResumen();
+}
+function confirmarUsuario(id){
+  if(id!==usuarioActual){
+    var pin = prompt('Clave para cambiar de repartidor:');
+    if(pin===null) return;
+    if(pin.trim()!==PIN_COMERCIAL){ alert('Clave incorrecta.'); return; }
+  }
+  usuarioActual = id;
+  verTodasOperativo = false;
+  localStorage.setItem('muspel_usuario', usuarioActual);
+  var ov = document.getElementById('overlay-usuario');
+  if(ov) ov.remove();
+  aplicarUsuario();
+  renderPaquetes();
+  actualizarResumen();
+}
+function aplicarUsuario(){
+  var chip = document.getElementById('usuario-btn');
+  if(chip){
+    chip.innerHTML = REPARTIDORES.map(function(r){ return '<option value="'+r.id+'"'+(r.id===usuarioActual?' selected':'')+'>🚚 '+r.nombre+'</option>'; }).join('');
+    chip.value = usuarioActual;
+  }
+  var btnVer = document.getElementById('btn-ver-todas');
+  if(btnVer){
+    btnVer.style.display = usuarioEsJefe() ? '' : 'none';
+    btnVer.textContent = verTodasOperativo ? '👤 Ver solo mis rutas' : '👀 Ver todas las órdenes';
+  }
+}
+function toggleVerTodas(){
+  verTodasOperativo = !verTodasOperativo;
+  aplicarUsuario();
+  renderPaquetes();
+  actualizarResumen();
+}
+function filtrarPorRepartidor(f){
+  filtroRepartidorComercial = f;
+  renderPaquetes();
+}
+
+// Panel de asignación (solo Comercial), arriba de la lista de Órdenes.
+function renderPanelAsignacion(){
+  var cont = document.getElementById('panel-asignacion');
+  if(!cont) return;
+  if(perfilActual!=='comercial' || paquetes.length===0){ cont.innerHTML=''; return; }
+  function contar(fn){ return contarOrdenes(paquetes.filter(fn)).total; }
+  var chips = [{id:'todos', txt:'Todos', n:contarOrdenes(paquetes).total}];
+  REPARTIDORES.forEach(function(r){ chips.push({id:r.id, txt:r.nombre, n:contar(function(p){ return getRepartidor(p)===r.id; })}); });
+  chips.push({id:'sin', txt:'Sin asignar', n:contar(function(p){ return !getRepartidor(p); })});
+  var html = '<div class="card" style="padding:12px 14px;">';
+  html += '<div class="card-title">🚚 Rutas por repartidor</div>';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">';
+  chips.forEach(function(c){
+    var activo = filtroRepartidorComercial===c.id;
+    html += '<button class="filtro-btn'+(activo?' active':'')+'" style="width:auto;" onclick="filtrarPorRepartidor(\''+c.id+'\')">'+c.txt+' ('+c.n+')</button>';
+  });
+  html += '</div>';
+  // Asignación rápida por comuna
+  var porComuna = {}; var orden = [];
+  paquetes.forEach(function(p){
+    var c = (p.comuna||'Sin comuna').trim() || 'Sin comuna';
+    if(!porComuna[c]){ porComuna[c]=[]; orden.push(c); }
+    porComuna[c].push(p);
+  });
+  var diaSemana = new Date().getDay();
+  orden.sort(function(a,b){ return getPrioridadComuna(a,diaSemana)-getPrioridadComuna(b,diaSemana); });
+  html += '<div style="font-size:0.72rem;color:#64748b;margin-bottom:6px;">Asignar comuna completa (después puedes cambiar una orden suelta tocándola):</div>';
+  orden.forEach(function(c, i){
+    var items = porComuna[c];
+    var reps = {}; items.forEach(function(p){ reps[getRepartidor(p)] = true; });
+    var keys = Object.keys(reps);
+    var actual = keys.length===1 ? keys[0] : '__mixto';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 0;border-top:1px solid var(--borde);">';
+    html += '<span style="font-size:0.8rem;font-weight:600;">'+c+' <span style="color:#94a3b8;font-weight:400;">('+contarOrdenes(items).total+')</span></span>';
+    html += '<select class="form-select" style="width:auto;min-width:130px;padding:4px 8px;font-size:0.78rem;" onchange="asignarComuna('+i+', this.value)">';
+    if(actual==='__mixto') html += '<option value="__mixto" selected>Mixto</option>';
+    html += '<option value=""'+(actual===''?' selected':'')+'>Sin asignar</option>';
+    REPARTIDORES.forEach(function(r){ html += '<option value="'+r.id+'"'+(actual===r.id?' selected':'')+'>'+r.nombre+'</option>'; });
+    html += '</select></div>';
+  });
+  html += '</div>';
+  cont.innerHTML = html;
+  _comunasPanelAsignacion = orden.map(function(c){ return porComuna[c].map(function(p){ return p.codigo; }); });
+}
+var _comunasPanelAsignacion = [];
+function asignarComuna(i, idRep){
+  if(idRep==='__mixto') return;
+  var codigos = _comunasPanelAsignacion[i] || [];
+  asignarCodigos(codigos, idRep);
+}
+// Desde el detalle de una orden: asigna la orden y todo su multibulto.
+function asignarDesdeModal(idRep){
+  var p = paquetes.find(function(x){ return x.id===modalOrdenId; });
+  if(!p) return;
+  var grupo = calcularGrupoMultibulto(p);
+  asignarCodigos(grupo.map(function(x){ return x.codigo; }), idRep);
+}
+// Resumen por repartidor (se usa en el mensaje de cierre por WhatsApp).
+function lineasPorRepartidor(){
+  var hayAsignadas = paquetes.some(function(p){ return !!getRepartidor(p); });
+  if(!hayAsignadas) return '';
+  var txt = '\n\n*Por repartidor:*';
+  REPARTIDORES.concat([{id:'', nombre:'Sin asignar'}]).forEach(function(r){
+    var suyos = paquetes.filter(function(p){ return getRepartidor(p)===r.id; });
+    if(!suyos.length) return;
+    var s = contarOrdenesPorEstado(suyos);
+    txt += '\n🚚 '+r.nombre+': '+s.entregadas+'/'+s.total+' entregadas';
+  });
+  return txt;
 }
 var qrScanner = null;
 var qrActivo = false;
@@ -1983,7 +2428,7 @@ function abrirResumenDetalle(filtro){
     'ramal':'🛣 Ruta Ramal'
   };
 
-  var lista = paquetes.filter(function(p){
+  var lista = (perfilActual==='comercial' ? paquetes : paquetesVisibles()).filter(function(p){
     if(filtro === 'todos') return true;
     if(filtro === 'principal') return (p.tipo||'').toLowerCase() === 'principal';
     if(filtro === 'ramal') return (p.tipo||'').toLowerCase() === 'ramal';
@@ -2145,6 +2590,13 @@ function abrirModal(id){
     numRutaRow.style.display = 'none';
   }
   document.getElementById('modal-empresa').textContent = p.b2b || '(no especificada)';
+  var selRep = document.getElementById('modal-repartidor');
+  if(selRep){
+    var repActual = getRepartidor(p);
+    selRep.innerHTML = '<option value=""'+(repActual?'':' selected')+'>Sin asignar</option>' + REPARTIDORES.map(function(r){
+      return '<option value="'+r.id+'"'+(repActual===r.id?' selected':'')+'>'+r.nombre+'</option>';
+    }).join('');
+  }
   document.getElementById('modal-folio').textContent = p.folio || '—';
 
   // Cuántos paquetes en total tiene esta misma orden (multibulto)
@@ -2153,7 +2605,7 @@ function abrirModal(id){
   var grupo = [];
   var porFolioBase = false;
   if(p.folio && p.folio.trim()){
-    grupo = paquetes.filter(function(x){ return getFolioBase(x.folio) === getFolioBase(p.folio); });
+    grupo = paquetes.filter(function(x){ return claveGrupoOrden(x) === claveGrupoOrden(p); });
     if(grupo.length > 1) porFolioBase = true;
   }
   // Respaldo: si por folio no se detectó multibulto, cruzar también por misma dirección + mismo teléfono
@@ -2281,7 +2733,12 @@ function guardarObservacionOrden(){
   var grupo = calcularGrupoMultibulto(p);
   grupo.forEach(function(item){ item.observacion = texto; });
   guardarStorage();
-  enviarASheets('cambio_estado', {codigo:p.codigo, nombre:p.nombre, estado:p.estado, motivo:p.motivo||'', observacion:texto, fecha:new Date().toLocaleString('es-CL')});
+  // CORREGIDO 02-10-2026: "soloDatos" = no tocar el estado en la nube (antes devolvía a
+  // "pendiente" una orden que otro celular ya había entregado). Se manda por cada código
+  // del grupo para que el multibulto quede igual en todos los bultos.
+  codigosUnicos(grupo.length?grupo:[p]).forEach(function(cod){
+    enviarASheets('cambio_estado', {codigo:cod, nombre:p.nombre, estado:p.estado, motivo:p.motivo||'', observacion:texto, soloDatos:true, fecha:new Date().toLocaleString('es-CL')});
+  });
   abrirModal(modalOrdenId);
   renderPaquetes();
 }
@@ -2295,7 +2752,9 @@ function toggleFlagOrden(campo){
   var grupo = calcularGrupoMultibulto(p);
   grupo.forEach(function(item){ item[campo] = p[campo]; });
   guardarStorage();
-  enviarASheets('cambio_estado', {codigo:p.codigo, nombre:p.nombre, estado:p.estado, motivo:p.motivo||'', esRetiro:p.esRetiro?'si':'no', intercambio:p.intercambio?'si':'no', fecha:new Date().toLocaleString('es-CL')});
+  codigosUnicos(grupo.length?grupo:[p]).forEach(function(cod){
+    enviarASheets('cambio_estado', {codigo:cod, nombre:p.nombre, estado:p.estado, motivo:p.motivo||'', esRetiro:p.esRetiro?'si':'no', intercambio:p.intercambio?'si':'no', soloDatos:true, fecha:new Date().toLocaleString('es-CL')});
+  });
   abrirModal(modalOrdenId);
   renderPaquetes();
   actualizarResumen();
@@ -2313,7 +2772,7 @@ function cerrarModal(e){
 function calcularGrupoMultibulto(p){
   var grupo = [];
   if(p.folio && p.folio.trim()){
-    grupo = paquetes.filter(function(x){ return getFolioBase(x.folio) === getFolioBase(p.folio); });
+    grupo = paquetes.filter(function(x){ return claveGrupoOrden(x) === claveGrupoOrden(p); });
   }
   return grupo.length > 1 ? grupo : [p];
 }
@@ -2455,12 +2914,14 @@ function actualizarHeader(){
   var dias = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
   var meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   document.getElementById('header-fecha').textContent = dias[d.getDay()] + ' ' + d.getDate() + ' de ' + meses[d.getMonth()] + ' ' + d.getFullYear();
-  var total = paquetes.length;
-  var ent = paquetes.filter(function(p){return p.estado==='entregado';}).length;
+  var visHeader = perfilActual==='comercial' ? paquetes : paquetesVisibles();
+  var total = visHeader.length;
+  var ent = visHeader.filter(function(p){return p.estado==='entregado';}).length;
   document.getElementById('header-paquetes').textContent = total + ' paquetes';
   // alerta dia
   var ai = document.getElementById('alerta-dia');
-  if(total === 0) ai.textContent = perfilActual==='comercial' ? 'Sin órdenes cargadas. Ve a Importar para cargar el Excel de Alas.' : 'Aún no hay órdenes cargadas todavía. Se sincronizan solas apenas Comercial las suba.';
+  if(total === 0 && paquetes.length > 0 && perfilActual!=='comercial') ai.textContent = 'Aún no tienes órdenes asignadas. Aparecen solas apenas Kathy te las asigne.';
+  else if(total === 0) ai.textContent = perfilActual==='comercial' ? 'Sin órdenes cargadas. Ve a Importar para cargar el Excel de Alas.' : 'Aún no hay órdenes cargadas todavía. Se sincronizan solas apenas Comercial las suba.';
   else ai.textContent = 'Operación en curso — ' + ent + ' de ' + total + ' órdenes entregadas.';
   actualizarIndicadorSync();
   if(typeof ajustarPosicionTabs === 'function') setTimeout(ajustarPosicionTabs, 0);
@@ -2550,14 +3011,16 @@ function actualizarResumen(){
 
   // Vista simple para Cristian: los mismos 4 conceptos, pero en ÓRDENES (no paquetes) y
   // sin ningún dato de efectividad.
+  // AGREGADO 24-09-2026: en Operativo cuenta solo las órdenes del repartidor de este celular.
+  var ordStatsPorEstadoOp = contarOrdenesPorEstado(perfilActual==='comercial' ? paquetes : paquetesVisibles());
   var elSoRec = document.getElementById('so-recibidas');
-  if(elSoRec) elSoRec.textContent = ordStatsPorEstado.total;
+  if(elSoRec) elSoRec.textContent = ordStatsPorEstadoOp.total;
   var elSoEnt = document.getElementById('so-entregadas');
-  if(elSoEnt) elSoEnt.textContent = ordStatsPorEstado.entregadas;
+  if(elSoEnt) elSoEnt.textContent = ordStatsPorEstadoOp.entregadas;
   var elSoPend = document.getElementById('so-pendientes');
-  if(elSoPend) elSoPend.textContent = ordStatsPorEstado.pendientes;
+  if(elSoPend) elSoPend.textContent = ordStatsPorEstadoOp.pendientes;
   var elSoDev = document.getElementById('so-devueltas');
-  if(elSoDev) elSoDev.textContent = ordStatsPorEstado.devueltas + ordStatsPorEstado.retornos;
+  if(elSoDev) elSoDev.textContent = ordStatsPorEstadoOp.devueltas + ordStatsPorEstadoOp.retornos;
 
   actualizarHeader();
 }
@@ -2623,6 +3086,10 @@ function importarExcel(input){
         if(h==='BULTO DE ENTREGA') idx.bulto=i;
         if(h==='N'||h==='N°'||h==='NRO'||h==='NUMERO'||h==='NÚMERO') idx.numRuta=i;
         if(h==='INTERCAMBIO') idx.intercambio=i;
+        // AGREGADO 02-10-2026: FAMILIA ("Recibido Virtual" = retiro de producto) y una
+        // columna de observación donde Kathy anota "intercambio" o "retiro de producto".
+        if(h==='FAMILIA') idx.familia=i;
+        if(h==='OBS'||h==='OBSERVACION'||h==='OBSERVACIONES') idx.obs=i;
       }
       // "BASE" (J05/J06) trae el tipo POR FILA — cuando está, se usa directo y no hace
       // falta preguntar nada (antes solo se leía "TIPO DESTINO" o se preguntaba UNA vez
@@ -2668,7 +3135,18 @@ function importarExcel(input){
       var paquetesPorCodigo = {};
       paquetes.forEach(function(p){ paquetesPorCodigo[p.codigo] = p; });
 
-      var nuevos=0, dup=0, ocultasSalteadas=0, alertas=[], actualizadosNumRuta=0;
+      var nuevos=0, dup=0, ocultasSalteadas=0, alertas=[], actualizadosNumRuta=0, cuentaRetiros=0, cuentaIntercambios=0;
+      // AGREGADO 02-10-2026 — detecta retiro de producto e intercambio por fila.
+      // Retiro: FAMILIA dice "virtual" / "retiro" / "devolución", o la observación dice "retiro".
+      // Intercambio: columna INTERCAMBIO marcada, o la observación dice "intercambio".
+      function tipoEspecialFila(row){
+        var fam = (idx.familia!==undefined ? normTexto(row[idx.familia]) : '') + ' ' + (idx.estado!==undefined && /VIRTUAL/.test(normTexto(row[idx.estado])) ? 'VIRTUAL' : '');
+        var obsTxt = idx.obs!==undefined ? String(row[idx.obs]||'').trim() : '';
+        var obsN = normTexto(obsTxt);
+        var inter = (idx.intercambio!==undefined && /^(si|sí|1|true|x)$/i.test(String(row[idx.intercambio]||'').trim())) || obsN.indexOf('INTERCAMBIO')!==-1;
+        var retiro = /VIRTUAL|RETIRO|DEVOLUC/.test(fam) || (!inter && /RETIR|DEVOLUC/.test(obsN));
+        return {esRetiro:retiro, intercambio:inter, obs:obsTxt};
+      }
       for(var r=headerRowIdx+1;r<data.length;r++){
         if(filasOcultas[r]){ ocultasSalteadas++; continue; }
         var row=data[r];
@@ -2678,17 +3156,26 @@ function importarExcel(input){
         // revisa duplicado real (de una importación anterior), no dentro de este mismo archivo
         if(paquetesPorCodigo[codigo]){
           dup++;
+          // Si al reimportar viene marcado como retiro/intercambio u observación nueva, se actualiza.
+          var espDup = tipoEspecialFila(row), prevDup = paquetesPorCodigo[codigo], cambioDup = false;
+          if(espDup.esRetiro && !prevDup.esRetiro){ prevDup.esRetiro = true; cambioDup = true; }
+          if(espDup.intercambio && !prevDup.intercambio){ prevDup.intercambio = true; cambioDup = true; }
+          if(espDup.obs && espDup.obs !== (prevDup.observacion||'')){ prevDup.observacion = espDup.obs; cambioDup = true; }
+          if(cambioDup){
+            paquetes.forEach(function(x){ if(x.codigo===codigo){ x.esRetiro = prevDup.esRetiro; x.intercambio = prevDup.intercambio; x.observacion = prevDup.observacion; } });
+            enviarASheets('cambio_estado', {codigo:codigo, nombre:prevDup.nombre, estado:prevDup.estado, esRetiro:prevDup.esRetiro?'si':'no', intercambio:prevDup.intercambio?'si':'no', observacion:prevDup.observacion||'', soloDatos:true, fecha:new Date().toLocaleString('es-CL')});
+          }
           // Si este archivo trae número de parada (columna "N°", el que asigna Spoke) y el
           // pedido ya existía SIN ese número o con uno distinto, lo actualiza en vez de
           // solo descartarlo — pasa cuando Kathy importa primero el Excel de Alas y más
           // tarde reimporta el mismo archivo ya con los números de ruta agregados por Spoke.
-          if(idx.numRuta!==undefined && row[idx.numRuta]!==undefined && String(row[idx.numRuta]).trim()!==''){
+          if(idx.numRuta!==undefined && row[idx.numRuta]!=null && String(row[idx.numRuta]).trim()!==''){
             var nuevoNum = Number(row[idx.numRuta]);
             var existentePrevio = paquetesPorCodigo[codigo];
             if(!isNaN(nuevoNum) && existentePrevio.numRuta !== nuevoNum){
               existentePrevio.numRuta = nuevoNum;
               actualizadosNumRuta++;
-              enviarASheets('cambio_estado', {codigo:existentePrevio.codigo, nombre:existentePrevio.nombre, estado:existentePrevio.estado, numRuta:nuevoNum, fecha:new Date().toLocaleString('es-CL')});
+              enviarASheets('cambio_estado', {codigo:existentePrevio.codigo, nombre:existentePrevio.nombre, estado:existentePrevio.estado, numRuta:nuevoNum, soloDatos:true, fecha:new Date().toLocaleString('es-CL')});
             }
           }
           continue;
@@ -2727,14 +3214,17 @@ function importarExcel(input){
           intentosAgotados: intentoActual>3,
           // Nº de orden de ruta (de Circuit/Spoke, ingresado a mano en el Excel por Kathy)
           // — cuando viene, se usa para ordenar la ruta directo, sin pasar por el optimizador ORS.
-          numRuta: (idx.numRuta!==undefined && row[idx.numRuta]!==undefined && String(row[idx.numRuta]).trim()!=='') ? Number(row[idx.numRuta]) : null,
+          numRuta: (idx.numRuta!==undefined && row[idx.numRuta]!=null && String(row[idx.numRuta]).trim()!=='') ? Number(row[idx.numRuta]) : null,
           // Intercambio: se detecta si el Excel trae columna "INTERCAMBIO" marcada, si no,
           // queda en false y se puede activar a mano desde el detalle de la orden.
-          intercambio: idx.intercambio!==undefined ? /^(si|sí|1|true|x)$/i.test(String(row[idx.intercambio]||'').trim()) : false,
-          // Retiro (B2B): ALAS aún no manda esta columna — siempre parte en false y se marca
-          // a mano cuando corresponda (retiro que ALAS etiqueta como "devolución" en su sistema).
-          esRetiro: false
+          intercambio: tipoEspecialFila(row).intercambio,
+          // Retiro de producto: FAMILIA "Recibido Virtual" o la observación lo indica (02-10-2026).
+          // Igual se puede marcar/desmarcar a mano desde el detalle de la orden.
+          esRetiro: tipoEspecialFila(row).esRetiro,
+          observacion: tipoEspecialFila(row).obs
         };
+        if(nuevoPaquete.esRetiro) cuentaRetiros++;
+        if(nuevoPaquete.intercambio) cuentaIntercambios++;
         paquetes.push(nuevoPaquete);
         nuevos++;
       }
@@ -2746,12 +3236,18 @@ function importarExcel(input){
       if(actualizadosNumRuta>0){
         status.innerHTML += '<br><span style="color:var(--azul);font-weight:600;">🔢 '+actualizadosNumRuta+' pedido(s) ya existentes actualizaron su número de parada.</span>';
       }
+      var avisoEspeciales = (cuentaRetiros||cuentaIntercambios) ? '<br><span style="color:#9a3412;font-weight:700;">'+(cuentaRetiros?'📮 '+cuentaRetiros+' retiro(s) de producto':'')+(cuentaRetiros&&cuentaIntercambios?' · ':'')+(cuentaIntercambios?'🔀 '+cuentaIntercambios+' intercambio(s)':'')+' detectados en el archivo.</span>' : '';
+      status.innerHTML += avisoEspeciales;
       if(ocultasSalteadas>0){
         status.innerHTML += '<br><span style="color:var(--naranja);font-weight:600;">👁️‍🗨️ '+ocultasSalteadas+' fila(s) ocultas en el Excel se saltaron (no se importaron).</span>';
       }
       if(alertas.length>0){
         status.innerHTML += '<br><span style="color:var(--naranja);font-weight:600;">⚠️ '+alertas.length+' código(s) ya existían en días anteriores: '+alertas.join(', ')+'</span>';
       }
+      // AGREGADO 02-10-2026: clientes que antes rechazaron o quedaron sin entregar con OTRO folio
+      var conProblemas = (nuevos>0 ? paquetes.slice(-nuevos) : []).map(function(p){ var pr = problemasCliente(p); return pr ? (p.nombre+(p.b2b?' ('+p.b2b+')':'')+': '+textoProblemasCliente(pr)) : null; }).filter(Boolean);
+      var avisoProblemas = conProblemas.length>0 ? '<br><span style="color:var(--rojo);font-weight:700;">🚩 '+conProblemas.length+' cliente(s) con problemas en entregas anteriores:</span><br><span style="color:var(--rojo);font-size:0.75rem;">'+conProblemas.join('<br>')+'</span>' : '';
+      status.innerHTML += avisoProblemas;
       // Subir todas las órdenes en lotes a Sheets
       subirOrdenesEnLotes(paquetes, function(loteActual, totalLotes){
         status.style.color='var(--azul2)';
@@ -2762,6 +3258,8 @@ function importarExcel(input){
         if(alertas.length>0){
           status.innerHTML += '<br><span style="color:var(--naranja);font-weight:600;">⚠️ '+alertas.length+' código(s) ya existían en días anteriores.</span>';
         }
+        status.innerHTML += avisoEspeciales + avisoProblemas;
+        renderPaquetes();
       });
     }catch(err){
       status.style.color='var(--rojo)';
@@ -3080,7 +3578,8 @@ function traerOrdenesDesdeNube(){
       var cloudNumRuta = (row[17]===''||row[17]===null||row[17]===undefined) ? null : Number(row[17]);
       var cloudTs = Number(row[12])||0;
       var cloudObservacion = row[20]||'';
-      var local = paquetes.find(function(p){ return p.codigo === codigo; });
+      var locales = paquetes.filter(function(p){ return p.codigo === codigo; });
+      var local = locales[0];
       if(local){
         var cambio = false;
         // El Nº de ruta y la base (J05/J06) se actualizan siempre que la nube traiga
@@ -3097,7 +3596,13 @@ function traerOrdenesDesdeNube(){
         // El estado solo se pisa si la nube tiene un cambio MÁS NUEVO que lo que hay acá
         // (para no borrar, por ejemplo, una entrega que Cristian acaba de marcar en su
         // celular pero que todavía no alcanzó a subir a la nube).
-        if(cloudTs > (local.ts||0) && row[11] && row[11] !== local.estado){ local.estado = row[11]; local.ts = cloudTs; cambio = true; }
+        // CORREGIDO 02-10-2026: compara contra la hora del ÚLTIMO cambio de estado (ts_estado),
+        // igual que el auto-sync de 10s, no contra la hora de carga; no pisa un cambio que
+        // este celular todavía no alcanza a subir, y actualiza TODOS los bultos del código.
+        if(row[11] && row[11] !== local.estado && !cambioEstadoEnCola(codigo) && cloudTs > (local.ts_estado || local.ts || 0)){
+          locales.forEach(function(x){ x.estado = row[11]; x.ts_estado = cloudTs; });
+          cambio = true;
+        }
         if(cambio) actualizadas++;
       } else {
         paquetes.push({
@@ -3123,7 +3628,7 @@ function traerOrdenesDesdeNube(){
 }
 
 function generarRutaOptimizada(){
-  var pendientes = paquetes.filter(function(p){ return p.estado === 'pendiente'; });
+  var pendientes = paquetesVisibles().filter(function(p){ return p.estado === 'pendiente'; }); // solo la ruta de este repartidor
   if(pendientes.length === 0){ alert('No hay órdenes pendientes.'); return; }
 
   if(esDiaNoOperativo()){ alert('⛔ Hoy no es día operativo.'); return; }
@@ -3266,7 +3771,7 @@ function mostrarListaRutaOptimizada(){
     var mapsUrl = 'https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(p.dir)+'&travelmode=driving';
 
     // Detectar si es multibulto (mismo folio, misma persona) o entregas distintas en misma calle
-    var esMultibulto = total > 1 && p.ordenes.every(function(o){ return getFolioBase(o.folio) === getFolioBase(p.ordenes[0].folio); });
+    var esMultibulto = total > 1 && p.ordenes.every(function(o){ return claveGrupoOrden(o) === claveGrupoOrden(p.ordenes[0]); });
     var mismaCalle = p.calleGrupo && p.calleGrupo.length > 1;
 
     html += '<div style="background:var(--blanco);border:1px solid var(--borde);border-radius:8px;padding:10px 12px;margin-bottom:6px;'+(todoEntregado?'opacity:0.5;border-left:3px solid var(--verde);':'')+(mismaCalle?'border-left:3px solid #7ec8f4;':'')+'">';
@@ -3427,8 +3932,16 @@ function toggleSeccionTipo(tipo){
 
 function renderPaquetes(){
   var lista = document.getElementById('lista-paquetes');
-  var filtered = filtroActual==='todos' ? paquetes : paquetes.filter(function(p){return p.estado===filtroActual;});
-  if(filtered.length===0){lista.innerHTML='<div class="alerta alerta-info">No hay órdenes en este filtro.</div>';return;}
+  if(!lista) return;
+  renderPanelAsignacion();
+  aplicarUsuario();
+  var base = paquetesVisibles(); // AGREGADO 24-09-2026: cada repartidor ve solo lo suyo
+  var filtered = filtroActual==='todos' ? base : base.filter(function(p){return p.estado===filtroActual;});
+  if(filtered.length===0){
+    var msgVacio = 'No hay órdenes en este filtro.';
+    if(perfilActual!=='comercial' && !usuarioEsJefe() && base.length===0 && paquetes.length>0) msgVacio = 'Todavía no tienes órdenes asignadas. Kathy te las asigna desde Comercial y aparecen solas aquí.';
+    lista.innerHTML='<div class="alerta alerta-info">'+msgVacio+'</div>';return;
+  }
   // CORREGIDO 03-09-2026: antes esto separaba en dos secciones grandes, Principal (J05)
   // y Ramal (J06), cada una con su propio desplegable. Eso rompía el orden correlativo
   // real de la ruta (Circuit numera J05 y J06 mezclados en un solo recorrido, ej. Osorno
@@ -3555,6 +4068,10 @@ function renderComunasDeTipo(items, diaSemana, tipo){
           : '⚠️ INTENTO '+(p.intentos||1)+'/3 — ya existía en un día anterior';
         html+='<div style="font-size:0.68rem;font-weight:700;color:var(--rojo);">'+txtIntento+'</div>';
       }
+      var probCli = problemasCliente(p);
+      if(probCli){
+        html+='<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:3px 7px;margin-bottom:4px;font-size:0.68rem;font-weight:700;color:#b91c1c;">'+textoProblemasCliente(probCli)+'</div>';
+      }
       var obsSector = observacionDeSector(p);
       if(obsSector){
         html+='<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:6px;padding:3px 7px;margin-bottom:4px;font-size:0.68rem;font-weight:700;color:#9a3412;">⚠️ '+obsSector.tipo+(obsSector.nota?' — '+obsSector.nota:'')+'</div>';
@@ -3562,10 +4079,17 @@ function renderComunasDeTipo(items, diaSemana, tipo){
       if(p.observacion && p.observacion.trim()){
         html+='<div style="display:inline-block;background:#ede9fe;border:1px solid #a855f7;border-radius:6px;padding:3px 8px;margin-bottom:4px;font-size:0.68rem;font-weight:700;color:#6b21a8;">📝 Observación del cliente</div>';
       }
+      if(p.esRetiro){
+        html+='<div style="display:inline-block;background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;padding:3px 8px;margin-bottom:4px;margin-right:4px;font-size:0.68rem;font-weight:800;color:#92400e;">📮 RETIRO — retirar producto al cliente</div>';
+      }
       if(p.intercambio){
         html+='<div style="display:inline-block;background:#fff7ed;border:1px solid #fdba74;border-radius:6px;padding:3px 8px;margin-bottom:4px;font-size:0.68rem;font-weight:700;color:#9a3412;">🔀 Intercambio — retirar envase vacío</div>';
       }
       html+='<div class="paquete-nombre">'+p.nombre+'</div>';
+      if(perfilActual==='comercial' || verTodasOperativo){
+        var repCard = getRepartidor(p);
+        html+='<div style="display:inline-block;font-size:0.66rem;font-weight:700;border-radius:6px;padding:1px 7px;margin-bottom:2px;'+(repCard?'background:#e0f2fe;color:#075985;':'background:#f1f5f9;color:#94a3b8;')+'">🚚 '+nombreRepartidor(repCard)+'</div>';
+      }
       if(p.b2b && p.b2b.trim()){
         html+='<div style="font-size:0.7rem;font-weight:800;color:var(--azul2);margin-bottom:1px;">🏪 '+p.b2b.trim()+'</div>';
       }
@@ -3670,12 +4194,52 @@ function proximoDiaRutaComuna(comuna){
   }
   return null;
 }
+// AGREGADO 02-10-2026 — NOMBRES COMPUESTOS para el saludo de WhatsApp.
+// Si el nombre empieza con un nombre compuesto conocido (María Paz, Juan Carlos, José
+// Luis, Ana María, Miguel Ángel, Francisco Javier, María de los Ángeles...), se usan
+// los dos. Si no, solo el primero (como antes). Para agregar otro, súmalo a la lista.
+var NOMBRES_COMPUESTOS = {
+  MARIA: ['PAZ','JOSE','JOSEFA','CRISTINA','IGNACIA','FERNANDA','JESUS','TERESA','ELENA','ISABEL','ANGELICA','EUGENIA','LUISA','SOLEDAD','VERONICA','PAULA','ALEJANDRA','CAROLINA','FRANCISCA','CONSTANZA','BELEN','TRINIDAD','GRACIA','MAGDALENA','VICTORIA','PILAR','INES','ESTER','LORETO','ANTONIETA','ELIANA','GABRIELA','LUZ','CECILIA','ROSA','OLGA','MERCEDES','ELISA','VALENTINA','EMILIA','FERNANDA','JESUS','ANGELES','LORENA','SOFIA','JOSE'],
+  JUAN: ['CARLOS','PABLO','JOSE','ANTONIO','MANUEL','FRANCISCO','IGNACIO','LUIS','ANDRES','ALBERTO','ESTEBAN','DANIEL','DAVID','CRISTOBAL','ENRIQUE','EDUARDO','FELIPE','JAVIER','MIGUEL','PEDRO','MARTIN','CAMILO','AGUSTIN','RAMON','GUILLERMO','SEBASTIAN','GABRIEL','RODRIGO','FERNANDO','VICENTE','DIEGO'],
+  JOSE: ['LUIS','MIGUEL','MANUEL','ANTONIO','IGNACIO','TOMAS','PABLO','FRANCISCO','MARIA','ALBERTO','CARLOS','DANIEL','JOAQUIN','ANDRES','RAMON','ROBERTO','ENRIQUE','JAVIER','VICENTE','FERNANDO','ARIEL','PATRICIO'],
+  ANA: ['MARIA','LUISA','PAULA','BELEN','KARINA','ISABEL','CAROLINA','SOFIA','JOSEFA','ROSA','CRISTINA','TERESA','VICTORIA'],
+  LUIS: ['ALBERTO','ALFONSO','ANTONIO','FELIPE','MIGUEL','ENRIQUE','EDUARDO','FERNANDO','ANDRES','CARLOS','ALEJANDRO','ALFREDO','EMILIO','IGNACIO'],
+  MIGUEL: ['ANGEL'],
+  FRANCISCO: ['JAVIER','JOSE'],
+  JUANA: ['MARIA'],
+  ROSA: ['MARIA','ELENA'],
+  MARIO: ['ANDRES','ALBERTO']
+};
+// Palabras que indican que el "cliente" es un NEGOCIO (aunque no diga SpA): en ese caso
+// se saluda con el nombre completo. Para agregar otra, súmala a la lista (sin tildes).
+var PALABRAS_NEGOCIO = ['BARBERIA','PELUQUERIA','SALON','ESTETICA','COMERCIAL','COMERCIALIZADORA','DISTRIBUIDORA','IMPORTADORA','TIENDA','STORE','SHOP','MARKET','MINIMARKET','SUPERMERCADO','ALMACEN','EMPORIO','BAZAR','BOTILLERIA','FERRETERIA','FARMACIA','LIBRERIA','OPTICA','VETERINARIA','PANADERIA','PASTELERIA','CAFETERIA','RESTAURANT','RESTAURANTE','PIZZERIA','SANGUCHERIA','HOTEL','HOSTAL','CABANAS','TALLER','AUTOMOTRIZ','LUBRICENTRO','INMOBILIARIA','CONSTRUCTORA','AGRICOLA','INVERSIONES','SERVICIOS','TRANSPORTES','LOGISTICA','INGENIERIA','EMPRESA','EMPRESAS','CLINICA','CENTRO','LABORATORIO','HOSPITAL','CESFAM','COLEGIO','ESCUELA','LICEO','JARDIN','INSTITUTO','UNIVERSIDAD','MUNICIPALIDAD','FUNDACION','CORPORACION','ASOCIACION','CLUB','IGLESIA','GIMNASIO','NEGOCIO','KIOSKO','ASOCIADOS','HERMANOS','HNOS','CIA'];
+function esNombreNegocio(nombre){
+  var palabras = String(nombre||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().split(/[^A-Z]+/).filter(Boolean);
+  return palabras.some(function(w){ return PALABRAS_NEGOCIO.indexOf(w) !== -1; });
+}
+function nombreSaludo(nombre){
+  var partes = String(nombre||'').trim().split(/\s+/).filter(Boolean);
+  if(!partes.length) return '';
+  var n = function(t){ return String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z]/g,''); };
+  var p1 = n(partes[0]), p2 = n(partes[1]);
+  // "María de los Ángeles", "María del Carmen", "María de la Luz"
+  if(p1==='MARIA' && (p2==='DE' || p2==='DEL')){
+    var fin = p2==='DEL' ? 3 : ((n(partes[2])==='LOS' || n(partes[2])==='LA') ? 4 : 3);
+    if(partes.length >= fin) return partes.slice(0, fin).join(' ');
+  }
+  if(p2 && NOMBRES_COMPUESTOS[p1] && NOMBRES_COMPUESTOS[p1].indexOf(p2) !== -1) return partes[0]+' '+partes[1];
+  return partes[0];
+}
 function armarLinkWhatsApp(p){
   var telLimpio = normalizarTelChile(p.tel);
   if(!telLimpio) return null;
-  var primerNombre = String(p.nombre||'').trim().split(/\s+/)[0] || '';
+  var primerNombre = nombreSaludo(p.nombre);
   var esNombrePersona = primerNombre && !/^\.$/.test(primerNombre);
   var saludoNombre = esNombrePersona ? primerNombre : 'estimado/a';
+  // AGREGADO 02-10-2026: si el cliente es una EMPRESA (SpA, Ltda., S.A., EIRL, Sociedad),
+  // se saluda con el nombre completo de la empresa, no solo con la primera palabra.
+  var nombreCompleto = String(p.nombre||'').trim().replace(/[\s.\-]+$/,'');
+  if(/\b(S\.?\s?P\.?\s?A|SPA|LTDA|LIMITADA|S\.\s?A|EIRL|E\.I\.R\.L|SOCIEDAD)\b\.?/i.test(nombreCompleto) || esNombreNegocio(nombreCompleto)) saludoNombre = nombreCompleto;
   var marcaPedido = String(p.b2b||'').trim() || 'su pedido';
   var proximaRuta = proximoDiaRutaComuna(p.comuna);
   // El punto va DENTRO del subrayado (para que quede "_Lunes._" en cursiva, tal como
@@ -3686,8 +4250,9 @@ function armarLinkWhatsApp(p){
   // esto NO aplica a las demás comunas, que siempre muestran el día puntual.
   var esOsorno = normalizarComuna(p.comuna) === normalizarComuna('Osorno');
   var fraseProximaRuta;
-  if(proximaRuta && esOsorno && proximaRuta.esManana) fraseProximaRuta = '_mañana._';
-  else if(proximaRuta) fraseProximaRuta = 'el _'+proximaRuta.dia+'._';
+  // 02-10-2026: el día va en negrita y cursiva (*_..._*), a pedido de Kathy.
+  if(proximaRuta && esOsorno && proximaRuta.esManana) fraseProximaRuta = '*_mañana._*';
+  else if(proximaRuta) fraseProximaRuta = 'el *_'+proximaRuta.dia+'._*';
   else fraseProximaRuta = 'en la próxima fecha que tengamos ruta agendada por esa zona.';
   // REINTENTO: si esta orden ya venía marcada como repetida de un día anterior
   // (mismo detector que usa la tarjeta y el modal — p.repetidoDeHistorial / p.intentos /
@@ -3699,22 +4264,37 @@ function armarLinkWhatsApp(p){
   // ni la palabra "intento".
   var esReintento = !!p.repetidoDeHistorial;
   var mensajeWa;
+  // AGREGADO 02-10-2026: RETIRO de producto — el mensaje avisa que pasamos a RETIRAR
+  // (no a entregar) y pide tener el producto listo. Si es un reintento, dice "nuevamente".
+  if(p.esRetiro){
+    mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos *Muspel* y por encargo de Alas, *hoy pasaremos '+(esReintento?'nuevamente ':'')+'a retirar el producto de '+marcaPedido+'* que usted solicitó devolver.\n\n'
+      + '*Le pedimos tener el producto listo y bien embalado* (en su caja o bolsa original, si es posible) para entregárselo a nuestro repartidor.\n\n'
+      + '*Cuando estemos próximos a su domicilio, le llamaremos.* Agradecemos que pueda atender nuestra llamada.\n\n'
+      + '*Importante:* *No hay horario especifico. Los retiros se realizan durante el día y según el recorrido de la ruta*, por lo que si no logramos comunicarnos con usted o no hay alguien disponible para entregar el producto, reagendaremos el retiro para nuestra próxima ruta por la localidad, '+fraseProximaRuta+'\n\n'
+      + '¡Muchas gracias! Nos vemos pronto.';
+    return 'https://wa.me/'+telLimpio+'?text='+encodeURIComponent(mensajeWa);
+  }
+  // INTERCAMBIO: mismo mensaje de entrega, más un aviso de que se retira el producto a cambiar.
+  var fraseIntercambio = p.intercambio
+    ? '*Este pedido es un intercambio:* al entregarle el producto nuevo, *retiraremos el producto a cambiar. Le pedimos tenerlo listo y bien embalado.*\n\n'
+    : '';
   if(esReintento && p.intentosAgotados){
     // Ya se agotaron los intentos del mes — sin decirle al cliente el número, se le
     // avisa igual que esta es prácticamente la última oportunidad antes de que el
     // pedido vuelva a la marca (esa parte sí es información útil para el cliente).
     mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos *Muspel* y hoy intentaremos nuevamente entregar su pedido de *'+marcaPedido+'*.\n\n'
-      + '*Cuando estemos próximos a su domicilio, le llamaremos* para que pueda recibirlo. Le agradecemos mucho que pueda atender nuestra llamada.\n\n'
+      + fraseIntercambio + '*Cuando estemos próximos a su domicilio, le llamaremos* para que pueda recibirlo. Le agradecemos mucho que pueda atender nuestra llamada.\n\n'
       + '*Importante:* Si en este intento tampoco logramos comunicarnos con usted o no hay alguien disponible para recibir, su pedido quedará sin entregar y será devuelto a *'+marcaPedido+'*.\n\n'
-      + 'Esperamos poder concretar la entrega hoy. ¡Muchas gracias!';
+      + 'Esperamos poder concretar la entrega hoy.\n\n'
+      + '¡Muchas gracias! Nos vemos pronto.';
   } else if(esReintento){
     mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos *Muspel* y hoy estaremos nuevamente realizando la entrega de su pedido de *'+marcaPedido+'*.\n\n'
-      + '*Cuando estemos próximos a su domicilio, le llamaremos* para que pueda recibirlo. Le agradecemos que pueda atender nuestra llamada.\n\n'
+      + fraseIntercambio + '*Cuando estemos próximos a su domicilio, le llamaremos* para que pueda recibirlo. Le agradecemos que pueda atender nuestra llamada.\n\n'
       + '*Importante:* *No hay horario especifico. Las entregas se realizan durante el día y según el recorrido de la ruta*, por lo que si no logramos comunicarnos con usted o no hay alguien disponible para recibir el pedido, reagendaremos la entrega para nuestra próxima ruta por la localidad, '+fraseProximaRuta+'\n\n'
       + '¡Muchas gracias! Nos vemos pronto.';
   } else {
     mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos *Muspel* y por encargo de Alas, hoy estaremos realizando la entrega de su pedido de *'+marcaPedido+'*.\n\n'
-      + '*Cuando estemos próximos a su domicilio, le llamaremos* para que pueda recibirlo. Le agradecemos que pueda atender nuestra llamada.\n\n'
+      + fraseIntercambio + '*Cuando estemos próximos a su domicilio, le llamaremos* para que pueda recibirlo. Le agradecemos que pueda atender nuestra llamada.\n\n'
       + '*Importante:* *No hay horario especifico. Las entregas se realizan durante el día y según el recorrido de la ruta*, por lo que si no logramos comunicarnos con usted o no hay alguien disponible para recibir el pedido, reagendaremos la entrega para nuestra próxima ruta por la localidad, '+fraseProximaRuta+'\n\n'
       + '¡Muchas gracias! Nos vemos pronto.';
   }
@@ -3741,7 +4321,9 @@ function marcarAvisoWaEnviado(id){
   var grupo = calcularGrupoMultibulto(p);
   grupo.forEach(function(item){ item.avisoWaEnviado = true; });
   guardarStorage();
-  enviarASheets('cambio_estado', {codigo:p.codigo, nombre:p.nombre, estado:p.estado, motivo:p.motivo||'', avisoWaEnviado:'si', fecha:new Date().toLocaleString('es-CL')});
+  codigosUnicos(grupo.length?grupo:[p]).forEach(function(cod){
+    enviarASheets('cambio_estado', {codigo:cod, nombre:p.nombre, estado:p.estado, motivo:p.motivo||'', avisoWaEnviado:'si', soloDatos:true, fecha:new Date().toLocaleString('es-CL')});
+  });
   renderPaquetes();
 }
 
@@ -3841,7 +4423,8 @@ function procesarQR(texto){
 
   if(p){
     qrPaqueteActual = p;
-    box.innerHTML='<div class="qr-result ok">✅ Orden encontrada: <strong>'+p.nombre+'</strong></div>';
+    box.innerHTML='<div class="qr-result ok">✅ Orden encontrada: <strong>'+p.nombre+'</strong></div>'
+      + (esPaqueteDeOtro(p) ? '<div class="alerta alerta-warn" style="margin-top:6px;">⚠️ Ojo: esta orden está asignada a <strong>'+nombreRepartidor(getRepartidor(p))+'</strong>, no a ti.</div>' : '');
     var badgeClass = p.estado==='entregado'?'badge-verde':p.estado==='devuelto'?'badge-rojo':p.estado==='retorno'?'badge-naranja':p.estado==='daniado'?'badge-naranja':'badge-gris';
     var badgeTxt = p.estado==='entregado'?'Entregado':p.estado==='devuelto'?textoBadgeDevuelto(p):p.estado==='retorno'?'Retorno':p.estado==='daniado'?'Dañado':'Pendiente';
     var dir = (p.dir||'').trim();
@@ -3859,10 +4442,11 @@ function procesarQR(texto){
 
     // Detectar multibulto por folio base
     var folioBase = getFolioBase(p.folio);
+    var claveQr = claveGrupoOrden(p);
     qrMultibultoActual = [];
     if(folioBase){
       qrMultibultoActual = paquetes.filter(function(x){
-        return getFolioBase(x.folio) === folioBase && x.codigo !== p.codigo;
+        return claveGrupoOrden(x) === claveQr && x.codigo !== p.codigo;
       });
     }
 
@@ -4053,7 +4637,7 @@ function exportarExcelDia(){
   var _valExp=valorPorEntregaNeto(_efExp);
   var _grupos={};
   agruparOrdenes(paquetes).forEach(function(g){
-    var key=getFolioBase(g[0].folio) || ('__solo_'+g[0].id);
+    var key=claveGrupoOrden(g[0]) || ('__solo_'+g[0].id);
     _grupos[key]=g;
   });
   var _keyDe={};
@@ -4065,7 +4649,7 @@ function exportarExcelDia(){
     _ordenCompleta[k]=_grupos[k].every(function(p){return p.estado==='entregado';});
   });
   var _yaContado={};
-  var ws_data=[['Código','Folio','Marca (B2B)','Nombre','Teléfono','Dirección','Comuna','Tipo','Estado','Motivo','Orden Completa','Ingreso Neto (por orden)','Efectividad Mes %']];
+  var ws_data=[['Código','Folio','Marca (B2B)','Nombre','Teléfono','Dirección','Comuna','Tipo','Estado','Motivo','Orden Completa','Ingreso Neto (por orden)','Efectividad Mes %','Repartidor']];
   paquetes.forEach(function(p){
     var key=_keyDe[p.id];
     var completa=_ordenCompleta[key];
@@ -4073,7 +4657,7 @@ function exportarExcelDia(){
     // WOM se paga a tarifa base fija, sin bono, sin importar la efectividad del mes.
     var valorEstaOrden = esWomPaquete(p) ? TARIFA_BASE : _valExp;
     if(completa && !_yaContado[key]){ ingresoFila=valorEstaOrden; _yaContado[key]=true; }
-    ws_data.push([p.codigo,p.folio,p.b2b||'',p.nombre,p.tel,p.dir,p.comuna,p.tipo,p.estado,p.motivo||'',completa?'Sí':'No',ingresoFila,_efExp]);
+    ws_data.push([p.codigo,p.folio,p.b2b||'',p.nombre,p.tel,p.dir,p.comuna,p.tipo,p.estado,p.motivo||'',completa?'Sí':'No',ingresoFila,_efExp,nombreRepartidor(getRepartidor(p))]);
   });
   var wb=XLSX.utils.book_new();
   var ws=XLSX.utils.aoa_to_sheet(ws_data);
@@ -4095,6 +4679,7 @@ function enviarWhatsApp(){
     '⚠️ Dañadas: '+ordStatsWa.daniadas+'\n'+
     '📊 Efectividad día: '+ef+'%\n'+
     '📊 Efectividad mes: '+_efWa+'%';
+  msg += lineasPorRepartidor();
   if(perfilActual==='comercial'){
     msg += '\n💰 Ingreso neto est.: '+formatoPesos(_ingresoWa.ingresoTotal);
   }
@@ -4125,7 +4710,9 @@ function cerrarDia(){
     var resueltos = paquetes; // las que estaban pendientes, ahora con su estado final
     var detalleActualizado = (diaOriginal.detalle || []).map(function(p){
       var actualizado = resueltos.find(function(r){ return r.id === p.id; });
-      return actualizado || p;
+      var final = JSON.parse(JSON.stringify(actualizado || p));
+      if(getRepartidor(final)) final.repartidor = nombreRepartidor(getRepartidor(final));
+      return final;
     });
     var ent=detalleActualizado.filter(function(p){return p.estado==='entregado';}).length;
     var dev=detalleActualizado.filter(function(p){return p.estado==='devuelto';}).length;
@@ -4209,7 +4796,9 @@ function cerrarDia(){
     efectividadMesAlCierre:_efCierre,
     valorPorEntrega:_valCierre,
     ingresos:_ingresoCierre.ingresoTotal,
-    detalle:JSON.parse(JSON.stringify(paquetes))
+    // AGREGADO 02-10-2026: cada orden guarda también quién la tenía asignada, para que
+    // el historial completo (DetalleHistorico) sepa qué repartidor la llevó.
+    detalle:JSON.parse(JSON.stringify(paquetes)).map(function(p){ p.repartidor = getRepartidor(p) ? nombreRepartidor(getRepartidor(p)) : ''; return p; })
   };
   historial.push(registroDia);
   // se envía el cierre completo del día a Sheets (resumen en "Cierres", detalle completo en "DetalleHistorico")
@@ -4602,7 +5191,7 @@ function exportarReporteMensualAhora(){
     var _keyDeH={};
     var _completaH={};
     agruparOrdenes(h.detalle).forEach(function(g){
-      var key=getFolioBase(g[0].folio) || ('__solo_'+g[0].id);
+      var key=claveGrupoOrden(g[0]) || ('__solo_'+g[0].id);
       g.forEach(function(p){ _keyDeH[p.id]=key; });
       _completaH[key]=g.every(function(p){return p.estado==='entregado';});
     });
@@ -4798,7 +5387,7 @@ function exportarDiaHistorial(idx){
   var _keyDeH={};
   var _completaH={};
   agruparOrdenes(h.detalle).forEach(function(g){
-    var key=getFolioBase(g[0].folio) || ('__solo_'+g[0].id);
+    var key=claveGrupoOrden(g[0]) || ('__solo_'+g[0].id);
     g.forEach(function(p){ _keyDeH[p.id]=key; });
     _completaH[key]=g.every(function(p){return p.estado==='entregado';});
   });
