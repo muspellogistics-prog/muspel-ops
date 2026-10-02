@@ -683,6 +683,24 @@ function toggleMes(clase, headerRow){
 
 // Devuelve "julio 2026" a partir de una fecha (DD-MM-AAAA o ISO), sumándole un desfase de meses.
 // Sirve para calcular "¿en qué mes se paga esto realmente?" a partir de la fecha del hecho.
+// ════════════════════════════════════════
+// LIQUIDACIONES OFICIALES DE ALAS (agregado 02-10-2026)
+// Cuando ALAS ya mandó la liquidación de un mes, ESE monto es el real (incluye el bono de
+// efectividad de todo el mes, intercambios a 0,5, adicionales, etc.), no el estimado
+// de los Cierres de la OPS. Para agregar un mes nuevo, súmalo a esta lista:
+//   'mes año': { ordenes: N, neto: $, iva: $ }   (iva tal como viene en la liquidación)
+// ════════════════════════════════════════
+const LIQUIDACIONES_ALAS = {
+  'julio 2026':  { ordenes: 112,   neto: 257600, iva: 48944 },
+  'agosto 2026': { ordenes: 299.5, neto: 688850, iva: 130882 }
+};
+function liquidacionAlas(mesTexto){ return LIQUIDACIONES_ALAS[normalizarMes(mesTexto)] || null; }
+// Ingreso neto del mes: el de la liquidación si ya existe; si no, el estimado de Cierres.
+function ingresoNetoMes(mesTexto, estimadoCierres){
+  const l = liquidacionAlas(mesTexto);
+  return l ? l.neto : estimadoCierres;
+}
+
 function mesConDesfase(fechaRaw, desfaseMeses){
   const legible = formatoFechaLegible(fechaRaw);
   const partes = legible.split('-');
@@ -715,6 +733,16 @@ function pintarFlujoReal(){
     if(!m) return;
     entraPorMes[m] = (entraPorMes[m]||0) + c.ingresos;
   });
+  // Meses con liquidación oficial: se reemplaza el estimado de Cierres por el monto real.
+  Object.keys(LIQUIDACIONES_ALAS).forEach(mesServicio => {
+    const p = mesServicio.split(' ');
+    const idx = MESES_NOMBRES.indexOf(p[0]);
+    if(idx < 0) return;
+    const fechaRef = '01-' + ('0'+(idx+1)).slice(-2) + '-' + p[1];
+    const mesPago = mesConDesfase(fechaRef, 2);
+    const estimado = cierres.filter(c => perteneceAlMes(c.fecha, mesServicio)).reduce((a,c)=>a+c.ingresos,0);
+    entraPorMes[mesPago] = (entraPorMes[mesPago]||0) - estimado + LIQUIDACIONES_ALAS[mesServicio].neto;
+  });
 
   const todosMeses = [...new Set([...Object.keys(salePorMes), ...Object.keys(entraPorMes)])].sort((a,b)=>ordenMes(a)-ordenMes(b));
   // La caja real "de hoy" es el saldo acumulado SOLO hasta el mes en curso — la tabla
@@ -742,7 +770,7 @@ function pintarFlujoReal(){
 
 function pintarFinanzas(mesTexto){
   const delMes = cierres.filter(c => perteneceAlMes(c.fecha, mesTexto));
-  const ingresoMes = delMes.reduce((a,c)=>a+c.ingresos,0);
+  const ingresoMes = ingresoNetoMes(mesTexto, delMes.reduce((a,c)=>a+c.ingresos,0));
   const costosDelMes = costos.filter(c => normalizarMes(c.mes) === normalizarMes(mesTexto));
   const costosMes = costosDelMes.reduce((a,c)=>a+c.monto,0);
   const flujo = ingresoMes - costosMes;
@@ -776,8 +804,15 @@ function pintarFinanzas(mesTexto){
     .sort((a,b) => porMes[b].orden - porMes[a].orden)
     .map(m => {
       const d = porMes[m];
+      const liq = liquidacionAlas(m);
+      if(liq){
+        // Mes con liquidación oficial de ALAS: se muestra ese monto (el real a facturar).
+        const totalLiq = liq.neto + liq.iva;
+        return `<tr><td style="text-transform:capitalize;">${m} <span title="Estimado OPS: ${d.ordenes} órdenes / ${formatoPesos(d.ingreso)}" style="font-size:0.7rem;background:#dcfce7;color:#166534;border-radius:6px;padding:1px 6px;font-weight:700;text-transform:none;">✔ Liquidación ALAS</span></td><td class="num">${String(liq.ordenes).replace('.',',')}</td>
+        <td class="num">${formatoPesos(liq.neto)}</td><td class="num verde-txt">${formatoPesos(totalLiq)}</td></tr>`;
+      }
       const conIva = Math.round(d.ingreso * (1+IVA));
-      return `<tr><td style="text-transform:capitalize;">${m}</td><td class="num">${d.ordenes}</td>
+      return `<tr><td style="text-transform:capitalize;">${m} <span style="font-size:0.7rem;background:#fef9c3;color:#854d0e;border-radius:6px;padding:1px 6px;font-weight:700;text-transform:none;">Estimado OPS</span></td><td class="num">${d.ordenes}</td>
         <td class="num">${formatoPesos(d.ingreso)}</td><td class="num verde-txt">${formatoPesos(conIva)}</td></tr>`;
     }).join('');
   document.getElementById('tabla-facturacion').innerHTML = filasFactura || '<tr><td colspan="4" style="text-align:center;color:#94a3b8;">Sin días cerrados todavía</td></tr>';
@@ -906,8 +941,9 @@ function calcularRetiroSocios(){
 
 function pintarRentabilidad(mesTexto){
   const delMes = cierres.filter(c => perteneceAlMes(c.fecha, mesTexto));
-  const ingresoMes = delMes.reduce((a,c)=>a+c.ingresos,0);
-  const ordMes = delMes.reduce((a,c)=>a+c.entregadosOrdenes,0);
+  const ingresoMes = ingresoNetoMes(mesTexto, delMes.reduce((a,c)=>a+c.ingresos,0));
+  const liqRent = liquidacionAlas(mesTexto);
+  const ordMes = liqRent ? liqRent.ordenes : delMes.reduce((a,c)=>a+c.entregadosOrdenes,0);
   const fijosDelMes = costos.filter(c => normalizarMes(c.mes) === normalizarMes(mesTexto) && c.fijo === 'Sí');
   const costosFijos = fijosDelMes.reduce((a,c)=>a+c.monto,0);
   const costosTotalesMes = costos.filter(c => normalizarMes(c.mes) === normalizarMes(mesTexto)).reduce((a,c)=>a+c.monto,0);
