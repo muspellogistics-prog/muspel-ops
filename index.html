@@ -995,31 +995,47 @@ function textoEstado(e){ return e==='entregado'?'Entregado':e==='retorno'?'Retor
 
 // ¿Este cliente (mismo nombre o mismo teléfono) tuvo pedidos NO entregados antes, con
 // OTRO folio? Sirve sobre todo para WOM, que reenvía al mismo cliente con folio nuevo.
+// Pedidos de ABASTECIMIENTO DE TIENDA (Froens, folio "Osorno#..."): van a la tienda
+// del Mall Portal Osorno, se entregan sí o sí y de las primeras en la ruta.
+function esAbastecimientoTienda(p){
+  return !!p && /froens/i.test(String(p.b2b||'')) && /^osorno#/i.test(String(p.folio||p.codigo||'').trim());
+}
 function problemasCliente(p){
-  if(!p || !historialFilasRemotas.length) return null;
+  if(!p || !historialFilasRemotas.length || esAbastecimientoTienda(p)) return null;
   var nom = normTexto(p.nombre), tel = soloDigitos9(p.tel), folio = String(p.folio||'').trim();
   if(nom.length < 8 && tel.length < 8) return null;
-  var malos = historialFilasRemotas.filter(function(f){
-    if(!f || String(f[2]||'').trim() === folio) return false;
+  // CORREGIDO 02-10: (1) cuenta por ORDEN y día, no por caja (un multibulto de 3 cajas
+  // que volvió es 1 vez, no 3); (2) si el cliente RECIBIÓ algún pedido después de su
+  // último problema, ya no se marca (ej. Pia: falló 1 vez el 03-09 y después recibió
+  // todo bien). Así la alerta queda solo para clientes con problemas recientes reales.
+  var malos = {}, ultimaEntrega = '';
+  historialFilasRemotas.forEach(function(f){
+    if(!f) return;
     var mismoNombre = nom.length >= 8 && normTexto(f[3]) === nom;
     var mismoTel = tel.length >= 8 && soloDigitos9(f[12]) === tel;
-    if(!mismoNombre && !mismoTel) return false;
+    if(!mismoNombre && !mismoTel) return;
     var e = String(f[7]||'').trim();
-    return e==='retorno' || e==='devuelto' || e==='daniado';
+    var fo = fechaOrdenable(f[0]);
+    if(e==='entregado'){ if(fo > ultimaEntrega) ultimaEntrega = fo; return; }
+    if(String(f[2]||'').trim() === folio) return; // el mismo folio de hoy ya lo avisa "intento N/3"
+    if(e!=='retorno' && e!=='devuelto' && e!=='daniado') return;
+    var clave = fo + '|' + getFolioBase(String(f[2]||'').trim());
+    if(!malos[clave]) malos[clave] = f;
   });
-  if(!malos.length) return null;
-  malos.sort(function(a,b){ return fechaOrdenable(a[0]) < fechaOrdenable(b[0]) ? -1 : 1; });
-  var ult = malos[malos.length-1];
+  var lista = Object.keys(malos).sort().map(function(k){ return malos[k]; });
+  if(!lista.length) return null;
+  var ult = lista[lista.length-1];
+  if(ultimaEntrega && ultimaEntrega > fechaOrdenable(ult[0])) return null; // después recibió bien
   return {
-    n: malos.length,
-    rechazo: malos.some(function(f){ return /rechaz/i.test(String(f[8]||'')); }),
+    n: lista.length,
+    rechazo: lista.some(function(f){ return /rechaz/i.test(String(f[8]||'')); }),
     ultimaFecha: String(ult[0]||''),
     ultimoMotivo: String(ult[8]||'')
   };
 }
 function textoProblemasCliente(pr){
   if(!pr) return '';
-  return (pr.rechazo ? '🚩 YA RECHAZÓ antes' : '🚩 Antes quedó '+pr.n+' vez/veces sin entregar')
+  return (pr.rechazo ? '🚩 YA RECHAZÓ antes' : '🚩 Antes quedó sin entregar '+(pr.n===1?'1 vez':pr.n+' veces'))
     + ' — último: '+pr.ultimaFecha+(pr.ultimoMotivo ? ' ('+pr.ultimoMotivo+')' : '');
 }
 
@@ -4078,6 +4094,9 @@ function renderComunasDeTipo(items, diaSemana, tipo){
       }
       if(p.observacion && p.observacion.trim()){
         html+='<div style="display:inline-block;background:#ede9fe;border:1px solid #a855f7;border-radius:6px;padding:3px 8px;margin-bottom:4px;font-size:0.68rem;font-weight:700;color:#6b21a8;">📝 Observación del cliente</div>';
+      }
+      if(esAbastecimientoTienda(p)){
+        html+='<div style="display:inline-block;background:#dcfce7;border:1px solid #22c55e;border-radius:6px;padding:3px 8px;margin-bottom:4px;margin-right:4px;font-size:0.68rem;font-weight:800;color:#166534;">🏬 Abastecimiento tienda Mall — entregar de las primeras</div>';
       }
       if(p.esRetiro){
         html+='<div style="display:inline-block;background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;padding:3px 8px;margin-bottom:4px;margin-right:4px;font-size:0.68rem;font-weight:800;color:#92400e;">📮 RETIRO — retirar producto al cliente</div>';
