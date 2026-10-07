@@ -838,6 +838,48 @@ function claveGrupoOrden(p){
   if(esWomPaquete(p)) return fb + '|' + normTexto(p.nombre) + '|' + normTexto(p.dir);
   return fb;
 }
+// AGREGADO 06-10-2026 — DIRECCIÓN REPETIDA EN ÓRDENES DISTINTAS (⭐)
+// Detecta paquetes cuya misma dirección (calle + número + comuna) aparece en OTRA orden
+// distinta, ya sea de otro cliente o del mismo cliente con otro folio. Los multibultos
+// (mismo folio / misma clave de grupo) NO cuentan: son 1 sola orden con varios bultos.
+// Direcciones sin número (parcelas, condominios, "Laja") no se comparan para no marcar
+// por error. La referencia ("casa", "depto 5", "(frente a...)") se ignora al comparar.
+function claveDireccionRepetida(p){
+  var d = String((p && p.dir) || '');
+  if(!d || d.toLowerCase().indexOf('http') !== -1) return '';
+  d = d.replace(/\([^)]*\)/g, ' ');                       // quita "(referencia)"
+  var partes = d.split(',').map(function(x){ return x.trim(); }).filter(Boolean);
+  var calle = '';
+  for(var i=0;i<partes.length;i++){
+    var t = partes[i];
+    if(/^regi[oó]n/i.test(t)) continue;
+    if(/[A-Za-zÁÉÍÓÚÑáéíóúñ\.]\s*\d{1,5}\b/.test(t) && !/^(depto|dpto|dp|torre|casa|oficina|of|local)\b/i.test(t)){ calle = t; break; }
+  }
+  if(!calle) return '';
+  calle = normTexto(calle).replace(/\b(DEPTO|DPTO|DP|TORRE|CASA|OFICINA|LOCAL)\b.*$/, '').trim();
+  if(!/\d/.test(calle)) return '';
+  return calle + '|' + normTexto(p.comuna);
+}
+var _cacheDirRepetida = { total: 0, firma: null, mapa: {} }; // cache de 400 ms, se recalcula en cada render
+function paqueteConDireccionRepetida(p){
+  var arr = (typeof paquetes !== 'undefined') ? paquetes : [];
+  var ahoraDir = Date.now();
+  if(_cacheDirRepetida.firma !== arr || (ahoraDir - _cacheDirRepetida.total) > 400){
+    var porDir = {};
+    arr.forEach(function(x){
+      var k = claveDireccionRepetida(x); if(!k) return;
+      var g = claveGrupoOrden(x) || ('id' + x.id);
+      if(!porDir[k]) porDir[k] = {};
+      porDir[k][g] = true;
+    });
+    var mapa = {};
+    Object.keys(porDir).forEach(function(k){ mapa[k] = Object.keys(porDir[k]).length > 1; });
+    _cacheDirRepetida = { total: ahoraDir, firma: arr, mapa: mapa };
+  }
+  var kp = claveDireccionRepetida(p);
+  return !!(kp && _cacheDirRepetida.mapa[kp]);
+}
+
 function agruparOrdenes(arr){
   var porFolio = {};
   arr.forEach(function(p){
@@ -4072,12 +4114,16 @@ function renderComunasDeTipo(items, diaSemana, tipo){
         dirMostrar = (p.comuna||'').trim() ? '📍 Ver detalle — '+p.comuna.trim() : '(sin dirección — tocar para ver)';
       }
 
-      html+='<div class="paquete-item '+p.estado+'" id="pi-'+p.id+'" onclick="abrirModal('+p.id+')" style="cursor:pointer;display:flex;align-items:flex-start;gap:10px;'+(esMultibulto?'border-left:3px solid #f59e0b;':'')+(p.estado!=='pendiente'?'':'')+'">'; 
+      var dirRepetida = paqueteConDireccionRepetida(p);
+      html+='<div class="paquete-item '+p.estado+'" id="pi-'+p.id+'" onclick="abrirModal('+p.id+')" style="cursor:pointer;display:flex;align-items:flex-start;gap:10px;'+(esMultibulto?'border-left:3px solid #f59e0b;':'')+(dirRepetida?'background:#fce7f3;border:2px solid #ec4899;border-left:6px solid #db2777;':'')+(p.estado!=='pendiente'?'':'')+'">'; 
       if(p.numRuta !== null && p.numRuta !== undefined && !isNaN(p.numRuta)){
         html+='<div style="flex-shrink:0;background:var(--azul);color:#fff;border-radius:8px;min-width:38px;height:38px;display:flex;align-items:center;justify-content:center;font-size:1.15rem;font-weight:800;">'+p.numRuta+'</div>';
       }
       html+='<div class="paquete-info" style="flex:1;min-width:0;">';
       if(numeroBulto) html+='<div style="font-size:0.68rem;font-weight:700;color:#92400e;">📦 Bulto '+numeroBulto+' de '+grupo.length+'</div>';
+      if(dirRepetida){
+        html+='<div style="display:inline-block;background:#db2777;color:#fff;border-radius:6px;padding:3px 8px;margin-bottom:4px;font-size:0.7rem;font-weight:800;">⭐ Misma dirección que otra orden distinta</div>';
+      }
       if(p.repetidoDeHistorial){
         var txtIntento = p.intentosAgotados
           ? '🚫 INTENTO '+p.intentos+'/3 — YA AGOTÓ los intentos del mes, revisar con Alas'
