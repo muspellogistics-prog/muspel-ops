@@ -3144,6 +3144,7 @@ function importarExcel(input){
         if(h==='BULTO DE ENTREGA') idx.bulto=i;
         if(h==='N'||h==='N°'||h==='NRO'||h==='NUMERO'||h==='NÚMERO') idx.numRuta=i;
         if(h==='INTERCAMBIO') idx.intercambio=i;
+        if(h==='DESIGNACION'||h==='DESIGNACIÓN'||h==='DESIGNADO'||h==='REPARTIDOR') idx.designacion=i;
         // AGREGADO 02-10-2026: FAMILIA ("Recibido Virtual" = retiro de producto) y una
         // columna de observación donde Kathy anota "intercambio" o "retiro de producto".
         if(h==='FAMILIA') idx.familia=i;
@@ -3194,6 +3195,28 @@ function importarExcel(input){
       paquetes.forEach(function(p){ paquetesPorCodigo[p.codigo] = p; });
 
       var nuevos=0, dup=0, ocultasSalteadas=0, alertas=[], actualizadosNumRuta=0, cuentaRetiros=0, cuentaIntercambios=0;
+      // AGREGADO 07-10-2026: columna "Designacion" del Excel. L / Luchín -> Operativo 2 (Luchín);
+      // C / Cristian / OP -> OP. Principal. Si la celda está vacía NO se toca nada (así lo ya
+      // asignado se mantiene y los pedidos nuevos quedan "Sin asignar" para repartirlos con el desplegable).
+      var designPorRep = {};   // idRepartidor -> [codigos]
+      function repDesdeDesignacion(v){
+        var t = String(v==null?'':v).trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+        if(!t) return '';
+        if(t==='L' || t.indexOf('LUCHIN')===0 || t.indexOf('OPERATIVO 2')===0) return 'op2';
+        if(t==='C' || t==='OP' || t.indexOf('CRISTIAN')===0 || t.indexOf('OP. PRINCIPAL')===0 || t.indexOf('OP PRINCIPAL')===0) return 'cristian';
+        return '';
+      }
+      function anotarDesignacion(codigo,row){
+        if(idx.designacion===undefined) return;
+        var rep = repDesdeDesignacion(row[idx.designacion]);
+        if(!rep) return;
+        var act = asignaciones[codigo];
+        if(act && act.r===rep) return;   // ya estaba así, no se vuelve a enviar
+        (designPorRep[rep] = designPorRep[rep] || []).push(codigo);
+      }
+      function aplicarDesignacionesExcel(){
+        Object.keys(designPorRep).forEach(function(rep){ asignarCodigos(designPorRep[rep], rep); });
+      }
       // AGREGADO 02-10-2026 — detecta retiro de producto e intercambio por fila.
       // Retiro: FAMILIA dice "virtual" / "retiro" / "devolución", o la observación dice "retiro".
       // Intercambio: columna INTERCAMBIO marcada, o la observación dice "intercambio".
@@ -3227,6 +3250,7 @@ function importarExcel(input){
           // pedido ya existía SIN ese número o con uno distinto, lo actualiza en vez de
           // solo descartarlo — pasa cuando Kathy importa primero el Excel de Alas y más
           // tarde reimporta el mismo archivo ya con los números de ruta agregados por Spoke.
+          anotarDesignacion(codigo,row);
           if(idx.numRuta!==undefined && row[idx.numRuta]!=null && String(row[idx.numRuta]).trim()!==''){
             var nuevoNum = Number(row[idx.numRuta]);
             var existentePrevio = paquetesPorCodigo[codigo];
@@ -3281,11 +3305,13 @@ function importarExcel(input){
           esRetiro: tipoEspecialFila(row).esRetiro,
           observacion: tipoEspecialFila(row).obs
         };
+        anotarDesignacion(codigo,row);
         if(nuevoPaquete.esRetiro) cuentaRetiros++;
         if(nuevoPaquete.intercambio) cuentaIntercambios++;
         paquetes.push(nuevoPaquete);
         nuevos++;
       }
+      aplicarDesignacionesExcel();
       guardarStorage();
       actualizarResumen();
       if(actualizadosNumRuta>0) renderPaquetes();
