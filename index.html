@@ -457,6 +457,7 @@
   </div>
   <button class="btn btn-rojo" onclick="limpiarDia()" style="margin-top:4px;">🗑 Limpiar día actual</button>
   <button class="btn btn-outline" onclick="descargarOrdenesDesdeSheets(function(n){ if(n>0) renderPaquetes(); })" style="margin-top:4px;">⬇️ Descargar órdenes desde la nube</button>
+  <button class="btn btn-outline" onclick="repararDuplicadosNube()" style="margin-top:4px;">🧹 Reparar órdenes duplicadas</button>
 </div>
 
 <!-- ══════════════════════════════════════════ -->
@@ -1308,15 +1309,26 @@ function subirOrdenesEnLotes(listaOrdenes, onProgreso, onFin){
   var loteActual = 0;
 
   // Primero limpia la hoja Ordenes en Sheets
-  fetch(SHEETS_URL, {
-    method:'POST',
-    headers:{'Content-Type':'text/plain;charset=utf-8'},
-    body: JSON.stringify({tipo:'limpiar_ordenes', contenido:{}})
-  }).then(function(){
-    subirSiguienteLote();
-  }).catch(function(){
-    subirSiguienteLote(); // intenta igual aunque falle el limpiar
-  });
+  // CORREGIDO 09-10-2026: antes, si el "limpiar" fallaba se subía igual y la hoja quedaba con
+  // las órdenes viejas + las nuevas (duplicadas). Ahora se reintenta el limpiar hasta 3 veces
+  // y solo se sube cuando la nube confirmó que quedó vacía.
+  var intentosLimpiar = 0;
+  function limpiarNube(){
+    intentosLimpiar++;
+    fetch(SHEETS_URL, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({tipo:'limpiar_ordenes', contenido:{}})
+    }).then(function(r){ return r.text(); }).then(function(txt){
+      var resp = null; try{ resp = JSON.parse(txt); }catch(e){}
+      if(resp && resp.status === 'error') throw new Error('error');
+      subirSiguienteLote();
+    }).catch(function(){
+      if(intentosLimpiar < 3){ setTimeout(limpiarNube, 2000); return; }
+      alert('⚠️ No se pudo vaciar la hoja Ordenes de la nube. Para no duplicar órdenes NO se subió nada. Revisa tu internet y vuelve a intentar.');
+    });
+  }
+  limpiarNube();
 
   function subirSiguienteLote(){
     if(loteActual >= totalLotes){
@@ -1358,6 +1370,43 @@ function subirOrdenesEnLotes(listaOrdenes, onProgreso, onFin){
 // ════════════════════════════════════════
 // DESCARGA DE ÓRDENES DESDE SHEETS
 // ════════════════════════════════════════
+// AGREGADO 09-10-2026: quita órdenes duplicadas por ID (la MISMA fila cargada dos veces).
+// Los multibultos NO se tocan: cada bulto tiene su propio id. Devuelve cuántas quitó.
+function quitarDuplicadosLocales(){
+  var porId = {}, salida = [], quitados = 0;
+  paquetes.forEach(function(p){
+    var k = (p.id===undefined||p.id===null) ? null : String(p.id);
+    if(k===null){ salida.push(p); return; }
+    var previo = porId[k];
+    if(!previo){ porId[k] = p; salida.push(p); return; }
+    // se queda con el que tenga el estado más avanzado / reciente
+    if(previo.estado==='pendiente' && p.estado!=='pendiente'){
+      previo.estado = p.estado; previo.ts_estado = p.ts_estado || p.ts;
+    }
+    if((previo.numRuta===null||previo.numRuta===undefined) && p.numRuta!=null) previo.numRuta = p.numRuta;
+    quitados++;
+  });
+  if(quitados>0) paquetes = salida;
+  return quitados;
+}
+// Botón "Reparar duplicados": baja lo que hay en la nube, quita los duplicados y vuelve a
+// subir la lista limpia (subirOrdenesEnLotes primero vacía la hoja Ordenes).
+function repararDuplicadosNube(){
+  descargarOrdenesDesdeSheets(function(){
+    var quitados = quitarDuplicadosLocales();
+    if(quitados===0 && !confirm('No se encontraron duplicados en este equipo. ¿Igual quieres limpiar y volver a subir la lista a la nube?')) return;
+    if(!confirm('Quedarán '+paquetes.length+' órdenes ('+quitados+' duplicadas quitadas). Se va a vaciar la hoja Ordenes de la nube y subir esta lista limpia. ¿Continuar?')) return;
+    guardarStorage(); actualizarResumen(); renderPaquetes();
+    var status = document.getElementById('import-status');
+    subirOrdenesEnLotes(paquetes, function(a,b){
+      if(status){ status.style.color='var(--azul2)'; status.textContent='☁️ Subiendo lista limpia... lote '+a+' de '+b; }
+    }, function(){
+      if(status){ status.style.color='var(--verde)'; status.textContent='✅ Listo: '+paquetes.length+' órdenes, sin duplicados, en la nube.'; }
+      renderPaquetes();
+    });
+  });
+}
+
 function descargarOrdenesDesdeSheets(onFin){
   var status = document.getElementById('import-status');
   if(status){ status.style.color='var(--azul2)'; status.textContent = '⬇️ Descargando órdenes desde la nube...'; }
@@ -1391,10 +1440,16 @@ function descargarOrdenesDesdeSheets(onFin){
     var localCount = {};
     paquetes.forEach(function(p){ localCount[p.codigo] = (localCount[p.codigo]||0) + 1; });
     var vistosEnSheets = {};
+    var idsVistosNube = {};   // AGREGADO 09-10-2026: la misma fila (mismo id) repetida en Sheets = duplicado, no multibulto
     rows.slice(1).forEach(function(row){
       if(!row[1]) return; // sin código, skip
       var codigo = String(row[1]).trim();
       if(!codigo) return;
+      if(row[0]!==undefined && row[0]!==null && row[0]!==''){
+        var idNube = String(row[0]);
+        if(idsVistosNube[idNube]) return;   // fila duplicada (mismo id): se ignora
+        idsVistosNube[idNube] = true;
+      }
       vistosEnSheets[codigo] = (vistosEnSheets[codigo]||0) + 1;
       var yaLocal = localCount[codigo] || 0;
       var sinAgruparNube = row[16] === true || row[16] === 'true';
@@ -1476,7 +1531,8 @@ function descargarOrdenesDesdeSheets(onFin){
       });
       importadas++;
     });
-    if(importadas > 0 || actualizadas > 0){
+    var quitadosDup = quitarDuplicadosLocales();
+    if(importadas > 0 || actualizadas > 0 || quitadosDup > 0){
       guardarStorage();
       actualizarResumen();
       renderPaquetes();
