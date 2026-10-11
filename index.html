@@ -457,7 +457,6 @@
   </div>
   <button class="btn btn-rojo" onclick="limpiarDia()" style="margin-top:4px;">🗑 Limpiar día actual</button>
   <button class="btn btn-outline" onclick="descargarOrdenesDesdeSheets(function(n){ if(n>0) renderPaquetes(); })" style="margin-top:4px;">⬇️ Descargar órdenes desde la nube</button>
-  <button class="btn btn-outline" onclick="repararDuplicadosNube()" style="margin-top:4px;">🧹 Reparar órdenes duplicadas</button>
 </div>
 
 <!-- ══════════════════════════════════════════ -->
@@ -1309,26 +1308,15 @@ function subirOrdenesEnLotes(listaOrdenes, onProgreso, onFin){
   var loteActual = 0;
 
   // Primero limpia la hoja Ordenes en Sheets
-  // CORREGIDO 09-10-2026: antes, si el "limpiar" fallaba se subía igual y la hoja quedaba con
-  // las órdenes viejas + las nuevas (duplicadas). Ahora se reintenta el limpiar hasta 3 veces
-  // y solo se sube cuando la nube confirmó que quedó vacía.
-  var intentosLimpiar = 0;
-  function limpiarNube(){
-    intentosLimpiar++;
-    fetch(SHEETS_URL, {
-      method:'POST',
-      headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({tipo:'limpiar_ordenes', contenido:{}})
-    }).then(function(r){ return r.text(); }).then(function(txt){
-      var resp = null; try{ resp = JSON.parse(txt); }catch(e){}
-      if(resp && resp.status === 'error') throw new Error('error');
-      subirSiguienteLote();
-    }).catch(function(){
-      if(intentosLimpiar < 3){ setTimeout(limpiarNube, 2000); return; }
-      alert('⚠️ No se pudo vaciar la hoja Ordenes de la nube. Para no duplicar órdenes NO se subió nada. Revisa tu internet y vuelve a intentar.');
-    });
-  }
-  limpiarNube();
+  fetch(SHEETS_URL, {
+    method:'POST',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body: JSON.stringify({tipo:'limpiar_ordenes', contenido:{}})
+  }).then(function(){
+    subirSiguienteLote();
+  }).catch(function(){
+    subirSiguienteLote(); // intenta igual aunque falle el limpiar
+  });
 
   function subirSiguienteLote(){
     if(loteActual >= totalLotes){
@@ -1370,43 +1358,6 @@ function subirOrdenesEnLotes(listaOrdenes, onProgreso, onFin){
 // ════════════════════════════════════════
 // DESCARGA DE ÓRDENES DESDE SHEETS
 // ════════════════════════════════════════
-// AGREGADO 09-10-2026: quita órdenes duplicadas por ID (la MISMA fila cargada dos veces).
-// Los multibultos NO se tocan: cada bulto tiene su propio id. Devuelve cuántas quitó.
-function quitarDuplicadosLocales(){
-  var porId = {}, salida = [], quitados = 0;
-  paquetes.forEach(function(p){
-    var k = (p.id===undefined||p.id===null) ? null : String(p.id);
-    if(k===null){ salida.push(p); return; }
-    var previo = porId[k];
-    if(!previo){ porId[k] = p; salida.push(p); return; }
-    // se queda con el que tenga el estado más avanzado / reciente
-    if(previo.estado==='pendiente' && p.estado!=='pendiente'){
-      previo.estado = p.estado; previo.ts_estado = p.ts_estado || p.ts;
-    }
-    if((previo.numRuta===null||previo.numRuta===undefined) && p.numRuta!=null) previo.numRuta = p.numRuta;
-    quitados++;
-  });
-  if(quitados>0) paquetes = salida;
-  return quitados;
-}
-// Botón "Reparar duplicados": baja lo que hay en la nube, quita los duplicados y vuelve a
-// subir la lista limpia (subirOrdenesEnLotes primero vacía la hoja Ordenes).
-function repararDuplicadosNube(){
-  descargarOrdenesDesdeSheets(function(){
-    var quitados = quitarDuplicadosLocales();
-    if(quitados===0 && !confirm('No se encontraron duplicados en este equipo. ¿Igual quieres limpiar y volver a subir la lista a la nube?')) return;
-    if(!confirm('Quedarán '+paquetes.length+' órdenes ('+quitados+' duplicadas quitadas). Se va a vaciar la hoja Ordenes de la nube y subir esta lista limpia. ¿Continuar?')) return;
-    guardarStorage(); actualizarResumen(); renderPaquetes();
-    var status = document.getElementById('import-status');
-    subirOrdenesEnLotes(paquetes, function(a,b){
-      if(status){ status.style.color='var(--azul2)'; status.textContent='☁️ Subiendo lista limpia... lote '+a+' de '+b; }
-    }, function(){
-      if(status){ status.style.color='var(--verde)'; status.textContent='✅ Listo: '+paquetes.length+' órdenes, sin duplicados, en la nube.'; }
-      renderPaquetes();
-    });
-  });
-}
-
 function descargarOrdenesDesdeSheets(onFin){
   var status = document.getElementById('import-status');
   if(status){ status.style.color='var(--azul2)'; status.textContent = '⬇️ Descargando órdenes desde la nube...'; }
@@ -1440,16 +1391,10 @@ function descargarOrdenesDesdeSheets(onFin){
     var localCount = {};
     paquetes.forEach(function(p){ localCount[p.codigo] = (localCount[p.codigo]||0) + 1; });
     var vistosEnSheets = {};
-    var idsVistosNube = {};   // AGREGADO 09-10-2026: la misma fila (mismo id) repetida en Sheets = duplicado, no multibulto
     rows.slice(1).forEach(function(row){
       if(!row[1]) return; // sin código, skip
       var codigo = String(row[1]).trim();
       if(!codigo) return;
-      if(row[0]!==undefined && row[0]!==null && row[0]!==''){
-        var idNube = String(row[0]);
-        if(idsVistosNube[idNube]) return;   // fila duplicada (mismo id): se ignora
-        idsVistosNube[idNube] = true;
-      }
       vistosEnSheets[codigo] = (vistosEnSheets[codigo]||0) + 1;
       var yaLocal = localCount[codigo] || 0;
       var sinAgruparNube = row[16] === true || row[16] === 'true';
@@ -1531,8 +1476,7 @@ function descargarOrdenesDesdeSheets(onFin){
       });
       importadas++;
     });
-    var quitadosDup = quitarDuplicadosLocales();
-    if(importadas > 0 || actualizadas > 0 || quitadosDup > 0){
+    if(importadas > 0 || actualizadas > 0){
       guardarStorage();
       actualizarResumen();
       renderPaquetes();
@@ -4396,11 +4340,12 @@ function armarLinkWhatsApp(p){
   // justo mañana, se dice "mañana" en vez del nombre del día — a pedido de Kathy,
   // esto NO aplica a las demás comunas, que siempre muestran el día puntual.
   var esOsorno = normalizarComuna(p.comuna) === normalizarComuna('Osorno');
-  var fraseProximaRuta;
-  // 02-10-2026: el día va en negrita y cursiva (*_..._*), a pedido de Kathy.
-  if(proximaRuta && esOsorno && proximaRuta.esManana) fraseProximaRuta = '*_mañana._*';
-  else if(proximaRuta) fraseProximaRuta = 'el *_'+proximaRuta.dia+'._*';
-  else fraseProximaRuta = 'en la próxima fecha que tengamos ruta agendada por esa zona.';
+  // 11-10-2026: plantillas unificadas con las de WhatsApp API (Meta). rutaTxt = lo que va en {{4}}:
+  // "mañana" (solo Osorno, si es el día siguiente) o "el <Día>"; si no hay día calculado, frase de respaldo.
+  var rutaTxt;
+  if(proximaRuta && esOsorno && proximaRuta.esManana) rutaTxt = 'mañana';
+  else if(proximaRuta) rutaTxt = 'el '+proximaRuta.dia;
+  else rutaTxt = 'la próxima fecha que tengamos ruta agendada por esa zona';
   // REINTENTO: si esta orden ya venía marcada como repetida de un día anterior
   // (mismo detector que usa la tarjeta y el modal — p.repetidoDeHistorial / p.intentos /
   // p.intentosAgotados, ver renderPaquetes), se manda un mensaje parecido pero que
@@ -4411,39 +4356,40 @@ function armarLinkWhatsApp(p){
   // ni la palabra "intento".
   var esReintento = !!p.repetidoDeHistorial;
   var mensajeWa;
-  // AGREGADO 02-10-2026: RETIRO de producto — el mensaje avisa que pasamos a RETIRAR
-  // (no a entregar) y pide tener el producto listo. Si es un reintento, dice "nuevamente".
+  var saludoIni = 'Hola, '+saludoSegunHora()+', ';
+  var llamada = '*Le llamaremos al estar cerca, agradecemos responder la llamada*.📲';
+  var cierre = '¡Muchas gracias! Nos vemos pronto ☺️';
+  // Intercambio: se junta con la frase de la llamada en el mismo párrafo (igual que la plantilla).
+  var bloqueLlamada = p.intercambio
+    ? '*Es un intercambio:* al entregar el producto nuevo, retiraremos el que desea cambiar. Por favor tenerlo preparado y embalado para su retiro. '+llamada
+    : llamada;
+  var impIni = '*Importante:* no hay horario fijo, depende de la ruta. Si no logramos contacto o no hay nadie para ';
   if(p.esRetiro){
-    mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos *Muspel* y por encargo de Alas, *hoy pasaremos '+(esReintento?'nuevamente ':'')+'a retirar el producto de '+marcaPedido+'* que usted solicitó devolver.\n\n'
-      + '*Le pedimos tener el producto listo y bien embalado* (en su caja o bolsa original, si es posible) para entregárselo a nuestro repartidor.\n\n'
-      + '*Cuando estemos próximos a su domicilio, le llamaremos.* Agradecemos que pueda atender nuestra llamada.\n\n'
-      + '*Importante:* *No hay horario especifico. Los retiros se realizan durante el día y según el recorrido de la ruta*, por lo que si no logramos comunicarnos con usted o no hay alguien disponible para entregar el producto, reagendaremos el retiro para nuestra próxima ruta por la localidad, '+fraseProximaRuta+'\n\n'
-      + '¡Muchas gracias! Nos vemos pronto.';
-    return 'https://wa.me/'+telLimpio+'?text='+encodeURIComponent(mensajeWa);
-  }
-  // INTERCAMBIO: mismo mensaje de entrega, más un aviso de que se retira el producto a cambiar.
-  var fraseIntercambio = p.intercambio
-    ? '*Este pedido es un intercambio:* al entregarle el producto nuevo, *retiraremos el producto a cambiar. Le pedimos tenerlo listo y bien embalado.*\n\n'
-    : '';
-  if(esReintento && p.intentosAgotados){
-    // Ya se agotaron los intentos del mes — sin decirle al cliente el número, se le
-    // avisa igual que esta es prácticamente la última oportunidad antes de que el
-    // pedido vuelva a la marca (esa parte sí es información útil para el cliente).
-    mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos *Muspel* y hoy intentaremos nuevamente entregar su pedido de *'+marcaPedido+'*.\n\n'
-      + fraseIntercambio + '*Cuando estemos próximos a su domicilio, le llamaremos* para que pueda recibirlo. Le agradecemos mucho que pueda atender nuestra llamada.\n\n'
-      + '*Importante:* Si en este intento tampoco logramos comunicarnos con usted o no hay alguien disponible para recibir, su pedido quedará sin entregar y será devuelto a *'+marcaPedido+'*.\n\n'
-      + 'Esperamos poder concretar la entrega hoy.\n\n'
-      + '¡Muchas gracias! Nos vemos pronto.';
+    mensajeWa = saludoIni+saludoNombre+'. Somos *Muspel* y por encargo de Alas, *hoy pasaremos '+(esReintento?'nuevamente ':'')+'a retirar* el producto de *'+marcaPedido+'* que solicitó devolver.📦\n\n'
+      + 'Por favor tenerlo preparado y embalado para su retiro. '+llamada+'\n\n'
+      + cierre+'\n\n'
+      + impIni+'entregar el producto, reagendamos el retiro para nuestra próxima ruta por su localidad: *'+rutaTxt+'*.';
+  } else if(esReintento && p.intentosAgotados){
+    // Último intento: {{4}} = la marca/tienda a la que se devuelve.
+    mensajeWa = saludoIni+saludoNombre+'. Somos *Muspel* y *hoy intentaremos nuevamente entregar* su pedido de *'+marcaPedido+'*.🚐\n\n'
+      + bloqueLlamada+'\n\n'
+      + 'Esperamos concretar la entrega hoy. ¡Muchas gracias! ☺️\n\n'
+      + '*Importante:* si en este intento tampoco logramos contacto o no hay nadie para recibir, su pedido no se entregará y será devuelto a *'+marcaPedido+'*.';
   } else if(esReintento){
-    mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos *Muspel* y hoy estaremos nuevamente realizando la entrega de su pedido de *'+marcaPedido+'*.\n\n'
-      + fraseIntercambio + '*Cuando estemos próximos a su domicilio, le llamaremos* para que pueda recibirlo. Le agradecemos que pueda atender nuestra llamada.\n\n'
-      + '*Importante:* *No hay horario especifico. Las entregas se realizan durante el día y según el recorrido de la ruta*, por lo que si no logramos comunicarnos con usted o no hay alguien disponible para recibir el pedido, reagendaremos la entrega para nuestra próxima ruta por la localidad, '+fraseProximaRuta+'\n\n'
-      + '¡Muchas gracias! Nos vemos pronto.';
+    mensajeWa = saludoIni+saludoNombre+'. Somos *Muspel* y *hoy intentaremos nuevamente entregar* su pedido de *'+marcaPedido+'*.🚐\n\n'
+      + bloqueLlamada+'\n\n'
+      + cierre+'\n\n'
+      + impIni+'recibir, reagendamos para nuestra próxima ruta por su localidad: *'+rutaTxt+'*.';
+  } else if(p.intercambio){
+    mensajeWa = saludoIni+saludoNombre+'. Somos *Muspel* y por encargo de Alas, *hoy entregaremos* su pedido de *'+marcaPedido+'*.🚐\n\n'
+      + bloqueLlamada+'\n\n'
+      + cierre+'\n\n'
+      + impIni+'recibir, reagendamos para nuestra próxima ruta por su localidad: *'+rutaTxt+'*.';
   } else {
-    mensajeWa = 'Hola, '+saludoSegunHora()+', *'+saludoNombre+'*. Somos *Muspel* y por encargo de Alas, hoy estaremos realizando la entrega de su pedido de *'+marcaPedido+'*.\n\n'
-      + fraseIntercambio + '*Cuando estemos próximos a su domicilio, le llamaremos* para que pueda recibirlo. Le agradecemos que pueda atender nuestra llamada.\n\n'
-      + '*Importante:* *No hay horario especifico. Las entregas se realizan durante el día y según el recorrido de la ruta*, por lo que si no logramos comunicarnos con usted o no hay alguien disponible para recibir el pedido, reagendaremos la entrega para nuestra próxima ruta por la localidad, '+fraseProximaRuta+'\n\n'
-      + '¡Muchas gracias! Nos vemos pronto.';
+    mensajeWa = saludoIni+'*'+saludoNombre+'*. Somos *Muspel* y por encargo de Alas, *hoy entregaremos* su pedido de *'+marcaPedido+'*.🚐\n\n'
+      + '*Cuando estemos cerca le llamaremos*. Agradecemos que pueda atender nuestra llamada.📲\n\n'
+      + '¡Muchas gracias! Nos vemos pronto.☺️\n\n'
+      + '*Importante:* *No hay horario específico. Las entregas son de acuerdo a la ruta*. Si no logramos contacto o no hay nadie para recibir, reagendamos para nuestra próxima ruta por su localidad, *_'+rutaTxt+'_*.';
   }
   return 'https://wa.me/'+telLimpio+'?text='+encodeURIComponent(mensajeWa);
 }
