@@ -4363,25 +4363,25 @@ function armarLinkWhatsApp(p){
   var bloqueLlamada = p.intercambio
     ? '*Es un intercambio:* al entregar el producto nuevo, retiraremos el que desea cambiar. Por favor tenerlo preparado y embalado para su retiro. '+llamada
     : llamada;
-  var impIni = '*Importante:* no hay horario fijo, depende de la ruta. Si no logramos contacto o no hay nadie para ';
+  var impIni = '*Importante: no hay horario fijo, depende de la ruta*. Si no logramos contacto o no hay nadie para ';
   if(p.esRetiro){
-    mensajeWa = saludoIni+saludoNombre+'. Somos *Muspel* y por encargo de Alas, *hoy pasaremos '+(esReintento?'nuevamente ':'')+'a retirar* el producto de *'+marcaPedido+'* que solicitó devolver.\n\n'
+    mensajeWa = saludoIni+'*'+saludoNombre+'*. Somos *Muspel* y por encargo de Alas, *hoy pasaremos '+(esReintento?'nuevamente ':'')+'a retirar* el producto de *'+marcaPedido+'* que solicitó devolver.\n\n'
       + 'Por favor tenerlo preparado y embalado para su retiro. '+llamada+'\n\n'
       + cierre+'\n\n'
       + impIni+'entregar el producto, reagendamos el retiro para nuestra próxima ruta por su localidad: *'+rutaTxt+'*.';
   } else if(esReintento && p.intentosAgotados){
     // Último intento: {{4}} = la marca/tienda a la que se devuelve.
-    mensajeWa = saludoIni+saludoNombre+'. Somos *Muspel* y *hoy intentaremos nuevamente entregar* su pedido de *'+marcaPedido+'*.\n\n'
+    mensajeWa = saludoIni+'*'+saludoNombre+'*. Somos *Muspel* y *hoy intentaremos nuevamente entregar* su pedido de *'+marcaPedido+'*.\n\n'
       + bloqueLlamada+'\n\n'
       + 'Esperamos concretar la entrega hoy. ¡Muchas gracias!\n\n'
       + '*Importante:* si en este intento tampoco logramos contacto o no hay nadie para recibir, su pedido no se entregará y será devuelto a *'+marcaPedido+'*.';
   } else if(esReintento){
-    mensajeWa = saludoIni+saludoNombre+'. Somos *Muspel* y *hoy intentaremos nuevamente entregar* su pedido de *'+marcaPedido+'*.\n\n'
+    mensajeWa = saludoIni+'*'+saludoNombre+'*. Somos *Muspel* y *hoy intentaremos nuevamente entregar* su pedido de *'+marcaPedido+'*.\n\n'
       + bloqueLlamada+'\n\n'
       + cierre+'\n\n'
       + impIni+'recibir, reagendamos para nuestra próxima ruta por su localidad: *'+rutaTxt+'*.';
   } else if(p.intercambio){
-    mensajeWa = saludoIni+saludoNombre+'. Somos *Muspel* y por encargo de Alas, *hoy entregaremos* su pedido de *'+marcaPedido+'*.\n\n'
+    mensajeWa = saludoIni+'*'+saludoNombre+'*. Somos *Muspel* y por encargo de Alas, *hoy entregaremos* su pedido de *'+marcaPedido+'*.\n\n'
       + bloqueLlamada+'\n\n'
       + cierre+'\n\n'
       + impIni+'recibir, reagendamos para nuestra próxima ruta por su localidad: *'+rutaTxt+'*.';
