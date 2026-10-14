@@ -1324,7 +1324,16 @@ function subirOrdenesEnLotes(listaOrdenes, onProgreso, onFin){
       return;
     }
     var inicio = loteActual * TAMANO_LOTE;
-    var lote = listaOrdenes.slice(inicio, inicio + TAMANO_LOTE);
+    enviarLote(listaOrdenes.slice(inicio, inicio + TAMANO_LOTE));
+  }
+
+  function avanzarLote(){
+    loteActual++;
+    if(onProgreso) onProgreso(loteActual, totalLotes);
+    setTimeout(subirSiguienteLote, 300); // pausa entre lotes para no saturar
+  }
+
+  function enviarLote(lote){
     var fecha = new Date().toLocaleDateString('es-CL');
     fetch(SHEETS_URL, {
       method:'POST',
@@ -1341,17 +1350,30 @@ function subirOrdenesEnLotes(listaOrdenes, onProgreso, onFin){
     }).then(function(r){ return r.json(); }).then(function(resp){
       if(resp && resp.status === 'error'){
         // El servidor recibió la petición pero el script falló al procesarla — no lo
-        // damos por subido, reintentamos este mismo lote en vez de seguir con el siguiente.
-        setTimeout(subirSiguienteLote, 2000);
+        // damos por subido: se revisa qué quedó guardado y se reintenta solo lo que falta.
+        reintentarLote(lote);
         return;
       }
-      loteActual++;
-      if(onProgreso) onProgreso(loteActual, totalLotes);
-      setTimeout(subirSiguienteLote, 300); // pausa entre lotes para no saturar
+      avanzarLote();
     }).catch(function(){
-      // reintenta este lote en 2 segundos si falla (ej: sin internet, o respuesta no-JSON)
-      setTimeout(subirSiguienteLote, 2000);
+      // Falla de conexión o respuesta no-JSON: puede que la hoja SÍ haya guardado el lote.
+      reintentarLote(lote);
     });
+  }
+
+  // CORREGIDO 14-10-2026: antes el reintento reenviaba el lote completo, y si la hoja ya lo
+  // había guardado (respuesta lenta o no-JSON) las órdenes quedaban 2 o 3 veces idénticas.
+  // Ahora, antes de reintentar, se lee la hoja y se envían solo las órdenes (por id) que faltan.
+  function reintentarLote(lote){
+    setTimeout(function(){
+      fetch(SHEETS_URL + '?tipo=ordenes').then(function(r){ return r.json(); }).then(function(rows){
+        var ya = {};
+        (rows || []).slice(1).forEach(function(r){ if(r && r[0] !== '' && r[0] != null) ya[String(r[0])] = true; });
+        var faltan = lote.filter(function(o){ return !ya[String(o.id)]; });
+        if(faltan.length === 0){ avanzarLote(); }
+        else { enviarLote(faltan); }
+      }).catch(function(){ reintentarLote(lote); });
+    }, 2000);
   }
 }
 
