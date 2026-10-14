@@ -140,6 +140,26 @@
       <div class="panel-nota">Paquetes = lo entregado físicamente; órdenes = lo que se paga (un multibulto cuenta como 1). Si un día se cerró dos veces, sale sumado en una sola fila. Los montos quedan ocultos hasta que toques el ojo (también oculta los de "Cuánto facturar").</div>
       <div id="detalle-facturar"></div>
     </div>
+    <div class="panel plata-oculta" id="panel-pago-repartidor">
+      <div class="titulo-seccion" style="margin-top:0;">🧮 Pago a repartidor por boleta de honorarios (ej. Luchín)</div>
+      <div class="panel-nota">Ingresa lo acordado y te calcula cuánto debe ir en la boleta y cuánta retención se descuenta. Los montos se ocultan/muestran con el 👁 de arriba.</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:10px;">
+        <label style="font-size:0.78rem;font-weight:700;">Pago líquido acordado ($)<input id="pg-liq" type="number" value="500000" oninput="calcPagoRep()" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;"></label>
+        <label style="font-size:0.78rem;font-weight:700;">Bono BRUTO total ($)<input id="pg-bono" type="number" value="130000" oninput="calcPagoRep()" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;"></label>
+        <label style="font-size:0.78rem;font-weight:700;">Retención honorarios (%)<input id="pg-ret" type="number" step="0.01" value="15.25" oninput="calcPagoRep()" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;"></label>
+      </div>
+      <div id="pg-resultado"></div>
+      <div class="titulo-seccion" style="margin-top:14px;">📦 Bono según órdenes efectivamente entregadas</div>
+      <div class="panel-nota">Cuenta las órdenes entregadas por el repartidor en el rango (un multibulto cuenta 1; no cuenta retiros). El bono se paga por orden; los paquetes salen solo de referencia. Usa los días ya cerrados y lo que quedó asignado a OP. Luchín en la OPS.</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:10px;">
+        <label style="font-size:0.78rem;font-weight:700;">Desde<input id="pg-desde" type="date" value="2026-10-06" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;"></label>
+        <label style="font-size:0.78rem;font-weight:700;">Hasta<input id="pg-hasta" type="date" value="2026-10-17" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;"></label>
+        <label style="font-size:0.78rem;font-weight:700;">Repartidor<select id="pg-rep" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;"><option value="op2">OP. Luchín</option><option value="cristian">OP. Cristian</option></select></label>
+        <label style="font-size:0.78rem;font-weight:700;">Bono bruto por orden ($)<input id="pg-porord" type="number" value="500" placeholder="ej. 500" oninput="pintarBonoOrdenes()" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;"></label>
+      </div>
+      <button onclick="contarEntregasRep()" style="background:var(--azul);color:#fff;border:0;border-radius:10px;padding:10px 16px;font-weight:700;cursor:pointer;">Contar entregas</button>
+      <div id="pg-ordenes" style="margin-top:10px;"></div>
+    </div>
     <div class="panel">
       <div class="titulo-seccion" style="margin-top:0;">🏦 Flujo de Caja Real — cuándo se mueve la plata de verdad</div>
       <div class="panel-nota">No es lo mismo que "Cuánto facturar" de arriba (eso es el mes de la orden). Acá se ve CUÁNDO entra y sale la plata realmente: los costos usan la fecha real de pago (columna "Fecha" en Costos), y el ingreso se corre 2 meses (ALAS factura 1 mes después y paga al mes siguiente de esa factura) — julio se paga en septiembre, agosto se paga en octubre, y así sucesivamente cada mes por separado.</div>
@@ -461,6 +481,7 @@ async function cargarDatos(){
       const f = String(folio).trim();
       return f.replace(/-\d{1,2}(\/\d{1,2})?$/, '').trim() || f;
     }
+    window._detalleRaw = rDetalle||[];
     const porCodigo = {};
     (rDetalle||[]).slice(1).forEach(row => {
       const fecha = row[0], codigo = row[1], folio = row[2], nombre = row[3], estado = row[7], motivo = row[8], b2b = row[9];
@@ -800,7 +821,7 @@ function pintarFlujoReal(){
 
 function toggleOjoPlata(){
   const ocultar = !document.getElementById('panel-facturar-dia').classList.contains('plata-oculta');
-  ['panel-facturar-dia','panel-facturar-mes'].forEach(id => document.getElementById(id).classList.toggle('plata-oculta', ocultar));
+  ['panel-facturar-dia','panel-facturar-mes','panel-pago-repartidor'].forEach(id => document.getElementById(id).classList.toggle('plata-oculta', ocultar));
   document.getElementById('ojo-plata').textContent = ocultar ? '👁 Ver montos' : '🙈 Ocultar montos';
 }
 const abiertoFact = {};
@@ -835,6 +856,77 @@ function pintarDetalleFacturar(){
   cont.innerHTML = h;
 }
 
+
+// ---- Pago a repartidor (boleta de honorarios) ----
+function _pesoPg(n){ return '$' + Math.round(n||0).toLocaleString('es-CL'); }
+function calcPagoRep(){
+  const liq = Number(document.getElementById('pg-liq').value)||0;
+  const bono = Number(document.getElementById('pg-bono').value)||0;
+  const r = (Number(document.getElementById('pg-ret').value)||0)/100;
+  const f = 1 - r;
+  const bolLiq = liq / f, retLiq = bolLiq - liq;
+  const retBono = bono * r, bonoLiq = bono - retBono;
+  const bolTot = bolLiq + bono, retTot = retLiq + retBono, liqTot = liq + bonoLiq;
+  const fila = (a,b,c,d,neg) => `<tr${neg?' style="background:#1e293b;color:#fff;font-weight:800;"':''}><td>${a}</td><td class="num plata">${b}</td><td class="num plata">${c}</td><td class="num plata">${d}</td></tr>`;
+  document.getElementById('pg-resultado').innerHTML =
+    '<table style="font-size:0.82rem;"><thead><tr><th></th><th class="num">Boleta (bruto)</th><th class="num">Retención</th><th class="num">Líquido a recibir</th></tr></thead><tbody>' +
+    fila('Pago base', _pesoPg(bolLiq), _pesoPg(retLiq), _pesoPg(liq)) +
+    fila('Bono (bruto)', _pesoPg(bono), _pesoPg(retBono), _pesoPg(bonoLiq)) +
+    fila('TOTAL', _pesoPg(bolTot), _pesoPg(retTot), _pesoPg(liqTot), true) + '</tbody></table>' +
+    '<div class="panel-nota" style="margin-top:6px;">La retención (' + (r*100).toFixed(2) + '%) la paga el repartidor al SII a través de la boleta; Muspel declara y paga esa retención. Confirma el porcentaje vigente con el SII.</div>';
+  pintarBonoOrdenes();
+}
+let _pgOrdenes = null;
+async function contarEntregasRep(){
+  const box = document.getElementById('pg-ordenes');
+  box.innerHTML = '<div class="panel-nota">Buscando…</div>';
+  try{
+    const rep = document.getElementById('pg-rep').value;
+    const d = document.getElementById('pg-desde').value.replace(/-/g,'');
+    const h = document.getElementById('pg-hasta').value.replace(/-/g,'');
+    const ra = await fetch(SHEETS_URL + '?tipo=asignaciones').then(r=>r.json());
+    const asg = {};
+    ((ra && ra.asignaciones) || []).forEach(a => {
+      if(!a.codigo) return;
+      const prev = asg[a.codigo];
+      if(!prev || Number(a.ts||0) >= Number(prev.ts||0)) asg[a.codigo] = a;
+    });
+    const filas = (window._detalleRaw||[]).slice(1);
+    const ordenes = {}, porDia = {}, paqs = {};
+    filas.forEach(row => {
+      const m = String(row[0]||'').trim().match(/^(\d{1,2})-(\d{1,2})-(\d{4})/); if(!m) return;
+      const k = m[3] + m[2].padStart(2,'0') + m[1].padStart(2,'0');
+      if(k < d || k > h) return;
+      if(String(row[7]||'').toLowerCase() !== 'entregado') return;
+      if(String(row[10]||'').trim().toLowerCase() === 'si') return;
+      const a = asg[row[1]]; if(!a || a.repartidor !== rep) return;
+      const clave = (String(row[2]||'').trim().replace(/-\d{1,2}(\/\d{1,2})?$/, '') || row[1]);
+      if(!paqs[row[1]]){ paqs[row[1]] = k; porDia[k] = porDia[k] || {o:0,p:0}; porDia[k].p++; }
+      if(ordenes[clave]) return;
+      ordenes[clave] = k;
+      porDia[k].o++;
+    });
+    _pgOrdenes = {total: Object.keys(ordenes).length, paq: Object.keys(paqs).length, porDia};
+    pintarBonoOrdenes();
+  }catch(e){ box.innerHTML = '<div class="panel-nota" style="color:#b91c1c;">No pude leer los datos. Intenta de nuevo.</div>'; }
+}
+function usarBonoEnCalculo(v){ document.getElementById('pg-bono').value = Math.round(v); calcPagoRep(); }
+function pintarBonoOrdenes(){
+  const box = document.getElementById('pg-ordenes'); if(!box || !_pgOrdenes) return;
+  const n = _pgOrdenes.total, pq = _pgOrdenes.paq;
+  const r = (Number(document.getElementById('pg-ret').value)||0)/100;
+  const tarifa = Number(document.getElementById('pg-porord').value)||0;
+  const dias = Object.keys(_pgOrdenes.porDia).sort();
+  const bonoTot = tarifa * n;
+  let h = `<div class="grid"><div class="card"><div class="card-label">Órdenes entregadas (multibulto = 1)</div><div class="card-value">${n}</div></div><div class="card"><div class="card-label">Paquetes (referencia)</div><div class="card-value">${pq}</div></div>`;
+  if(n && tarifa) h += `<div class="card"><div class="card-label">Bono: ${_pesoPg(tarifa)} × ${n} órdenes</div><div class="card-value plata">${_pesoPg(bonoTot)} <span style="font-size:0.7rem;">bruto · líquido ${_pesoPg(bonoTot*(1-r))}</span></div></div>`;
+  h += '</div>';
+  if(n && tarifa) h += `<button onclick="usarBonoEnCalculo(${bonoTot})" style="margin:6px 0;background:#16a34a;color:#fff;border:0;border-radius:10px;padding:9px 14px;font-weight:700;cursor:pointer;">Usar ${_pesoPg(bonoTot)} como bono en la boleta</button>`;
+  if(dias.length) h += '<div class="panel-nota">Órdenes por día: ' + dias.map(k => k.slice(6)+'-'+k.slice(4,6)+': '+_pgOrdenes.porDia[k].o).join(' · ') + '</div>';
+  if(!pq) h += '<div class="panel-nota">No encontré entregas en ese rango. Revisa que los días estén cerrados y que las órdenes estén asignadas a ese operativo en la OPS.</div>';
+  box.innerHTML = h;
+}
+
 function pintarFinanzas(mesTexto){
   const delMes = cierres.filter(c => perteneceAlMes(c.fecha, mesTexto));
   const ingresoMes = ingresoNetoMes(mesTexto, delMes.reduce((a,c)=>a+c.ingresos,0));
@@ -842,6 +934,7 @@ function pintarFinanzas(mesTexto){
   const costosMes = costosDelMes.reduce((a,c)=>a+c.monto,0);
   const flujo = ingresoMes - costosMes;
 
+  calcPagoRep();
   document.getElementById('fin-ingreso').textContent = formatoPesos(ingresoMes);
   document.getElementById('fin-costos').textContent = formatoPesos(costosMes);
   const flujoEl = document.getElementById('fin-flujo');
