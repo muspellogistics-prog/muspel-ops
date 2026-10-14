@@ -35,6 +35,7 @@
   .card-sub{font-size:0.72rem;color:var(--gris);margin-top:4px;}
   .titulo-seccion{font-size:1.05rem;font-weight:800;color:var(--azul);margin:22px 0 10px;display:flex;align-items:center;gap:8px;}
   .panel{background:#fff;border-radius:12px;padding:18px;box-shadow:var(--sombra);margin-bottom:16px;}
+  .plata-oculta .plata,.plata-oculta #tabla-facturacion td.num:nth-child(n+3){filter:blur(7px);user-select:none;}
   .panel-nota{font-size:0.78rem;color:var(--gris);margin-bottom:12px;line-height:1.5;}
   table{width:100%;border-collapse:collapse;font-size:0.84rem;}
   th{background:var(--azul);color:#fff;text-align:left;padding:8px 10px;font-size:0.76rem;text-transform:uppercase;letter-spacing:0.3px;}
@@ -114,6 +115,7 @@
       <div class="titulo-seccion" style="margin-top:0;">Últimos días operados</div>
       <table><thead><tr><th>Fecha</th><th class="num">Paquetes</th><th class="num">Órdenes</th><th class="num">Entregadas</th><th class="num">Entreg. WOM</th><th class="num">Efectividad</th><th class="num">Retornos</th><th class="num">Devueltas a ALAS</th><th class="num">Órdenes WOM</th></tr></thead><tbody id="tabla-dias"></tbody></table>
     </div>
+
   </div>
 
   <!-- FINANZAS -->
@@ -125,10 +127,18 @@
       <div class="card"><div class="card-label">Costos del mes</div><div class="card-value rojo" id="fin-costos">—</div></div>
       <div class="card"><div class="card-label">Flujo de caja del mes</div><div class="card-value" id="fin-flujo">—</div></div>
     </div>
-    <div class="panel">
+    <div class="panel plata-oculta" id="panel-facturar-mes">
       <div class="titulo-seccion" style="margin-top:0;">💵 Cuánto facturar — por mes, por separado</div>
       <div class="panel-nota">Ingreso neto real de cada mes (según Cierres), y el total a facturar a ALAS con IVA. Cada mes queda aparte, no acumulado — usa esta tabla para cruzar julio, agosto y los meses que sigan contra la liquidación que mande ALAS.</div>
       <table><thead><tr><th>Mes</th><th class="num">Órdenes entregadas</th><th class="num">Ingreso Neto</th><th class="num">Total a facturar (+IVA)</th></tr></thead><tbody id="tabla-facturacion"></tbody></table>
+    </div>
+    <div class="panel plata-oculta" id="panel-facturar-dia">
+      <div class="titulo-seccion" style="margin-top:0;justify-content:space-between;">
+        <span>🧾 Detalle por día para facturar</span>
+        <button id="ojo-plata" onclick="toggleOjoPlata()" style="border:1px solid #cbd5e1;background:#f1f5f9;color:#1e3a5f;border-radius:20px;padding:6px 12px;font-size:0.8rem;font-weight:700;cursor:pointer;">👁 Ver montos</button>
+      </div>
+      <div class="panel-nota">Paquetes = lo entregado físicamente; órdenes = lo que se paga (un multibulto cuenta como 1). Si un día se cerró dos veces, sale sumado en una sola fila. Los montos quedan ocultos hasta que toques el ojo (también oculta los de "Cuánto facturar").</div>
+      <div id="detalle-facturar"></div>
     </div>
     <div class="panel">
       <div class="titulo-seccion" style="margin-top:0;">🏦 Flujo de Caja Real — cuándo se mueve la plata de verdad</div>
@@ -367,6 +377,25 @@ function perteneceAlMes(fechaTexto, mesTexto){
   return (nombreMes + ' ' + partes[2]) === mesTexto;
 }
 
+// Cierres repetidos del mismo día (ej. "11-10-2026_2" o "12-10-2026.1": 2 cierres distintos
+// el mismo día). Antes se leían como otro mes ("octubre 2026_2") y quedaban fuera de los
+// totales del mes. Ahora se juntan en UNA fila por día, sumando sus cifras.
+function juntarCierresPorDia(arr){
+  const ultimoPorTexto = {};
+  arr.forEach(c => { const k = String(c.fecha||'').trim(); if(!ultimoPorTexto[k] || c.ts > ultimoPorTexto[k].ts) ultimoPorTexto[k] = c; });
+  const campos = ['total','entregados','devueltos','daniados','pendientes','totalOrdenes','entregadosOrdenes','ingresos','totalOrdenesNoWom','entregadosOrdenesNoWom','ordenesWom','entregadosWom','ingresoNoWom','ingresoWom','retornos'];
+  const porDia = {}, orden = [];
+  Object.keys(ultimoPorTexto).forEach(k => {
+    const c = ultimoPorTexto[k];
+    const base = formatoFechaLegible(k).replace(/^(\d{1,2}-\d{1,2}-\d{4})[_.]\d+$/, '$1');
+    if(!porDia[base]){ porDia[base] = Object.assign({}, c, {fecha: base, _n:1, _ef: c.efectividad*c.totalOrdenes}); orden.push(base); }
+    else { const a = porDia[base]; campos.forEach(f => { a[f] += c[f]; }); a._ef += c.efectividad*c.totalOrdenes; a.ts = Math.max(a.ts, c.ts); a._n++; }
+  });
+  const clave = f => { const p = String(f).split('-'); return p.length===3 ? p[2]+p[1].padStart(2,'0')+p[0].padStart(2,'0') : '00000000'; };
+  return orden.map(k => { const a = porDia[k]; if(a._n>1) a.efectividad = a.totalOrdenes ? Math.round(a._ef/a.totalOrdenes) : 0; delete a._ef; return a; })
+              .sort((x,y) => clave(x.fecha) < clave(y.fecha) ? -1 : (clave(x.fecha) > clave(y.fecha) ? 1 : 0));
+}
+
 async function cargarDatos(){
   const mesTexto = mesActualTexto();
   document.getElementById('header-fecha').textContent = 'Mes en curso: ' + mesTexto;
@@ -397,6 +426,7 @@ async function cargarDatos(){
       // mezclados dentro de "devueltos" y no se pueden separar retroactivamente).
       retornos: Number(row[19])||0
     }));
+    cierres = juntarCierresPorDia(cierres);
     costos = (rCostos||[]).slice(1).map(row => ({
       fecha: row[0], mes: mesComoTexto(row[1]), categoria: row[2], descripcion: row[3],
       monto: Number(row[4])||0, fijo: row[5]
@@ -768,6 +798,43 @@ function pintarFlujoReal(){
   calcularRetiroSocios();
 }
 
+function toggleOjoPlata(){
+  const ocultar = !document.getElementById('panel-facturar-dia').classList.contains('plata-oculta');
+  ['panel-facturar-dia','panel-facturar-mes'].forEach(id => document.getElementById(id).classList.toggle('plata-oculta', ocultar));
+  document.getElementById('ojo-plata').textContent = ocultar ? '👁 Ver montos' : '🙈 Ocultar montos';
+}
+const abiertoFact = {};
+function toggleMesFact(k){ abiertoFact[k] = !abiertoFact[k]; pintarDetalleFacturar(); }
+function pintarDetalleFacturar(){
+  const cont = document.getElementById('detalle-facturar'); if(!cont) return;
+  if(!cierres.length){ cont.innerHTML = '<div class="panel-nota">Aún no hay días cerrados.</div>'; return; }
+  const NOM = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const IVA_ = 0.19, peso = n => '$' + Math.round(n||0).toLocaleString('es-CL');
+  const meses = {}, orden = [];
+  cierres.forEach(c => {
+    const p = formatoFechaLegible(c.fecha).split('-'); if(p.length!==3) return;
+    const k = p[2] + p[1].padStart(2,'0');
+    if(!meses[k]){ meses[k] = {nombre: NOM[parseInt(p[1],10)-1] + ' ' + p[2], dias:[], paq:0, ord:0, ing:0}; orden.push(k); }
+    const m = meses[k]; m.dias.push(c); m.paq += c.entregados; m.ord += c.entregadosOrdenes; m.ing += c.ingresos;
+  });
+  orden.sort().reverse();
+  const hoy = new Date(), kHoy = String(hoy.getFullYear()) + String(hoy.getMonth()+1).padStart(2,'0');
+  let h = '<table style="font-size:0.8rem;"><thead><tr><th>Día</th><th class="num">Paq.</th><th class="num">Órd.</th><th class="num">Neto</th><th class="num">+IVA</th></tr></thead><tbody>';
+  let tp=0, to=0, ti=0;
+  orden.forEach(k => {
+    if(abiertoFact[k] === undefined) abiertoFact[k] = (k === kHoy);
+    const m = meses[k], ab = abiertoFact[k];
+    tp += m.paq; to += m.ord; ti += m.ing;
+    h += `<tr onclick="toggleMesFact('${k}')" style="background:var(--azul);color:#fff;cursor:pointer;"><td colspan="5" style="padding:7px 8px;font-weight:700;text-transform:capitalize;">${ab?'▼':'▶'} ${m.nombre} — ${m.dias.length} día${m.dias.length!==1?'s':''}</td></tr>`;
+    if(ab) m.dias.slice().reverse().forEach(c => {
+      h += `<tr><td>${formatoFechaLegible(c.fecha)}</td><td class="num">${c.entregados}</td><td class="num">${c.entregadosOrdenes}</td><td class="num plata verde-txt">${peso(c.ingresos)}</td><td class="num plata verde-txt">${peso(c.ingresos*(1+IVA_))}</td></tr>`;
+    });
+    h += `<tr style="background:#f4f6fa;font-weight:800;"><td style="text-transform:capitalize;">Total ${m.nombre}</td><td class="num">${m.paq}</td><td class="num">${m.ord}</td><td class="num plata">${peso(m.ing)}</td><td class="num plata">${peso(m.ing*(1+IVA_))}</td></tr>`;
+  });
+  h += `<tr style="background:#1e293b;color:#fff;font-weight:800;"><td>Total general</td><td class="num">${tp}</td><td class="num">${to}</td><td class="num plata">${peso(ti)}</td><td class="num plata">${peso(ti*(1+IVA_))}</td></tr></tbody></table>`;
+  cont.innerHTML = h;
+}
+
 function pintarFinanzas(mesTexto){
   const delMes = cierres.filter(c => perteneceAlMes(c.fecha, mesTexto));
   const ingresoMes = ingresoNetoMes(mesTexto, delMes.reduce((a,c)=>a+c.ingresos,0));
@@ -816,6 +883,7 @@ function pintarFinanzas(mesTexto){
         <td class="num">${formatoPesos(d.ingreso)}</td><td class="num verde-txt">${formatoPesos(conIva)}</td></tr>`;
     }).join('');
   document.getElementById('tabla-facturacion').innerHTML = filasFactura || '<tr><td colspan="4" style="text-align:center;color:#94a3b8;">Sin días cerrados todavía</td></tr>';
+  pintarDetalleFacturar();
 }
 
 // Recuerda los % de reserva/crecimiento que Kathy deje cargados, para no tener que
