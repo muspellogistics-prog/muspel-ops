@@ -622,7 +622,7 @@
     </div>
     <div id="buscar-cliente-resultado" style="margin-top:10px;font-size:0.8rem;"></div>
   </div>
-  <div class="card" style="border:1.5px solid var(--borde);">
+  <div class="card" style="display:none;border:1.5px solid var(--borde);">
     <div class="card-title">📍 Observaciones de sector (precaución operativa)</div>
     <div style="font-size:0.78rem;color:#64748b;margin-bottom:10px;">No es una lista de "sectores peligrosos" — es conocimiento real que van ganando con la ruta: difícil estacionar, dirección GPS con errores, pasaje complicado, anegable en lluvia, etc. Cuando una orden caiga en una dirección o comuna que contenga esta palabra, la tarjeta muestra el aviso.</div>
     <label class="form-label">Palabra clave (parte de la dirección o comuna, ej. "Rahue Alto", "Quinto Centenario")</label>
@@ -701,7 +701,7 @@
     <div style="font-size:0.78rem;color:#64748b;margin-bottom:10px;">Esto deshace SOLO el último día cerrado, devolviendo sus órdenes a Resumen/Órdenes para corregirlas. No afecta días anteriores.</div>
     <button class="btn btn-rojo" onclick="reabrirUltimoDia()">↩️ Reabrir último día cerrado</button>
   </div>
-  <div class="card" style="border:1.5px solid var(--naranja);">
+  <div class="card" style="display:none;border:1.5px solid var(--naranja);">
     <div class="card-title">🔁 Reclasificar devoluciones históricas</div>
     <div style="font-size:0.78rem;color:#64748b;margin-bottom:10px;">Corrige el historial (DetalleHistorico en Sheets) para separar lo que fue <strong>Devuelta a Alas de verdad</strong> (físicamente entregado de vuelta) de lo que en realidad fue un <strong>Retorno</strong> (intento fallido que se reintentó o se debía reintentar). Usa la lista de códigos confirmados como devoluciones efectivas. Todo lo demás que hoy dice "devuelto" pasa a "retorno".</div>
     <div style="font-size:0.72rem;color:#94a3b8;margin-bottom:10px;">Código(s) confirmados como devueltos de verdad a Alas (uno por línea). Ya vienen precargados los que Cristian mandó por foto — agrega más si hace falta.</div>
@@ -709,7 +709,7 @@
     <button class="btn btn-naranja" onclick="reclasificarDevolucionesHistoricas()">🔁 Reclasificar historial ahora</button>
     <div id="reclasificar-status" style="margin-top:8px;font-size:0.8rem;color:#64748b;"></div>
   </div>
-  <div class="card" style="border:1.5px solid var(--azul2);">
+  <div class="card" style="display:none;border:1.5px solid var(--azul2);">
     <div class="card-title">🧩 Ajuste manual de un día sin detalle por orden</div>
     <div style="font-size:0.78rem;color:#64748b;margin-bottom:10px;">Para días operados que nunca quedaron cargados en OPS (ej. julio 27-28, respaldados solo por guías de despacho), pero de los que SÍ sabes el total real según la liquidación de Alas. Esto agrega un "día cerrado" con esos totales, para que el Dashboard y la tabla de facturación cuadren con lo ya facturado — sin inventar órdenes individuales que no existen.</div>
     <label class="form-label">Fecha (o la primera fecha del rango, si es más de un día junto)</label>
@@ -2400,8 +2400,30 @@ function actualizarBannerOperacional(){
   if(btnBlack) btnBlack.style.background = configOp.modoEspecial === 'black' ? 'var(--verde)' : '';
 }
 
+// AGREGADO 14-10-2026: quita copias EXACTAS de una misma orden (mismo id y mismo código) que
+// quedaron guardadas en el equipo por subidas repetidas. Los bultos distintos de un mismo
+// pedido tienen id distinto, así que no se tocan. Si hay copias con estados distintos, se
+// conserva la que ya tiene un estado avanzado (entregado, devuelto, etc.) o la más reciente.
+function quitarCopiasPorId(lista){
+  if(!Array.isArray(lista)) return lista;
+  var mejor = {}, orden = [];
+  lista.forEach(function(p){
+    if(!p || p.id==null){ orden.push({solo:p}); return; }
+    var k = String(p.id)+'|'+String(p.codigo);
+    if(!(k in mejor)){ mejor[k] = p; orden.push({k:k}); return; }
+    var a = mejor[k];
+    var pa = (a.estado && a.estado!=='pendiente') ? 1 : 0, pb = (p.estado && p.estado!=='pendiente') ? 1 : 0;
+    var ta = a.ts_estado || a.ts || 0, tb = p.ts_estado || p.ts || 0;
+    if(pb>pa || (pb===pa && tb>ta)) mejor[k] = p;
+  });
+  return orden.map(function(o){ return o.k ? mejor[o.k] : o.solo; });
+}
 function cargarStorage(){
   try{ paquetes = JSON.parse(localStorage.getItem('muspel_paquetes')||'[]'); }catch(e){ paquetes=[]; }
+  try{
+    var sinCopias = quitarCopiasPorId(paquetes);
+    if(sinCopias.length !== paquetes.length){ paquetes = sinCopias; localStorage.setItem('muspel_paquetes', JSON.stringify(paquetes)); }
+  }catch(e){}
   try{ historial = JSON.parse(localStorage.getItem('muspel_historial')||'[]'); }catch(e){ historial=[]; }
   try{ diaEnCompletar = JSON.parse(localStorage.getItem('muspel_dia_en_completar')||'null'); }catch(e){ diaEnCompletar=null; }
 }
@@ -4186,6 +4208,10 @@ function renderComunasDeTipo(items, diaSemana, tipo){
       if(obsSector){
         html+='<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:6px;padding:3px 7px;margin-bottom:4px;font-size:0.68rem;font-weight:700;color:#9a3412;">⚠️ '+obsSector.tipo+(obsSector.nota?' — '+obsSector.nota:'')+'</div>';
       }
+      var mReag=/REAGENDAD[OA]\s+PARA:\s*([0-9\/\-.]+)/i.exec(p.observacion||'');
+      if(mReag){
+        html+='<div style="display:inline-block;background:#f3e8ff;border:1px solid #7c3aed;border-radius:6px;padding:3px 8px;margin-bottom:4px;margin-right:4px;font-size:0.68rem;font-weight:800;color:#5b21b6;">📅 REAGENDADO · '+mReag[1].replace(/[<>&]/g,'')+'</div>';
+      }
       if(p.observacion && p.observacion.trim()){
         html+='<div style="display:inline-block;background:#ede9fe;border:1px solid #a855f7;border-radius:6px;padding:3px 8px;margin-bottom:4px;font-size:0.68rem;font-weight:700;color:#6b21a8;">📝 Observación del cliente</div>';
       }
@@ -5458,8 +5484,9 @@ function renderHistorial(){
 
   var NOMBRES_MES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   function claveMesDeFecha(fechaStr){
-    var p = formatoFechaLegible(fechaStr).split('-');
-    return p.length===3 ? {nombre:(NOMBRES_MES[parseInt(p[1],10)-1]+' '+p[2]), clave:p[2]+p[1].padStart(2,'0')} : {nombre:'Sin fecha', clave:'000000'};
+    // Acepta "13-10-2026" y también cierres repetidos del mismo día ("11-10-2026_2", "12-10-2026.1")
+    var p = /^(\d{1,2})-(\d{1,2})-(\d{4})/.exec(formatoFechaLegible(fechaStr));
+    return p ? {nombre:(NOMBRES_MES[parseInt(p[2],10)-1]+' '+p[3]), clave:p[3]+p[2].padStart(2,'0')} : {nombre:'Sin fecha', clave:'000000'};
   }
   var itemsOrdenados = [].concat(historialUnicoPorFecha()).reverse(); // más reciente primero
   var porMes = {}; var ordenMeses = [];
@@ -5470,6 +5497,7 @@ function renderHistorial(){
   });
   var hoyClave = (function(){ var d=new Date(); return String(d.getFullYear())+String(d.getMonth()+1).padStart(2,'0'); })();
 
+  ordenMeses.sort().reverse(); // mes más reciente primero
   var html='';
   ordenMeses.forEach(function(claveMes){
     var dm = porMes[claveMes];
@@ -5485,7 +5513,7 @@ function renderHistorial(){
     if(!abierto) return;
     dm.items.forEach(function(h){
       html+='<div class="hist-item">';
-      html+='<div><div class="hist-fecha">'+formatoFechaLegible(h.fecha)+'</div>';
+      html+='<div><div class="hist-fecha">'+formatoFechaLegible(h.fecha).replace(/[_.](\d+)$/,' (cierre $1)')+'</div>';
       html+='<div class="hist-stats">'+h.total+' paq · ✅'+h.entregados+' · 🔁'+(h.retornos||0)+' · 📮'+h.devueltos+' · '+h.efectividad+'%</div></div>';
       html+='<div style="text-align:right"><div style="font-weight:700;color:var(--verde);">$'+h.ingresos.toLocaleString('es-CL')+'</div>';
       html+='<button class="btn btn-outline btn-sm" style="margin-top:4px;" onclick="exportarDiaHistorial('+historial.indexOf(h)+')">Descargar</button></div>';
