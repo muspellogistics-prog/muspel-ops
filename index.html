@@ -24,6 +24,9 @@
   .tabs::-webkit-scrollbar{display:none;}
   .tab{flex:0 0 88px;min-width:88px;padding:10px 6px 8px;text-align:center;font-size:0.66rem;font-weight:600;color:rgba(255,255,255,0.55);cursor:pointer;border-bottom:3px solid transparent;transition:all .2s;white-space:nowrap;letter-spacing:0.3px;text-transform:uppercase;}
   .tab.active{color:#fff;border-bottom-color:#7ec8f4;}
+  #barra-fija-paq .filtro-bar{display:flex !important;overflow-x:auto;gap:6px;padding:0 0 2px;scrollbar-width:none;}
+  #barra-fija-paq .filtro-bar::-webkit-scrollbar{display:none;}
+  #barra-fija-paq .filtro-btn{flex:0 0 auto !important;width:auto !important;white-space:nowrap;padding:6px 12px !important;grid-column:auto !important;}
   .tab:hover:not(.active){color:rgba(255,255,255,0.8);}
   .perfil-flotante{display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.14);color:#fff;border:1px solid rgba(255,255,255,0.3);padding:3px 9px;border-radius:20px;font-size:0.62rem;font-weight:700;cursor:pointer;white-space:nowrap;}
   .perfil-flotante:active{background:rgba(255,255,255,0.24);}
@@ -463,12 +466,15 @@
 <!-- TAB: PAQUETES -->
 <!-- ══════════════════════════════════════════ -->
 <div class="content" id="tab-paquetes">
+  <div id="barra-fija-paq" style="position:sticky;top:96px;z-index:90;background:var(--gris);padding:4px 0 6px;">
+  <div id="chips-rep-fijos"></div>
   <div class="filtro-bar">
     <button class="filtro-btn active" onclick="filtrarPaquetes('todos',this)">Todos</button>
     <button class="filtro-btn" onclick="filtrarPaquetes('pendiente',this)">Pendientes</button>
     <button class="filtro-btn" onclick="filtrarPaquetes('entregado',this)">Entregados</button>
     <button class="filtro-btn" onclick="filtrarPaquetes('retorno',this)">🔁 Retorno</button>
     <button class="filtro-btn" onclick="filtrarPaquetes('devuelto',this)" style="grid-column:span 2;">📮 Devueltas a Alas</button>
+  </div>
   </div>
   <div id="panel-asignacion"></div>
   <button class="btn btn-outline solo-operativo" id="btn-ver-todas" onclick="toggleVerTodas()" style="margin-bottom:6px;display:none;">👀 Ver todas las órdenes</button>
@@ -2205,19 +2211,23 @@ function filtrarPorRepartidor(f){
 function renderPanelAsignacion(){
   var cont = document.getElementById('panel-asignacion');
   if(!cont) return;
+  var fj=document.getElementById('chips-rep-fijos'); if(fj && (perfilActual!=='comercial' || paquetes.length===0)) fj.innerHTML='';
   if(perfilActual!=='comercial' || paquetes.length===0){ cont.innerHTML=''; return; }
   function contar(fn){ return contarOrdenes(paquetes.filter(fn)).total; }
   var chips = [{id:'todos', txt:'Todos', n:contarOrdenes(paquetes).total}];
   REPARTIDORES.forEach(function(r){ chips.push({id:r.id, txt:r.nombre, n:contar(function(p){ return getRepartidor(p)===r.id; })}); });
   chips.push({id:'sin', txt:'Sin asignar', n:contar(function(p){ return !getRepartidor(p); })});
+  var fijos = document.getElementById('chips-rep-fijos');
+  if(fijos){
+    var hf = '<div style="display:flex;gap:6px;padding:2px 0 6px;overflow-x:auto;">';
+    chips.forEach(function(c){
+      var activo = filtroRepartidorComercial===c.id;
+      hf += '<button class="filtro-btn'+(activo?' active':'')+'" style="width:auto;flex:1 0 auto;white-space:nowrap;font-weight:800;" onclick="filtrarPorRepartidor(\''+c.id+'\')">'+c.txt+' ('+c.n+')</button>';
+    });
+    fijos.innerHTML = hf+'</div>';
+  }
   var html = '<div class="card" style="padding:12px 14px;">';
-  html += '<div class="card-title">🚚 Rutas por repartidor</div>';
-  html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">';
-  chips.forEach(function(c){
-    var activo = filtroRepartidorComercial===c.id;
-    html += '<button class="filtro-btn'+(activo?' active':'')+'" style="width:auto;" onclick="filtrarPorRepartidor(\''+c.id+'\')">'+c.txt+' ('+c.n+')</button>';
-  });
-  html += '</div>';
+  html += '<div class="card-title">🚚 Asignar rutas por repartidor</div>';
   // Asignación rápida por comuna
   var porComuna = {}; var orden = [];
   paquetes.forEach(function(p){
@@ -5559,6 +5569,8 @@ function ajustarPosicionTabs(){
   if(header && tabs){
     tabs.style.top = header.offsetHeight + 'px';
   }
+  var bf = document.getElementById('barra-fija-paq');
+  if(bf && header && tabs) bf.style.top = (header.offsetHeight + tabs.offsetHeight) + 'px';
 }
 window.addEventListener('resize', ajustarPosicionTabs);
 setTimeout(ajustarPosicionTabs, 50);
