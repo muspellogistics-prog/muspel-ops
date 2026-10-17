@@ -1820,9 +1820,20 @@ function notaEntregaDeDireccion(p){
 }
 function urlMapsOrden(p){
   var dir = String((p && p.dir)||'').trim();
-  if(!dir) return '';
-  if(/^https?:\/\//i.test(dir)) return dir;
-  var q = dir + ((p.comuna||'').trim() ? ', '+p.comuna.trim() : '') + ', Chile';
+  var comuna = String((p && p.comuna)||'').trim();
+  if(/^https?:\/\/\S*(google\.[a-z.]+\/maps|maps\.app\.goo\.gl|goo\.gl\/maps)/i.test(dir)) return dir;
+  var base = '';
+  if(dir && !/^https?:\/\//i.test(dir)){
+    // Solo calle + número (sin casa/depto/referencias, que confunden a Google Maps)
+    var m = /^\s*([^\d]*?[A-Za-z\u00C0-\u017F][^\d]*?)\s*(\d{1,5})(?!\d)/.exec(dir);
+    if(m){
+      var calle = m[1].replace(/\b(n\u00b0|n\u00ba|no\.?|numero|n\u00famero|#)\s*$/i,'').replace(/[,;:#\-\s]+$/,'').replace(/^[,;:\s]+/,'').trim();
+      if(calle && !/^(parcela|lote|sitio|km|kilometro|hijuela)\b/i.test(calle)) base = calle + ' ' + m[2];
+    }
+    if(!base) base = dir.split(/[,;(]|\s-\s|\bref/i)[0].trim().slice(0,70);
+  }
+  if(!base && !comuna) return '';
+  var q = (base ? base + ', ' : '') + (comuna ? comuna + ', ' : '') + 'Chile';
   return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q);
 }
 function guardarNotaDireccion(){
@@ -4339,7 +4350,7 @@ function renderComunasDeTipo(items, diaSemana, tipo){
         html+='<div style="font-size:0.7rem;font-weight:800;color:var(--azul2);margin-bottom:1px;">🏪 '+p.b2b.trim()+'</div>';
       }
       var urlMapsCard = urlMapsOrden(p);
-      var dirHtml = (urlMapsCard && dir.length >= 5 && dir.toLowerCase().indexOf('http') === -1)
+      var dirHtml = (urlMapsCard)
         ? '<a class="dir-maps" href="'+urlMapsCard+'" target="_blank" rel="noopener" onclick="event.stopPropagation()">🗺️ '+escHtml(dirMostrar)+'</a>'
         : escHtml(dirMostrar);
       html+='<div class="paquete-dir">'+dirHtml+(p.tel?' · '+escHtml(p.tel):'')+'</div>';
