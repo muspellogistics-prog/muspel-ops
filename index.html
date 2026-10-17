@@ -90,10 +90,14 @@
   .paquete-item.retorno{border-left:3px solid var(--naranja);opacity:0.7;}
   .paquete-item.daniado{border-left:3px solid var(--naranja);opacity:0.7;}
   .paquete-info{flex:1;min-width:0;}
-  .paquete-nombre{font-weight:600;font-size:0.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .paquete-dir{font-size:0.72rem;color:#64748b;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .paquete-item{padding:14px 14px !important;}
+  .paquete-nombre{font-weight:700;font-size:1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .paquete-dir{font-size:0.88rem;color:#334155;margin-top:3px;line-height:1.3;}
+  .paquete-dir a.dir-maps{color:#1d4ed8;font-weight:600;text-decoration:underline;}
   .paquete-codigo{font-size:0.68rem;color:#94a3b8;font-family:monospace;}
-  .paquete-acciones{display:flex;gap:6px;flex-shrink:0;}
+  .paquete-acciones{display:grid;grid-template-columns:repeat(2,46px);gap:6px;flex-shrink:0;}
+  .paquete-acciones .btn,.paquete-acciones a .btn{min-width:46px;min-height:46px;font-size:1.15rem;padding:4px;margin:0;}
+  .paquete-acciones a{display:block;}
   /* INPUT / SELECT */
   .form-group{margin-bottom:10px;}
   .form-label{font-size:0.75rem;font-weight:600;color:var(--azul);margin-bottom:4px;display:block;}
@@ -232,6 +236,10 @@
         <div style="font-size:0.72rem;font-weight:700;color:#6b21a8;margin-bottom:3px;">📝 OBSERVACIÓN DEL CLIENTE</div>
         <div style="font-size:0.85rem;color:#3b0764;" id="modal-observacion-texto">—</div>
       </div>
+      <div id="modal-notadir-box" style="display:none;margin:10px 0;padding:10px 12px;background:#e0f2fe;border:1.5px solid #0284c7;border-radius:8px;">
+        <div style="font-size:0.72rem;font-weight:700;color:#075985;margin-bottom:3px;">📌 NOTA DE ENTREGA DE ESTA DIRECCIÓN</div>
+        <div style="font-size:0.9rem;color:#0c4a6e;" id="modal-notadir-texto">—</div>
+      </div>
       <div class="modal-columna-principal">
         <div id="modal-numruta-row" style="display:none;align-items:center;gap:8px;margin-bottom:10px;">
           <div style="flex-shrink:0;background:var(--azul);color:#fff;border-radius:8px;min-width:38px;height:38px;display:flex;align-items:center;justify-content:center;font-size:1.15rem;font-weight:800;" id="modal-numruta">—</div>
@@ -285,6 +293,12 @@
           <span class="modal-campo-valor" id="modal-estado">—</span>
         </div>
         <div id="modal-clasificacion" style="display:flex;gap:8px;margin-top:8px;"></div>
+        <div style="margin-top:10px;padding:8px 10px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;">
+          <label class="form-label">📌 Nota de entrega de esta dirección (queda guardada para la próxima vez)</label>
+          <textarea class="form-input" id="modal-notadir-input" rows="2" placeholder="Ej: es una veterinaria, se entrega por el costado, por Gómez Carreño"></textarea>
+          <div style="font-size:0.68rem;color:#64748b;margin-top:3px;" id="modal-notadir-clave"></div>
+          <button class="btn btn-primary btn-sm" style="margin-top:6px;" onclick="guardarNotaDireccion()">💾 Guardar nota de la dirección</button>
+        </div>
         <div class="solo-comercial" style="margin-top:10px;">
           <label class="form-label">📝 Dejar observación para Cristian (indicación del cliente)</label>
           <textarea class="form-input" id="modal-observacion-input" rows="3" placeholder="Ej: dejar con el vecino del 205, o llamar antes de subir"></textarea>
@@ -1772,9 +1786,65 @@ function observacionDeSector(p){
   var texto = ((p.dir||'') + ' ' + (p.comuna||'')).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   for(var i=0; i<sectoresObservados.length; i++){
     var palabra = String(sectoresObservados[i].palabra||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    if(sectoresObservados[i].tipo === 'Nota de entrega') continue;
     if(palabra && texto.indexOf(palabra) !== -1) return sectoresObservados[i];
   }
   return null;
+}
+
+// ════════════════════════════════════════
+// NOTA DE ENTREGA POR DIRECCIÓN — 17-10-2026
+// El operativo deja una nota (ej. "es una veterinaria, se entrega por el costado") y queda
+// guardada en la misma hoja de observaciones de sector (tipo 'Nota de entrega'), con la
+// clave calle+número. Cuando vuelve a aparecer esa misma dirección, la OPS la muestra sola.
+// ════════════════════════════════════════
+function escHtml(t){ return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function claveDireccion(dir){
+  var d = String(dir||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  if(!d || d.indexOf('http') !== -1) return '';
+  var m = /^\s*([^\d]*?[a-z][^\d]*?)\s*(\d{1,5})(?!\d)/.exec(d);
+  if(!m) return '';
+  var calle = m[1].replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+  calle = calle.replace(/^(avenida|avda|av|calle|pasaje|psje|pje)\s+/,'').trim();
+  if(!calle || /^(parcela|lote|sitio|km|kilometro|ruta|camino|fundo|hijuela)\b/.test(calle)) return '';
+  return calle + ' ' + m[2];
+}
+function notaEntregaDeDireccion(p){
+  var k = claveDireccion(p && p.dir);
+  if(!k) return null;
+  for(var i=0; i<sectoresObservados.length; i++){
+    var s = sectoresObservados[i];
+    if(s.tipo === 'Nota de entrega' && String(s.palabra||'') === k) return s;
+  }
+  return null;
+}
+function urlMapsOrden(p){
+  var dir = String((p && p.dir)||'').trim();
+  if(!dir) return '';
+  if(/^https?:\/\//i.test(dir)) return dir;
+  var q = dir + ((p.comuna||'').trim() ? ', '+p.comuna.trim() : '') + ', Chile';
+  return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q);
+}
+function guardarNotaDireccion(){
+  if(!modalOrdenId) return;
+  var p = paquetes.find(function(x){return x.id===modalOrdenId;});
+  if(!p) return;
+  var k = claveDireccion(p.dir);
+  if(!k){ alert('No pude sacar calle y número de esta dirección. Usa la observación de la orden.'); return; }
+  var texto = document.getElementById('modal-notadir-input').value.trim();
+  var previa = notaEntregaDeDireccion(p);
+  if(previa){
+    sectoresObservados = sectoresObservados.filter(function(s){ return String(s.ts) !== String(previa.ts); });
+    enviarASheets('sector_eliminar', {ts: previa.ts});
+  }
+  if(texto){
+    var ts = Date.now();
+    enviarASheets('sector_nuevo', {palabra:k, tipo:'Nota de entrega', nota:texto, ts:ts});
+    sectoresObservados.push({palabra:k, tipo:'Nota de entrega', nota:texto, ts:ts});
+  }
+  renderListaSectores();
+  abrirModal(modalOrdenId);
+  renderPaquetes();
 }
 
 function guardarRetiro(){
@@ -2745,7 +2815,22 @@ function abrirModal(id){
 
   document.getElementById('modal-bulto').textContent = p.bulto || '—';
   document.getElementById('modal-bulto-row').style.display = p.bulto ? 'flex' : 'none';
-  document.getElementById('modal-dir').textContent = dirMostrar || '(sin dirección)';
+  (function(){
+    var el = document.getElementById('modal-dir');
+    var url = urlMapsOrden(p);
+    if(url && dirMostrar && dirMostrar !== '(sin dirección registrada)'){
+      el.innerHTML = '<a href="'+url+'" target="_blank" rel="noopener" style="color:#1d4ed8;font-weight:700;text-decoration:underline;">🗺️ '+escHtml(dirMostrar)+'</a>';
+    } else {
+      el.textContent = dirMostrar || '(sin dirección)';
+    }
+    var nd = notaEntregaDeDireccion(p);
+    var box = document.getElementById('modal-notadir-box');
+    document.getElementById('modal-notadir-input').value = nd ? (nd.nota||'') : '';
+    var k = claveDireccion(p.dir);
+    document.getElementById('modal-notadir-clave').textContent = k ? ('Se guarda para: '+k) : 'No pude sacar calle y número de esta dirección.';
+    if(nd && nd.nota){ box.style.display='block'; document.getElementById('modal-notadir-texto').innerHTML = linkificarTexto(escHtml(nd.nota)); }
+    else box.style.display='none';
+  })();
   document.getElementById('modal-comuna').textContent = (p.comuna||'').trim() || '—';
   document.getElementById('modal-tel').textContent = p.tel || '—';
   // Botones de llamar / WhatsApp: solo se muestran si hay teléfono. Normaliza a
@@ -4221,6 +4306,10 @@ function renderComunasDeTipo(items, diaSemana, tipo){
       if(probCli){
         html+='<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:3px 7px;margin-bottom:4px;font-size:0.68rem;font-weight:700;color:#b91c1c;">'+textoProblemasCliente(probCli)+'</div>';
       }
+      var notaDir = notaEntregaDeDireccion(p);
+      if(notaDir && notaDir.nota){
+        html+='<div style="background:#e0f2fe;border:1px solid #0284c7;border-radius:6px;padding:4px 8px;margin-bottom:4px;font-size:0.8rem;font-weight:700;color:#075985;">📌 '+escHtml(notaDir.nota)+'</div>';
+      }
       var obsSector = observacionDeSector(p);
       if(obsSector){
         html+='<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:6px;padding:3px 7px;margin-bottom:4px;font-size:0.68rem;font-weight:700;color:#9a3412;">⚠️ '+obsSector.tipo+(obsSector.nota?' — '+obsSector.nota:'')+'</div>';
@@ -4249,7 +4338,11 @@ function renderComunasDeTipo(items, diaSemana, tipo){
       if(p.b2b && p.b2b.trim()){
         html+='<div style="font-size:0.7rem;font-weight:800;color:var(--azul2);margin-bottom:1px;">🏪 '+p.b2b.trim()+'</div>';
       }
-      html+='<div class="paquete-dir">'+dirMostrar+(p.tel?' · '+p.tel:'')+'</div>';
+      var urlMapsCard = urlMapsOrden(p);
+      var dirHtml = (urlMapsCard && dir.length >= 5 && dir.toLowerCase().indexOf('http') === -1)
+        ? '<a class="dir-maps" href="'+urlMapsCard+'" target="_blank" rel="noopener" onclick="event.stopPropagation()">🗺️ '+escHtml(dirMostrar)+'</a>'
+        : escHtml(dirMostrar);
+      html+='<div class="paquete-dir">'+dirHtml+(p.tel?' · '+escHtml(p.tel):'')+'</div>';
       html+='<div class="paquete-codigo">'+p.codigo+' <span class="badge '+badgeClass+'">'+badgeTxt+'</span> <span style="font-size:0.65rem;font-weight:700;color:'+((p.tipo||'Principal').toLowerCase()==='ramal'?'var(--naranja)':'var(--azul2)')+';">'+((p.tipo||'Principal').toLowerCase()==='ramal'?'🛣 J06':'🏙 J05')+'</span></div>';
       html+='</div>';
       if(p.estado==='pendiente'){
