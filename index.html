@@ -4363,6 +4363,9 @@ function renderComunasDeTipo(items, diaSemana, tipo){
         : escHtml(dirMostrar);
       html+='<div class="paquete-dir">'+dirHtml+(p.tel?' · '+escHtml(p.tel):'')+'</div>';
       html+='<div class="paquete-codigo">'+p.codigo+' <span class="badge '+badgeClass+'">'+badgeTxt+'</span> <span style="font-size:0.65rem;font-weight:700;color:'+((p.tipo||'Principal').toLowerCase()==='ramal'?'var(--naranja)':'var(--azul2)')+';">'+((p.tipo||'Principal').toLowerCase()==='ramal'?'🛣 J06':'🏙 J05')+'</span></div>';
+      if(perfilActual==='comercial' && p.estado!=='pendiente' && p.estado!=='entregado' && p.motivo && String(p.motivo).trim()){
+        html+='<div style="margin-top:4px;background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:4px 8px;font-size:0.82rem;font-weight:700;color:#b91c1c;">Motivo: '+escHtml(p.motivo)+'</div>';
+      }
       html+='</div>';
       if(p.estado==='pendiente'){
         html+='<div class="paquete-acciones" onclick="event.stopPropagation()">';
