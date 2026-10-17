@@ -1824,6 +1824,14 @@ function urlMapsOrden(p){
   if(/^https?:\/\/\S*(google\.[a-z.]+\/maps|maps\.app\.goo\.gl|goo\.gl\/maps)/i.test(dir)) return dir;
   var base = '';
   if(dir && !/^https?:\/\//i.test(dir)){
+    // Rural (Ruta / Camino / Km / Parcela...): Google no ubica "Ruta U-162 KM 1.2", pero sí el
+    // nombre del lugar entre paréntesis (Condominio, Villa, Loteo...). Si no hay, usa el texto sin referencias.
+    if(/^\s*(ruta|camino|km|parcela|lote|sitio|hijuela|fundo)\b/i.test(dir) || /\bkm\b/i.test(dir)){
+      var lugar = /\(([^)]*(condominio|villa|poblaci|loteo|parcelaci|fundo|sector|hacienda|aldea|caleta)[^)]*)\)/i.exec(dir);
+      base = lugar ? lugar[1].trim() : dir.split(/[(;]|\bref/i)[0].replace(/[,\s]+$/,'').trim().slice(0,70);
+    }
+  }
+  if(!base && dir && !/^https?:\/\//i.test(dir)){
     // Solo calle + número (sin casa/depto/referencias, que confunden a Google Maps)
     var m = /^\s*([^\d]*?[A-Za-z\u00C0-\u017F][^\d]*?)\s*(\d{1,5})(?!\d)/.exec(dir);
     if(m){
