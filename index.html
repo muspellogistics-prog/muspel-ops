@@ -2138,16 +2138,20 @@ function cambiarPerfil(){
 // Las asignaciones viajan a Sheets (hoja "Asignaciones", vía Apps Script) para que se
 // vean en todos los celulares. Para cambiar nombres o agregar alguien, edita esta lista.
 // ════════════════════════════════════════
-var REPARTIDORES = [
-  {id:'cristian', nombre:'OP. Cristian', jefe:true},   // Cristian
-  {id:'op2',      nombre:'OP. Luchín', jefe:false}   // Luis "Luchín", primo de Cristian (Cyber)
+// ACTUALIZADO 18-10-2026: Luchín ya no apoya (volvió a Santiago). Queda INACTIVO: no aparece en
+// desplegables ni filtros, pero se conserva en esta lista para que el historial siga mostrando su
+// nombre. Si algún día vuelve, basta cambiar activo:false por activo:true.
+var REPARTIDORES_TODOS = [
+  {id:'cristian', nombre:'OP. Cristian', jefe:true,  activo:true},    // Cristian
+  {id:'op2',      nombre:'OP. Luchín',   jefe:false, activo:false}    // Luis "Luchín", primo de Cristian (Cyber)
 ];
+var REPARTIDORES = REPARTIDORES_TODOS.filter(function(r){ return r.activo!==false; });
 // Link para el celular del primo: agregar ?op=2 al final (ej. .../muspel-ops/?op=2).
 // La primera vez que lo abre, el celular queda como "Operativo 2" automáticamente.
 (function(){
   try{
     var m = /[?&]op=([^&]+)/.exec(location.search);
-    if(m && m[1]==='2') localStorage.setItem('muspel_usuario','op2');
+    if(m && m[1]==='2') localStorage.setItem('muspel_usuario','cristian'); // Luchín inactivo
   }catch(e){}
 })();
 var usuarioActual = localStorage.getItem('muspel_usuario') || 'cristian';
@@ -2164,9 +2168,9 @@ function guardarAsignaciones(){
 }
 cargarAsignaciones();
 
-function getRepartidorInfo(id){ return REPARTIDORES.find(function(r){ return r.id===id; }) || null; }
+function getRepartidorInfo(id){ return REPARTIDORES_TODOS.find(function(r){ return r.id===id; }) || null; }
 function nombreRepartidor(id){ var r = getRepartidorInfo(id); return r ? r.nombre : 'Sin asignar'; }
-function getRepartidor(p){ var a = p && asignaciones[p.codigo]; return (a && a.r) ? a.r : ''; }
+function getRepartidor(p){ var a = p && asignaciones[p.codigo]; if(!(a && a.r)) return ''; var inf = getRepartidorInfo(a.r); return (inf && inf.activo===false) ? '' : a.r; } // asignado a alguien inactivo = sin asignar
 function usuarioEsJefe(){ var r = getRepartidorInfo(usuarioActual); return !!(r && r.jefe); }
 
 // Lista de paquetes que ESTE equipo debe ver ahora, según perfil y repartidor.
@@ -3367,7 +3371,7 @@ function importarExcel(input){
       function repDesdeDesignacion(v){
         var t = String(v==null?'':v).trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
         if(!t) return '';
-        if(t==='L' || t.indexOf('LUCHIN')===0 || t.indexOf('OPERATIVO 2')===0) return 'op2';
+        if(t==='L' || t.indexOf('LUCHIN')===0 || t.indexOf('OPERATIVO 2')===0) return ''; // Luchín inactivo: se ignora
         if(t==='C' || t==='OP' || t.indexOf('CRISTIAN')===0 || t.indexOf('OP. PRINCIPAL')===0 || t.indexOf('OP PRINCIPAL')===0) return 'cristian';
         return '';
       }
