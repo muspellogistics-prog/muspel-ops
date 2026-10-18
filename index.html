@@ -907,6 +907,9 @@ function paqueteConDireccionRepetida(p){
   return !!(kp && _cacheDirRepetida.mapa[kp]);
 }
 
+// Cuenta ÓRDENES distintas (no bultos). A Muspel le pagan por orden: esto es lo que se muestra primero.
+function nOrdenes(arr){ return agruparOrdenes(arr).length; }
+
 function agruparOrdenes(arr){
   var porFolio = {};
   arr.forEach(function(p){
@@ -1419,12 +1422,12 @@ function descargarOrdenesDesdeSheets(onFin){
       // EXCEPCIÓN: si se está completando pendientes de un día anterior, NO se auto-limpia
       // (ese trabajo es local e independiente del día en curso en Sheets).
       if(paquetes.length > 0 && !diaEnCompletar){
-        var cuantosTeniamos = paquetes.length;
+        var cuantosTeniamos = nOrdenes(paquetes);
         paquetes = [];
         guardarStorage();
         actualizarResumen();
         renderPaquetes();
-        if(status){ status.style.color='var(--azul2)'; status.textContent = '✅ El día ya se cerró en otro equipo — se limpiaron '+cuantosTeniamos+' paquetes locales para quedar al día.'; }
+        if(status){ status.style.color='var(--azul2)'; status.textContent = '✅ El día ya se cerró en otro equipo — se limpiaron '+cuantosTeniamos+' órdenes locales para quedar al día.'; }
         if(onFin) onFin(0);
         return;
       }
@@ -1434,6 +1437,7 @@ function descargarOrdenesDesdeSheets(onFin){
     }
     // fila 0 es encabezado: id,codigo,folio,bulto,nombre,tel,dir,comuna,region,tipo,b2b,estado,ts,repetidoDeHistorial,intentos,intentosAgotados,sinAgrupar,numRuta,esRetiro,intercambio,observacion
     var importadas = 0;
+    var nuevosPaq = [];   // bultos nuevos, para contar ÓRDENES en el aviso
     var actualizadas = 0;
     // Cuenta cuántas veces aparece cada código LOCALMENTE (para no confundir multibulto
     // -código repetido- con "ya existe, no agregar")
@@ -1524,6 +1528,7 @@ function descargarOrdenesDesdeSheets(onFin){
         avisoWaEnviado: avisoWaEnviadoNube
       });
       importadas++;
+      nuevosPaq.push(paquetes[paquetes.length-1]);
     });
     if(importadas > 0 || actualizadas > 0){
       guardarStorage();
@@ -1533,7 +1538,8 @@ function descargarOrdenesDesdeSheets(onFin){
     if(status) {
       status.style.color='var(--verde)';
       if(importadas > 0 || actualizadas > 0){
-        status.textContent = '✅ '+importadas+' órdenes nuevas, '+actualizadas+' estados actualizados desde la nube.';
+        var _nOrdNuevas = nOrdenes(nuevosPaq);
+        status.textContent = '✅ '+_nOrdNuevas+(_nOrdNuevas===1?' orden nueva':' órdenes nuevas')+(importadas!==_nOrdNuevas?' ('+importadas+' bultos)':'')+', '+actualizadas+' estados actualizados desde la nube.';
       } else {
         status.textContent = '';
       }
@@ -3197,8 +3203,8 @@ function actualizarResumen(){
   var retornoCount = paquetes.filter(function(p){return p.estado==='retorno';}).length;
   var devueltoCount = paquetes.filter(function(p){return p.estado==='devuelto';}).length;
   var pend = paquetes.filter(function(p){return p.estado==='pendiente';}).length;
-  var prin = paquetes.filter(function(p){return (p.tipo||'').toLowerCase()==='principal';}).length;
-  var ram = paquetes.filter(function(p){return (p.tipo||'').toLowerCase()==='ramal';}).length;
+  var prin = nOrdenes(paquetes.filter(function(p){return (p.tipo||'').toLowerCase()==='principal';}));   // por ORDEN
+  var ram = nOrdenes(paquetes.filter(function(p){return (p.tipo||'').toLowerCase()==='ramal';}));
 
   // Panel Paquetes / Órdenes / Multibultos
   var ordStatsResumen = contarOrdenes(paquetes);
@@ -3210,7 +3216,7 @@ function actualizarResumen(){
   if(elTP) elTP.textContent = total;
   if(elTO) elTO.textContent = ordStatsResumen.total;
   if(elTM) elTM.textContent = totalMultibultos;
-  var ef = total > 0 ? Math.round(ent/total*100) : 0;
+  var ef = ordStatsResumen.total > 0 ? Math.round(ordStatsResumen.entregados/ordStatsResumen.total*100) : 0;   // por ORDEN, no por bulto
   // Tarjetas grandes en ÓRDENES (se paga por orden, no por paquete suelto); el paquete
   // queda como detalle chico debajo de cada número, igual que antes pero al revés.
   var noEntregadasOrdenes = ordStatsPorEstado.devueltas + ordStatsPorEstado.retornos + ordStatsPorEstado.daniadas;
@@ -3264,9 +3270,9 @@ function importarExcel(input){
   // dos cosas por separado: primero si es una carga EXTRA del mismo día (se suma tal
   // cual), y solo si no lo es, se pregunta si hay que reemplazar por ser de otro día.
   if(paquetes.length > 0 && !diaEnCompletar){
-    var esCargaExtra = confirm('Este equipo ya tiene '+paquetes.length+' pedido(s) cargados de hoy.\n\n¿Es una carga EXTRA de HOY MISMO (ej. una ruta adicional que llegó y se adelanta a hoy)?\n\nAceptar = Sumar este archivo a los pedidos que ya hay.\nCancelar = No es una carga extra de hoy (elegir otra opción).');
+    var esCargaExtra = confirm('Este equipo ya tiene '+nOrdenes(paquetes)+' orden(es) cargadas de hoy.\n\n¿Es una carga EXTRA de HOY MISMO (ej. una ruta adicional que llegó y se adelanta a hoy)?\n\nAceptar = Sumar este archivo a los pedidos que ya hay.\nCancelar = No es una carga extra de hoy (elegir otra opción).');
     if(!esCargaExtra){
-      var seguir = confirm('⚠️ ¿Estos '+paquetes.length+' pedido(s) son de un día ANTERIOR que no se cerró en este equipo (ej. se cerró desde otro celular)?\n\nSi continúas, se van a BORRAR esos '+paquetes.length+' pedidos locales antes de importar el archivo nuevo, para no mezclar días.\n\nAceptar = Borrar y continuar.\nCancelar = No hacer nada.');
+      var seguir = confirm('⚠️ ¿Estas '+nOrdenes(paquetes)+' orden(es) son de un día ANTERIOR que no se cerró en este equipo (ej. se cerró desde otro celular)?\n\nSi continúas, se van a BORRAR esas '+nOrdenes(paquetes)+' órdenes locales antes de importar el archivo nuevo, para no mezclar días.\n\nAceptar = Borrar y continuar.\nCancelar = No hacer nada.');
       if(!seguir){ input.value=''; return; }
       paquetes = [];
       guardarStorage();
@@ -5511,13 +5517,13 @@ function marcarTodoTipo(tipo){
     alert('No hay órdenes cargadas todavía.');
     return;
   }
-  var confirmar = confirm('¿Marcar las '+paquetes.length+' órdenes cargadas actualmente como "'+tipo+'"? Esto reemplaza el tipo que tenían antes.');
+  var confirmar = confirm('¿Marcar las '+nOrdenes(paquetes)+' órdenes cargadas actualmente como "'+tipo+'"? Esto reemplaza el tipo que tenían antes.');
   if(!confirmar) return;
   paquetes.forEach(function(p){ p.tipo = tipo; });
   guardarStorage();
   actualizarResumen();
   renderPaquetes();
-  alert('✅ Listo, las '+paquetes.length+' órdenes quedaron marcadas como "'+tipo+'".');
+  alert('✅ Listo, las '+nOrdenes(paquetes)+' órdenes quedaron marcadas como "'+tipo+'".');
 }
 
 function vaciarOrdenesActuales(){
@@ -5526,7 +5532,7 @@ function vaciarOrdenesActuales(){
     return;
   }
   var mensajeExtra = diaEnCompletar ? ('\n\nOjo: esto también CANCELA el completar pendientes del día '+diaEnCompletar.fecha+' que tenías en curso — ese día queda tal como estaba, sin completar.') : '';
-  var confirmar = confirm('Esto va a borrar las '+paquetes.length+' órdenes que están cargadas ahora mismo en el teléfono (por ejemplo, datos de prueba). NO se guardan en el historial ni se ve afectado ningún día ya cerrado.'+mensajeExtra+'\n\n¿Confirmas que quieres vaciarlas?');
+  var confirmar = confirm('Esto va a borrar las '+nOrdenes(paquetes)+' órdenes que están cargadas ahora mismo en el teléfono (por ejemplo, datos de prueba). NO se guardan en el historial ni se ve afectado ningún día ya cerrado.'+mensajeExtra+'\n\n¿Confirmas que quieres vaciarlas?');
   if(!confirmar) return;
   paquetes = [];
   diaEnCompletar = null;
@@ -5558,7 +5564,7 @@ function completarPendientesUltimoDia(){
     return;
   }
   if(paquetes.length > 0){
-    var seguir = confirm('Tienes '+paquetes.length+' órdenes cargadas ahora mismo. Si completas las '+pendientesDelDia.length+' pendientes del día '+ultimo.fecha+', se van a MEZCLAR con las de hoy.\n\n¿Continuar?');
+    var seguir = confirm('Tienes '+nOrdenes(paquetes)+' órdenes cargadas ahora mismo. Si completas las '+pendientesDelDia.length+' pendientes del día '+ultimo.fecha+', se van a MEZCLAR con las de hoy.\n\n¿Continuar?');
     if(!seguir) return;
   } else {
     var confirmar = confirm('Esto trae solo las '+pendientesDelDia.length+' órdenes que quedaron PENDIENTES del día '+ultimo.fecha+' (las '+ultimo.entregados+' ya entregadas y '+ultimo.devueltos+' devueltas de ese día NO se tocan, ya quedan contabilizadas).\n\nCuando termines, el botón de Cierre va a decir "Completar cierre del '+ultimo.fecha+'" en vez de cerrar un día nuevo.\n\n¿Continuar?');
@@ -5589,7 +5595,7 @@ function reabrirUltimoDia(){
     return;
   }
   if(paquetes.length > 0){
-    var seguir = confirm('Tienes '+paquetes.length+' órdenes en curso sin cerrar todavía. Si reabres el día '+ultimo.fecha+', sus órdenes se van a MEZCLAR con las de hoy.\n\n¿Quieres continuar de todas formas?');
+    var seguir = confirm('Tienes '+nOrdenes(paquetes)+' órdenes en curso sin cerrar todavía. Si reabres el día '+ultimo.fecha+', sus órdenes se van a MEZCLAR con las de hoy.\n\n¿Quieres continuar de todas formas?');
     if(!seguir) return;
   } else {
     var confirmar = confirm('¿Reabrir el día '+ultimo.fecha+'? Esto lo saca del historial y devuelve sus '+ultimo.total+' órdenes a Resumen/Órdenes para que las corrijas.');
