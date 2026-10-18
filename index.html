@@ -3149,13 +3149,13 @@ function actualizarHeader(){
   document.getElementById('header-fecha').textContent = dias[d.getDay()] + ' ' + d.getDate() + ' de ' + meses[d.getMonth()] + ' ' + d.getFullYear();
   var visHeader = perfilActual==='comercial' ? paquetes : paquetesVisibles();
   var total = visHeader.length;
-  var ent = visHeader.filter(function(p){return p.estado==='entregado';}).length;
-  document.getElementById('header-paquetes').textContent = total + ' paquetes';
+  var ordH = contarOrdenes(visHeader);   // ÓRDENES primero (se paga por orden); bultos como dato secundario
+  document.getElementById('header-paquetes').textContent = ordH.total + (ordH.total===1?' orden':' órdenes') + ' · ' + total + (total===1?' paquete':' paquetes');
   // alerta dia
   var ai = document.getElementById('alerta-dia');
   if(total === 0 && paquetes.length > 0 && perfilActual!=='comercial') ai.textContent = 'Aún no tienes órdenes asignadas. Aparecen solas apenas Kathy te las asigne.';
   else if(total === 0) ai.textContent = perfilActual==='comercial' ? 'Sin órdenes cargadas. Ve a Importar para cargar el Excel de Alas.' : 'Aún no hay órdenes cargadas todavía. Se sincronizan solas apenas Comercial las suba.';
-  else ai.textContent = 'Operación en curso — ' + ent + ' de ' + total + ' órdenes entregadas.';
+  else ai.textContent = 'Operación en curso — ' + ordH.entregados + ' de ' + ordH.total + ' órdenes entregadas.';
   actualizarIndicadorSync();
   if(typeof ajustarPosicionTabs === 'function') setTimeout(ajustarPosicionTabs, 0);
 }
