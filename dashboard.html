@@ -111,6 +111,15 @@
       <div class="card"><div class="card-label">Entregas WOM del mes</div><div class="card-value" id="op-ord-wom-entregadas">—</div></div>
       <div class="card"><div class="card-label">Ingreso WOM del mes (sin bono)</div><div class="card-value" id="op-ing-wom">—</div></div>
     </div>
+    <div class="panel" id="panel-estimativo">
+      <div class="titulo-seccion" style="margin-top:0;">💰 Estimativo de ingreso del mes (por órdenes entregadas)</div>
+      <div class="panel-nota">Cálculo propio de Muspel: las órdenes entregadas que NO son WOM van a la tarifa más el bono por orden; las WOM van solo a la tarifa, sin bono. ALAS calcula su liquidación de otra forma, así que su monto final puede ser distinto.</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+        <label style="font-size:0.78rem;font-weight:700;">Tarifa por orden ($)<input id="est-tarifa" type="number" value="2070" oninput="pintarEstimativo()" style="display:block;width:120px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;"></label>
+        <label style="font-size:0.78rem;font-weight:700;">Bono por orden no-WOM ($)<input id="est-bono" type="number" value="230" oninput="pintarEstimativo()" style="display:block;width:120px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;"></label>
+      </div>
+      <div class="grid" id="est-cards"></div>
+    </div>
     <div class="panel">
       <div class="titulo-seccion" style="margin-top:0;">Últimos días operados</div>
       <table><thead><tr><th>Fecha</th><th class="num">Paquetes</th><th class="num">Órdenes</th><th class="num">Entregadas</th><th class="num">Entreg. WOM</th><th class="num">Efectividad</th><th class="num">Retornos</th><th class="num">Devueltas a ALAS</th><th class="num">Órdenes WOM</th></tr></thead><tbody id="tabla-dias"></tbody></table>
@@ -638,6 +647,8 @@ function pintarOperacion(mesTexto){
   document.getElementById('op-ord-wom').textContent = ordWomMes;
   document.getElementById('op-ord-wom-entregadas').textContent = ordWomEntregadasMes;
   document.getElementById('op-ing-wom').textContent = formatoPesos(ingWomMes);
+  window.__estCnt = { noWom: ordEntNoWomMes, wom: ordWomEntregadasMes };
+  pintarEstimativo();
 
   const tbody = document.getElementById('tabla-dias');
   const ordenados = [].concat(cierres).reverse();
@@ -911,6 +922,25 @@ async function contarEntregasRep(){
   }catch(e){ box.innerHTML = '<div class="panel-nota" style="color:#b91c1c;">No pude leer los datos. Intenta de nuevo.</div>'; }
 }
 function usarBonoEnCalculo(v){ document.getElementById('pg-bono').value = Math.round(v); calcPagoRep(); }
+// Estimativo del mes: no-WOM entregadas × (tarifa + bono) + WOM entregadas × tarifa (sin bono).
+function pintarEstimativo(){
+  const el = document.getElementById('est-cards');
+  if(!el || !window.__estCnt) return;
+  const tarifa = Number(document.getElementById('est-tarifa').value)||0;
+  const bono = Number(document.getElementById('est-bono').value)||0;
+  try{ localStorage.setItem('muspel_est_tarifa', String(tarifa)); localStorage.setItem('muspel_est_bono', String(bono)); }catch(e){}
+  const c = window.__estCnt;
+  const ingNoWom = c.noWom * (tarifa + bono);
+  const ingWom = c.wom * tarifa;
+  const total = ingNoWom + ingWom;
+  el.innerHTML =
+    `<div class="card"><div class="card-label">Entregadas no-WOM</div><div class="card-value">${c.noWom}</div><div class="card-sub">× (${formatoPesos(tarifa)} + ${formatoPesos(bono)} de bono)</div></div>` +
+    `<div class="card"><div class="card-label">Ingreso no-WOM</div><div class="card-value plata">${formatoPesos(ingNoWom)}</div></div>` +
+    `<div class="card"><div class="card-label">Entregadas WOM</div><div class="card-value">${c.wom}</div><div class="card-sub">× ${formatoPesos(tarifa)} (sin bono)</div></div>` +
+    `<div class="card"><div class="card-label">Ingreso WOM</div><div class="card-value plata">${formatoPesos(ingWom)}</div></div>` +
+    `<div class="card"><div class="card-label">Total estimado del mes</div><div class="card-value plata verde">${formatoPesos(total)}</div><div class="card-sub">${c.noWom + c.wom} órdenes entregadas · ALAS puede calcular otro monto</div></div>`;
+}
+(function(){ try{ const t = localStorage.getItem('muspel_est_tarifa'), b = localStorage.getItem('muspel_est_bono'); window.addEventListener('DOMContentLoaded', function(){ if(t){ const e = document.getElementById('est-tarifa'); if(e) e.value = t; } if(b){ const e = document.getElementById('est-bono'); if(e) e.value = b; } }); }catch(e){} })();
 function pintarBonoOrdenes(){
   const box = document.getElementById('pg-ordenes'); if(!box || !_pgOrdenes) return;
   const n = _pgOrdenes.total, pq = _pgOrdenes.paq;
