@@ -3407,7 +3407,9 @@ function importarExcel(input){
         var fam = (idx.familia!==undefined ? normTexto(row[idx.familia]) : '') + ' ' + (idx.estado!==undefined && /VIRTUAL/.test(normTexto(row[idx.estado])) ? 'VIRTUAL' : '');
         var obsTxt = idx.obs!==undefined ? String(row[idx.obs]||'').trim() : '';
         var obsN = normTexto(obsTxt);
-        var inter = (idx.intercambio!==undefined && /^(si|sí|1|true|x)$/i.test(String(row[idx.intercambio]||'').trim())) || obsN.indexOf('INTERCAMBIO')!==-1;
+        // AGREGADO 21-10-2026: ALAS manda los intercambios con FAMILIA = "Intercambio"; también se reconoce así.
+        var famN = idx.familia!==undefined ? normTexto(row[idx.familia]) : '';
+        var inter = (idx.intercambio!==undefined && /^(si|sí|1|true|x)$/i.test(String(row[idx.intercambio]||'').trim())) || obsN.indexOf('INTERCAMBIO')!==-1 || famN.indexOf('INTERCAMBIO')!==-1;
         var retiro = /VIRTUAL|RETIRO|DEVOLUC/.test(fam) || (!inter && /RETIR|DEVOLUC/.test(obsN));
         return {esRetiro:retiro, intercambio:inter, obs:obsTxt};
       }
