@@ -3286,6 +3286,18 @@ function importarExcel(input){
       guardarStorage();
     }
     // si esCargaExtra===true, no se toca nada — el archivo nuevo se suma abajo tal cual
+    var _cargaExtraHoy = esCargaExtra;
+  }
+  // AGREGADO 27-10-2026 — ¿La ruta es para HOY o para MAÑANA? Define si el aviso de WhatsApp
+  // dice "hoy entregaremos" o "mañana estaremos realizando la entrega". Se guarda la FECHA de la
+  // ruta en cada pedido; si el pedido se abre otro día, el mensaje se ajusta solo.
+  var diaRutaFechaImport = null;
+  if(!diaEnCompletar && !(typeof _cargaExtraHoy!=='undefined' && _cargaExtraHoy)){
+    var esManana = confirm('¿Para cuándo es esta ruta?\n\nAceptar = MAÑANA (el aviso dirá "mañana estaremos realizando la entrega").\nCancelar = HOY (el aviso dirá "hoy entregaremos").');
+    if(esManana){
+      var dm = new Date(); dm.setDate(dm.getDate()+1);
+      diaRutaFechaImport = fechaISOLocal(dm);
+    }
   }
   var status = document.getElementById('import-status');
   status.textContent = 'Procesando...';
@@ -3476,6 +3488,7 @@ function importarExcel(input){
                 tipoPorDefecto,
           b2b:row[idx.b2b]?String(row[idx.b2b]).trim():'',
           estado:'pendiente', ts:Date.now(),
+          diaRutaFecha: diaRutaFechaImport,
           repetidoDeHistorial: registrosPrevios.length>0,
           intentos: intentoActual,
           intentosAgotados: intentoActual>3,
@@ -4475,10 +4488,24 @@ function esFechaFeriadoNoOperativo(fecha){
 // reales — así que nunca podía saber que un viernes o sábado puntual era feriado.
 // Devuelve {dia, esManana} — esManana es true si ese próximo día cae justo mañana.
 // Si no se encuentra ningún día operativo en las próximas 2 semanas, null.
-function proximoDiaRutaComuna(comuna){
+function fechaISOLocal(d){
+  var m = d.getMonth()+1, dd = d.getDate();
+  return d.getFullYear()+'-'+(m<10?'0':'')+m+'-'+(dd<10?'0':'')+dd;
+}
+// Días entre hoy y la fecha de ruta del pedido (0 = es hoy o ya pasó; 1 = mañana).
+function diasHastaRutaPedido(p){
+  if(!p || !p.diaRutaFecha) return 0;
+  var hoy = new Date(); hoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+  var pr = String(p.diaRutaFecha).split('-');
+  var f = new Date(Number(pr[0]), Number(pr[1])-1, Number(pr[2]));
+  var d = Math.round((f - hoy)/86400000);
+  return d>0 ? d : 0;
+}
+function proximoDiaRutaComuna(comuna, desdeOffset){
   if(!comuna) return null;
   var hoy = new Date();
-  for(var i=1; i<=14; i++){
+  // desdeOffset: si la ruta es mañana (1), la "próxima ruta" se busca desde pasado mañana.
+  for(var i=1+(desdeOffset||0); i<=14+(desdeOffset||0); i++){
     var fecha = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()+i);
     var diaSemana = fecha.getDay();
     if(esFechaFeriadoNoOperativo(fecha)) continue; // feriado puntual: se salta esta fecha
@@ -4535,7 +4562,9 @@ function armarLinkWhatsApp(p){
   var nombreCompleto = String(p.nombre||'').trim().replace(/[\s.\-]+$/,'');
   if(/\b(S\.?\s?P\.?\s?A|SPA|LTDA|LIMITADA|S\.\s?A|EIRL|E\.I\.R\.L|SOCIEDAD)\b\.?/i.test(nombreCompleto) || esNombreNegocio(nombreCompleto)) saludoNombre = nombreCompleto;
   var marcaPedido = String(p.b2b||'').trim() || 'su pedido';
-  var proximaRuta = proximoDiaRutaComuna(p.comuna);
+  var diasRuta = diasHastaRutaPedido(p);
+  var esMananaRuta = diasRuta > 0;
+  var proximaRuta = proximoDiaRutaComuna(p.comuna, diasRuta);
   // El punto va DENTRO del subrayado (para que quede "_Lunes._" en cursiva, tal como
   // lo pidió Kathy) cuando sí hay día calculado; si no hay día (comuna fuera de la
   // grilla), la frase de respaldo no lleva cursiva y el punto va afuera, normal.
@@ -4567,7 +4596,36 @@ function armarLinkWhatsApp(p){
     ? '*Es un intercambio:* al entregar el producto nuevo, retiraremos el que desea cambiar. Por favor tenerlo preparado y embalado para su retiro. '+llamada
     : llamada;
   var impIni = '*Importante: no hay horario fijo, depende de la ruta*. Si no logramos contacto o no hay nadie para ';
-  if(p.esRetiro){
+  if(esMananaRuta){
+    // MENSAJE DEL DÍA ANTERIOR (prueba 1 mes): misma estructura, pero con "mañana".
+    var llamadaM = '*Cuando estemos próximos a su domicilio, le llamaremos* para que pueda recibirlo. Le agradecemos que pueda atender nuestra llamada.📲';
+    var cierreM = '¡Muchas gracias! Nos vemos pronto.☺️';
+    var impM = '*Importante:* No hay horario específico. Las entregas se realizan durante el día y según el recorrido de la ruta, por lo que si no logramos comunicarnos con usted o no hay alguien disponible para ';
+    var reagM = 'recibir el pedido, reagendaremos la entrega para nuestra próxima ruta por la localidad, *'+rutaTxt+'*.';
+    var interM = '*Es un intercambio:* al entregar el producto nuevo, retiraremos el que desea cambiar. Por favor tenerlo listo y bien embalado.\n\n';
+    if(p.esRetiro){
+      mensajeWa = saludoIni+'*'+saludoNombre+'*. Somos *Muspel* y por encargo de Alas, *mañana pasaremos '+(esReintento?'nuevamente ':'')+'a retirar* el producto de *'+marcaPedido+'* que usted solicitó devolver.🚐\n\n'
+        + 'Por favor tenerlo listo y bien embalado para el retiro.\n\n'
+        + llamadaM+'\n\n'+cierreM+'\n\n'
+        + impM+'entregar el producto, reagendaremos el retiro para nuestra próxima ruta por la localidad, *'+rutaTxt+'*.';
+    } else if(esReintento && p.intentosAgotados){
+      mensajeWa = saludoIni+'*'+saludoNombre+'*. Somos *Muspel* y por encargo de Alas, *mañana intentaremos nuevamente entregar* su pedido de *'+marcaPedido+'*.🚐\n\n'
+        + (p.intercambio?interM:'')
+        + llamadaM+'\n\n'
+        + 'Esperamos concretar la entrega mañana. ¡Muchas gracias!☺️\n\n'
+        + '*Importante:* si en este intento tampoco logramos contacto o no hay nadie para recibir, su pedido no se entregará y será devuelto a *'+marcaPedido+'*.';
+    } else if(esReintento){
+      mensajeWa = saludoIni+'*'+saludoNombre+'*. Somos *Muspel* y por encargo de Alas, *mañana estaremos nuevamente realizando la entrega* de su pedido de *'+marcaPedido+'*.🚐\n\n'
+        + (p.intercambio?interM:'')
+        + llamadaM+'\n\n'+cierreM+'\n\n'
+        + impM+reagM;
+    } else {
+      mensajeWa = saludoIni+'*'+saludoNombre+'*. Somos *Muspel* y por encargo de Alas, *mañana estaremos realizando la entrega* de su pedido de *'+marcaPedido+'*.🚐\n\n'
+        + (p.intercambio?interM:'')
+        + llamadaM+'\n\n'+cierreM+'\n\n'
+        + impM+reagM;
+    }
+  } else if(p.esRetiro){
     mensajeWa = saludoIni+'*'+saludoNombre+'*. Somos *Muspel* y por encargo de Alas, *hoy pasaremos '+(esReintento?'nuevamente ':'')+'a retirar* el producto de *'+marcaPedido+'* que solicitó devolver.\n\n'
       + 'Por favor tenerlo preparado y embalado para su retiro. '+llamada+'\n\n'
       + cierre+'\n\n'
