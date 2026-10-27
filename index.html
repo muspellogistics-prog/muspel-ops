@@ -2883,9 +2883,9 @@ function abrirModal(id){
       btnModalWa.innerHTML = '<button class="btn" style="width:100%;margin-bottom:0;background:#128C7E;color:#fff;">✅💬 Llamar por WhatsApp</button>';
       btnModalWa.onclick = null;
     } else {
-      btnModalWa.innerHTML = '<button class="btn btn-primary" style="width:100%;margin-bottom:0;">💬 WhatsApp</button>';
+      btnModalWa.innerHTML = '<button class="btn btn-primary" style="width:100%;margin-bottom:0;">'+(diasHastaRutaPedido(p)>0?'🌙💬 WhatsApp (aviso de MAÑANA)':'☀️💬 WhatsApp (aviso de HOY)')+'</button>';
       var idParaAviso = p.id;
-      btnModalWa.onclick = function(){ marcarAvisoWaEnviado(idParaAviso); };
+      btnModalWa.onclick = function(){ if(!avisoWaOk(idParaAviso)) return false; marcarAvisoWaEnviado(idParaAviso); };
     }
     telAcciones.style.display = 'flex';
   }else{
@@ -4418,7 +4418,8 @@ function renderComunasDeTipo(items, diaSemana, tipo){
         } else {
           var linkWaTarjeta = armarLinkWhatsApp(p);
           if(linkWaTarjeta){
-            html+='<a href="'+linkWaTarjeta+'" target="_blank" onclick="marcarAvisoWaEnviado('+p.id+')"><button class="btn btn-sm" style="background:#25D366;color:#fff;" title="Enviar aviso de entrega">💬</button></a>';
+            var _esMan = diasHastaRutaPedido(p)>0;
+            html+='<a href="'+linkWaTarjeta+'" target="_blank" onclick="if(!avisoWaOk('+p.id+')) return false; marcarAvisoWaEnviado('+p.id+')"><button class="btn btn-sm" style="background:'+(_esMan?'#1d4ed8':'#25D366')+';color:#fff;" title="'+(_esMan?'Enviar aviso de MAÑANA (día anterior)':'Enviar aviso de HOY')+'">'+(_esMan?'🌙💬':'💬')+'</button></a>';
           }
         }
         html+='</div>';
@@ -4669,6 +4670,23 @@ function armarLinkWhatsAppLlamada(p){
 // si es multibulto) — cambia el botón a "ya avisado" y sincroniza el cambio a Sheets para
 // que se vea igual en todos los celulares (el de Kathy y el de Cristian).
 // Es de una sola vía: una vez en true, no se vuelve a poner en false desde acá.
+// REGLAS DE HORARIO (prueba 1 mes, 27-10-2026):
+//  - Aviso de MAÑANA (día anterior): se manda apenas se sube la ruta, hasta las 20:00.
+//  - Aviso de HOY: desde las 8:30. Si la ruta se subió después de las 20:00, el pedido queda
+//    para el otro día y su aviso pasa a ser "hoy" automáticamente (por la fecha de la ruta).
+// Esta función solo AVISA si se intenta enviar fuera de horario; Kathy decide si igual lo envía.
+function avisoWaOk(id){
+  var p = paquetes.find(function(x){ return x.id === id; });
+  if(!p) return true;
+  var ahora = new Date(), min = ahora.getHours()*60 + ahora.getMinutes();
+  if(diasHastaRutaPedido(p) > 0 && min >= 20*60){
+    return confirm('Son más de las 20:00.\n\nEl aviso de MAÑANA se manda hasta las 20:00. Lo normal es esperar a mañana desde las 8:30, y ahí el mensaje sale solo como "hoy".\n\n¿Enviar igual el aviso de MAÑANA ahora?');
+  }
+  if(diasHastaRutaPedido(p) === 0 && min < 8*60+30){
+    return confirm('Son menos de las 8:30.\n\nEl aviso de HOY se manda desde las 8:30.\n\n¿Enviar igual ahora?');
+  }
+  return true;
+}
 function marcarAvisoWaEnviado(id){
   var p = paquetes.find(function(x){ return x.id === id; });
   if(!p || p.avisoWaEnviado) return;
