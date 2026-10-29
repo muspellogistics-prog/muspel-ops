@@ -757,7 +757,10 @@ function toggleMes(clase, headerRow){
 // ════════════════════════════════════════
 const LIQUIDACIONES_ALAS = {
   'julio 2026':  { ordenes: 112,   neto: 257600, iva: 48944 },
-  'agosto 2026': { ordenes: 299.5, neto: 688850, iva: 130882 }
+  'agosto 2026': { ordenes: 299.5, neto: 688850, iva: 130882 },
+  // Septiembre 2026 — liquidación SER XIV y X recibida el 27-10-2026 (1.088,5 entregas equivalentes, bono de efectividad $0).
+  // Total bruto a facturar 2.681.302; ALAS descuenta arriendo de vehículo 693.603 -> total a pagar 1.987.699.
+  'septiembre 2026': { ordenes: 1088.5, neto: 2253195, iva: 428107 }
 };
 function liquidacionAlas(mesTexto){ return LIQUIDACIONES_ALAS[normalizarMes(mesTexto)] || null; }
 // Ingreso neto del mes: el de la liquidación si ya existe; si no, el estimado de Cierres.
