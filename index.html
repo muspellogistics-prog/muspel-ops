@@ -3269,6 +3269,45 @@ function actualizarResumen(){
 // ════════════════════════════════════════
 // IMPORTAR EXCEL
 // ════════════════════════════════════════
+// ═══ AGREGADO 01-11-2026: al subir una ruta, se registra también en el INVENTARIO ═══
+// Las órdenes nuevas entran al inventario como «En ruta» (después el inventario las pasa a
+// Entregado / En bodega por retorno / Devuelto según lo que pase en la OPS). Si algo falla,
+// no afecta a la OPS: el inventario igual se pone al día solo cuando se abre.
+var INV_URL_AVISO = 'https://script.google.com/macros/s/AKfycbykCAxXOCy2oFPHsNVsXgN4kTzlax5iWCNK4sLSkpeYLD8_SltLDAbkEV4Q6lcT1u3LUw/exec';
+function kfInv(s){ return String(s==null?'':s).trim().toUpperCase().replace(/-\d+\s*\/\s*\d+$/,'').replace(/[^A-Z0-9]/g,''); }
+function avisarInventario(){
+  try{
+    // 1) Mismo equipo: si el inventario está abierto en otra pestaña, que se sincronice ya
+    try{ localStorage.setItem('muspel_inv_nudge', String(Date.now())); }catch(e){}
+    try{ var bc=new BroadcastChannel('muspel_inv'); bc.postMessage('sync'); setTimeout(function(){ bc.close(); },500); }catch(e){}
+    // 2) Registrar las órdenes nuevas directo en la planilla del inventario (usa la clave guardada al abrir el inventario)
+    var ck=''; try{ ck=localStorage.getItem('inv_clave')||''; }catch(e){}
+    if(!ck) return;
+    fetch(INV_URL_AVISO+'?accion=listar&clave='+encodeURIComponent(ck)).then(function(r){return r.json();}).then(function(j){
+      if(!j || !Array.isArray(j.filas)) return;
+      var existe={}; j.filas.forEach(function(f){ existe[kfInv(f.folio)]=1; if(f.qr) existe[kfInv(f.qr)]=1; });
+      var g={}, orden=[];
+      paquetes.forEach(function(p){
+        if(p.esRetiro) return;
+        var fo=String(p.folio||p.codigo||'').trim(); if(!fo || existe[kfInv(fo)] || existe[kfInv(p.codigo)]) return;
+        if(!g[fo]){ g[fo]=[]; orden.push(fo); } g[fo].push(p);
+      });
+      if(!orden.length) return;
+      var d=new Date(), z=function(n){ return (n<10?'0':'')+n; }, hoyTxt=z(d.getDate())+'-'+z(d.getMonth()+1)+'-'+d.getFullYear();
+      var filasNuevas=[];
+      orden.forEach(function(fo){ var gr=g[fo]; gr.forEach(function(p,i){
+        var bul=(i+1)+' de '+gr.length;
+        filasNuevas.push({id:fo+'|'+bul, folio:fo, b2b:String(p.b2b||''), nombre:String(p.nombre||''), telefono:String(p.tel||''), direccion:String(p.dir||''), comuna:String(p.comuna||''), bulto:bul, qr:'', estado:'En ruta', verificado:'no', nota:'Ruta '+hoyTxt+' | Registrada desde la OPS al subir la ruta'});
+      }); });
+      var lotes=[]; for(var i=0;i<filasNuevas.length;i+=100) lotes.push(filasNuevas.slice(i,i+100));
+      (function sig(k){ if(k>=lotes.length) return;
+        fetch(INV_URL_AVISO,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({accion:'guardar',clave:ck,filas:lotes[k]})})
+          .then(function(r){return r.json();}).then(function(){ sig(k+1); }).catch(function(){});
+      })(0);
+    }).catch(function(){});
+  }catch(e){}
+}
+
 function importarExcel(input){
   var file = input.files[0];
   if(!file) return;
@@ -3542,6 +3581,7 @@ function importarExcel(input){
         }
         status.innerHTML += avisoEspeciales + avisoProblemas;
         renderPaquetes();
+        avisarInventario();
       });
     }catch(err){
       status.style.color='var(--rojo)';
