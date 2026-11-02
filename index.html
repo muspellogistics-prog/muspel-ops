@@ -3308,6 +3308,62 @@ function avisarInventario(){
   }catch(e){}
 }
 
+// ════════════════════════════════════════
+// UBICACIONES GUARDADAS — 02-11-2026
+// Cuando en una ruta anterior se anotó una ubicación (link de Google Maps) en la observación de
+// una dirección, esa ubicación se copia sola a la observación de la orden nueva con la misma
+// dirección al subir la ruta. Así no hay que volver a pedírsela al cliente.
+// (El Inventario usa la misma regla para mostrar la ubicación guardada al buscar.)
+// ════════════════════════════════════════
+function ubicClave(dir, comuna){
+  var d = String(dir||'').replace(/\([^)]*\)/g,' ').replace(/https?:\/\/\S+/g,' ');
+  var partes = d.split(',');
+  var seg = partes[0].normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+  seg = seg.replace(/^(avenida|avda|av|calle|pasaje|psje|pje)\s+/,'').trim();
+  if(!seg || /(^| )s n( |$)/.test(seg)) return '';
+  var conNumero = /\d/.test(seg);
+  if(!conNumero && !/^(sector|fundo|condominio|villa|loteo|poblacion|caleta|parcelacion|hijuela)\b/.test(seg)) return '';
+  var c = String(comuna || partes[1] || '').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z ]/g,' ').replace(/\s+/g,' ').trim();
+  return seg + '|' + c;
+}
+function ubicDeObs(obs){
+  var t = String(obs||'').replace(/\s+/g,' ').trim();
+  var m = /https?:\/\/(?:www\.)?(?:google\.[a-z.]+\/maps\S*|maps\.google\.[a-z.]+\S*|maps\.app\.goo\.gl\/\S+|goo\.gl\/maps\/\S+)/i.exec(t);
+  if(!m) return null;
+  var url = m[0].replace(/[).,;]+$/,'');
+  var texto = t.length <= 220 ? t : url;
+  if(!/ubicaci/i.test(texto)) texto = 'UBICACIÓN: ' + texto;
+  return {url:url, texto:texto};
+}
+var __ubicMapa = null, __ubicMapaN = -1;
+function ubicMapa(){
+  if(__ubicMapa && __ubicMapaN === historialFilasRemotas.length) return __ubicMapa;
+  var mapa = {}, orden = {};
+  historialFilasRemotas.forEach(function(f){
+    if(!f) return;
+    var u = ubicDeObs(f[16]); if(!u) return;
+    var k = ubicClave(f[4], f[5]); if(!k) return;
+    var fo = fechaOrdenable(f[0]);
+    if(!mapa[k] || fo >= orden[k]){ mapa[k] = u; orden[k] = fo; }
+  });
+  __ubicMapa = mapa; __ubicMapaN = historialFilasRemotas.length;
+  return mapa;
+}
+// Devuelve la ubicación guardada para la dirección de una orden (o null).
+function ubicGuardadaDe(p){
+  var k = ubicClave(p && p.dir, p && p.comuna);
+  if(!k) return null;
+  var u = ubicMapa()[k];
+  if(u) return u;
+  // también mira órdenes ya cargadas hoy (con su observación)
+  for(var i=0; i<paquetes.length; i++){
+    var q = paquetes[i];
+    if(q === p || !q.observacion) continue;
+    if(ubicClave(q.dir, q.comuna) === k){ var uo = ubicDeObs(q.observacion); if(uo) return uo; }
+  }
+  return null;
+}
+
 function importarExcel(input){
   var file = input.files[0];
   if(!file) return;
@@ -3428,7 +3484,7 @@ function importarExcel(input){
       var paquetesPorCodigo = {};
       paquetes.forEach(function(p){ paquetesPorCodigo[p.codigo] = p; });
 
-      var nuevos=0, dup=0, ocultasSalteadas=0, alertas=[], actualizadosNumRuta=0, cuentaRetiros=0, cuentaIntercambios=0;
+      var nuevos=0, dup=0, ocultasSalteadas=0, alertas=[], actualizadosNumRuta=0, cuentaRetiros=0, cuentaIntercambios=0, cuentaUbic=0;
       // AGREGADO 07-10-2026: columna "Designacion" del Excel. L / Luchín -> Operativo 2 (Luchín);
       // C / Cristian / OP -> OP. Principal. Si la celda está vacía NO se toca nada (así lo ya
       // asignado se mantiene y los pedidos nuevos quedan "Sin asignar" para repartirlos con el desplegable).
@@ -3477,7 +3533,7 @@ function importarExcel(input){
           var espDup = tipoEspecialFila(row), prevDup = paquetesPorCodigo[codigo], cambioDup = false;
           if(espDup.esRetiro && !prevDup.esRetiro){ prevDup.esRetiro = true; cambioDup = true; }
           if(espDup.intercambio && !prevDup.intercambio){ prevDup.intercambio = true; cambioDup = true; }
-          if(espDup.obs && espDup.obs !== (prevDup.observacion||'')){ prevDup.observacion = espDup.obs; cambioDup = true; }
+          if(espDup.obs && espDup.obs !== (prevDup.observacion||'') && String(prevDup.observacion||'').indexOf(espDup.obs+' | ')!==0){ prevDup.observacion = espDup.obs; cambioDup = true; }
           if(cambioDup){
             paquetes.forEach(function(x){ if(x.codigo===codigo){ x.esRetiro = prevDup.esRetiro; x.intercambio = prevDup.intercambio; x.observacion = prevDup.observacion; } });
             enviarASheets('cambio_estado', {codigo:codigo, nombre:prevDup.nombre, estado:prevDup.estado, esRetiro:prevDup.esRetiro?'si':'no', intercambio:prevDup.intercambio?'si':'no', observacion:prevDup.observacion||'', soloDatos:true, fecha:new Date().toLocaleString('es-CL')});
@@ -3542,6 +3598,14 @@ function importarExcel(input){
           esRetiro: tipoEspecialFila(row).esRetiro,
           observacion: tipoEspecialFila(row).obs
         };
+        // Ubicación guardada de un pedido anterior a la misma dirección (si la observación no trae ya un link de mapa)
+        if(!ubicDeObs(nuevoPaquete.observacion)){
+          var ubG = ubicGuardadaDe(nuevoPaquete);
+          if(ubG){
+            nuevoPaquete.observacion = (nuevoPaquete.observacion ? nuevoPaquete.observacion.trim() + ' | ' : '') + ubG.texto.replace(/\s*\(guardada de un pedido anterior\)/gi,'') + ' (guardada de un pedido anterior)';
+            cuentaUbic++;
+          }
+        }
         anotarDesignacion(codigo,row);
         if(nuevoPaquete.esRetiro) cuentaRetiros++;
         if(nuevoPaquete.intercambio) cuentaIntercambios++;
@@ -3559,6 +3623,7 @@ function importarExcel(input){
       }
       var avisoEspeciales = (cuentaRetiros||cuentaIntercambios) ? '<br><span style="color:#9a3412;font-weight:700;">'+(cuentaRetiros?'📮 '+cuentaRetiros+' retiro(s) de producto':'')+(cuentaRetiros&&cuentaIntercambios?' · ':'')+(cuentaIntercambios?'🔀 '+cuentaIntercambios+' intercambio(s)':'')+' detectados en el archivo.</span>' : '';
       status.innerHTML += avisoEspeciales;
+      if(cuentaUbic>0){ status.innerHTML += '<br><span style="color:var(--azul);font-weight:700;">📍 '+cuentaUbic+' orden(es) con ubicación guardada de un pedido anterior (ya quedó copiada en su observación).</span>'; }
       if(ocultasSalteadas>0){
         status.innerHTML += '<br><span style="color:var(--naranja);font-weight:600;">👁️‍🗨️ '+ocultasSalteadas+' fila(s) ocultas en el Excel se saltaron (no se importaron).</span>';
       }
@@ -3576,6 +3641,7 @@ function importarExcel(input){
       }, function(){
         status.style.color='var(--verde)';
         status.textContent = '✅ ' + nuevos + ' órdenes listas para repartir.';
+        if(cuentaUbic>0){ status.innerHTML += '<br><span style="color:var(--azul);font-weight:700;">📍 '+cuentaUbic+' orden(es) con ubicación guardada de un pedido anterior (copiada en su observación).</span>'; }
         if(alertas.length>0){
           status.innerHTML += '<br><span style="color:var(--naranja);font-weight:600;">⚠️ '+alertas.length+' código(s) ya existían en días anteriores.</span>';
         }
