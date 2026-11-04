@@ -334,7 +334,7 @@
   <div class="tab active" onclick="showTab('resumen')">📊 Resumen</div>
   <div class="tab solo-comercial" onclick="showTab('importar')">📥 Importar</div>
   <div class="tab" onclick="showTab('paquetes')">📦 Órdenes</div>
-  <!-- 03-11-2026: pestaña QR oculta (no se usa). El código del QR sigue en el archivo por si algún día se quiere volver a activar: basta devolver la línea <div class="tab" onclick="showTab('qr')">📷 QR</div> aquí. -->
+  <div class="tab" onclick="showTab('qr')">📷 QR</div>
   <div class="tab solo-comercial" onclick="showTab('cierre')">✅ Cierre</div>
   <div class="tab solo-comercial" onclick="showTab('dashboard')">📈 Dashboard</div>
   <div class="tab solo-comercial" onclick="showTab('historial')">🗂 Historial</div>
@@ -1457,8 +1457,6 @@ function descargarOrdenesDesdeSheets(onFin){
       // importó el Excel. row[17] es el mismo índice que ya usa traerOrdenesDesdeNube().
       var cloudNumRuta = (row[17]===''||row[17]===null||row[17]===undefined) ? null : Number(row[17]);
       var avisoWaEnviadoNube = row[21]===true || row[21]==='TRUE';
-      // AGREGADO 03-11-2026: columna 24 = ya se mandó el 2º mensaje ("llego en 10 min").
-      var avisoLlegadaNube = row[23]===true || row[23]==='TRUE';
       // CORREGIDO 14-09-2026: esta función tampoco traía la observación (indicación del
       // cliente que Kathy deja para Cristian) — por eso quedaba escrita en Sheets pero
       // nunca le llegaba al celular de Cristian, que depende del auto-sync de 10s y no
@@ -1486,7 +1484,6 @@ function descargarOrdenesDesdeSheets(onFin){
             // desde su celular, el de Cristian se entera solo (sin que él tenga que
             // tocar nada) en el próximo auto-sync de 30s.
             if(avisoWaEnviadoNube && !existente.avisoWaEnviado){ existente.avisoWaEnviado = true; actualizadas++; }
-            if(avisoLlegadaNube && !existente.avisoLlegadaEnviado){ existente.avisoLlegadaEnviado = true; actualizadas++; }
             // Nº de ruta: se completa si este equipo todavía no lo tiene y la nube sí
             // (mismo criterio que traerOrdenesDesdeNube) — así, si Kathy importa el Excel
             // DESPUÉS de que Cristian ya tenía el pedido cargado, igual le llega el número.
@@ -1536,8 +1533,7 @@ function descargarOrdenesDesdeSheets(onFin){
         intercambio: row[19]===true||row[19]==='TRUE',
         observacion: cloudObservacion,
         motivo: String(row[22]||'').trim(),
-        avisoWaEnviado: avisoWaEnviadoNube,
-        avisoLlegadaEnviado: avisoLlegadaNube
+        avisoWaEnviado: avisoWaEnviadoNube
       });
       importadas++;
       nuevosPaq.push(paquetes[paquetes.length-1]);
@@ -2879,25 +2875,11 @@ function abrirModal(id){
   // teléfono venía con o sin el 9 inicial o el +56 (ALAS lo trae en formatos mixtos).
   var telAcciones = document.getElementById('modal-tel-acciones');
   var btnModalWa = document.getElementById('modal-tel-whatsapp');
-  var usarLlegada = !!(p.avisoWaEnviado && !p.avisoLlegadaEnviado && perfilActual==='operativo');
-  var linkWa = usarLlegada ? armarLinkWhatsAppLlegada(p) : (p.avisoWaEnviado ? armarLinkWhatsAppLlamada(p) : armarLinkWhatsApp(p));
+  var linkWa = p.avisoWaEnviado ? armarLinkWhatsAppLlamada(p) : armarLinkWhatsApp(p);
   if(linkWa){
     document.getElementById('modal-tel-llamar').href = 'tel:+'+normalizarTelChile(p.tel);
     btnModalWa.href = linkWa;
-    if(usarLlegada){
-      btnModalWa.innerHTML = '<button class="btn" style="width:100%;margin-bottom:0;background:#f59e0b;color:#fff;">⏱️💬 Avisar: llego en 10 min</button>';
-      var idParaLlegada = p.id, pParaLlegada = p;
-      btnModalWa.onclick = function(){
-        marcarAvisoLlegadaEnviado(idParaLlegada);
-        // Después de abrir el chat, el botón vuelve a "Llamar por WhatsApp" (sin texto).
-        setTimeout(function(){
-          var lk = armarLinkWhatsAppLlamada(pParaLlegada);
-          if(lk) btnModalWa.href = lk;
-          btnModalWa.innerHTML = '<button class="btn" style="width:100%;margin-bottom:0;background:#128C7E;color:#fff;">✅💬 Llamar por WhatsApp</button>';
-          btnModalWa.onclick = null;
-        }, 400);
-      };
-    } else if(p.avisoWaEnviado){
+    if(p.avisoWaEnviado){
       btnModalWa.innerHTML = '<button class="btn" style="width:100%;margin-bottom:0;background:#128C7E;color:#fff;">✅💬 Llamar por WhatsApp</button>';
       btnModalWa.onclick = null;
     } else {
@@ -3048,110 +3030,24 @@ function tituloParaMotivo(estado){
   return estado;
 }
 
-// ════════════════════════════════════════
-// MOTIVO POR ALTERNATIVAS (AGREGADO 03-11-2026) — reemplaza el cuadro de texto libre.
-// Se toca UNA opción y listo; "Otro" permite escribir el motivo. Funciona igual en modo
-// Operativo y en modo Comercial (todas las formas de marcar usan este mismo selector).
-// Para cambiar las opciones, edita las listas de abajo.
-// ════════════════════════════════════════
-var MOTIVOS_POR_ESTADO = {
-  retorno:  ['No contesta', 'No hay quien reciba', 'Rechazó la entrega', 'Dirección incorrecta o incompleta'],
-  devuelto: ['Agotó los intentos', 'Rechazó la entrega', 'Dirección incorrecta o incompleta'],
-  daniado:  ['Llegó dañado de origen', 'Se dañó en la ruta']
-};
-function pedirMotivo(estado, motivoPrevio, alElegir, alCancelar){
-  var viejo = document.getElementById('motivo-overlay'); if(viejo) viejo.remove();
-  var ov = document.createElement('div');
-  ov.id = 'motivo-overlay';
-  ov.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,23,42,.55);z-index:100001;display:flex;align-items:flex-start;justify-content:center;padding:6vh 12px 12px;overflow:auto;';
-  var caja = document.createElement('div');
-  caja.style.cssText = 'background:#fff;border-radius:14px;width:100%;max-width:420px;padding:14px;box-shadow:0 8px 30px rgba(0,0,0,.3);';
-  ov.appendChild(caja);
-  var cerrado = false;
-  function cerrar(){ cerrado = true; ov.remove(); }
-  function elegir(m){ if(cerrado) return; cerrar(); alElegir(String(m||'').trim()); }
-  function cancelar(){ if(cerrado) return; cerrar(); if(alCancelar) alCancelar(); }
-  var tit = document.createElement('div');
-  tit.style.cssText = 'font-weight:800;font-size:1rem;color:#1e293b;margin-bottom:4px;';
-  tit.textContent = '¿Por qué se marca como ' + tituloParaMotivo(estado) + '?';
-  caja.appendChild(tit);
-  function boton(texto, fondo, color, borde, onclick){
-    var b = document.createElement('button');
-    b.type = 'button';
-    b.textContent = texto;
-    b.style.cssText = 'display:block;width:100%;margin-top:7px;padding:12px;border-radius:10px;font-size:0.95rem;font-weight:700;cursor:pointer;background:'+fondo+';color:'+color+';border:1px solid '+borde+';';
-    b.onclick = onclick;
-    caja.appendChild(b);
-    return b;
-  }
-  if(motivoPrevio && String(motivoPrevio).trim()){
-    boton('Mantener: ' + String(motivoPrevio).trim(), '#128C7E', '#fff', '#128C7E', function(){ elegir(motivoPrevio); });
-  }
-  (MOTIVOS_POR_ESTADO[estado] || []).forEach(function(m){
-    boton(m, '#fff', '#1e293b', '#cbd5e1', function(){ elegir(m); });
-  });
-  // "Otro": muestra un cuadro para escribir el motivo.
-  var filaOtro = document.createElement('div');
-  filaOtro.style.cssText = 'display:none;margin-top:7px;';
-  var inp = document.createElement('input');
-  inp.type = 'text';
-  inp.placeholder = 'Escribe el motivo';
-  inp.maxLength = 200;
-  inp.style.cssText = 'width:100%;padding:12px;border:2px solid #2563a8;border-radius:10px;font-size:1rem;box-sizing:border-box;';
-  filaOtro.appendChild(inp);
-  var btnGuardar = document.createElement('button');
-  btnGuardar.type = 'button';
-  btnGuardar.textContent = 'Guardar motivo';
-  btnGuardar.style.cssText = 'display:block;width:100%;margin-top:7px;padding:12px;border-radius:10px;font-size:0.95rem;font-weight:700;cursor:pointer;background:#1a7a4a;color:#fff;border:1px solid #1a7a4a;';
-  function guardarOtro(){ var t = inp.value.trim(); if(!t){ inp.focus(); return; } elegir(t); }
-  btnGuardar.onclick = guardarOtro;
-  inp.onkeydown = function(e){ if(e.key === 'Enter'){ e.preventDefault(); guardarOtro(); } };
-  filaOtro.appendChild(btnGuardar);
-  var btnOtro = boton('✏️ Otro (escribir)', '#eff6ff', '#1d4ed8', '#93c5fd', function(){
-    btnOtro.style.display = 'none';
-    filaOtro.style.display = 'block';
-    inp.focus();
-  });
-  caja.appendChild(filaOtro);
-  var pie = document.createElement('div');
-  pie.style.cssText = 'display:flex;gap:8px;margin-top:10px;';
-  function botonPie(texto, onclick){
-    var b = document.createElement('button');
-    b.type = 'button';
-    b.textContent = texto;
-    b.style.cssText = 'flex:1;padding:11px;border-radius:10px;font-size:0.9rem;font-weight:700;cursor:pointer;background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;';
-    b.onclick = onclick;
-    pie.appendChild(b);
-  }
-  botonPie('Sin motivo', function(){ elegir(''); });
-  botonPie('Cancelar', cancelar);
-  caja.appendChild(pie);
-  document.body.appendChild(ov);
-}
-
-function marcarDesdeModal(estado, motivoElegido){
+function marcarDesdeModal(estado){
   if(!modalOrdenId) return;
   // Misma protección contra doble toque que en marcar() — reusa el mismo registro de
   // tiempos, con el id del pedido abierto en el modal.
-  if(motivoElegido === undefined){
-    var ahoraMarcarModalTs = Date.now();
-    if(_ultimoMarcarTs[modalOrdenId] && (ahoraMarcarModalTs - _ultimoMarcarTs[modalOrdenId] < 3000)) return;
-    _ultimoMarcarTs[modalOrdenId] = ahoraMarcarModalTs;
-  }
+  var ahoraMarcarModalTs = Date.now();
+  if(_ultimoMarcarTs[modalOrdenId] && (ahoraMarcarModalTs - _ultimoMarcarTs[modalOrdenId] < 3000)) return;
+  _ultimoMarcarTs[modalOrdenId] = ahoraMarcarModalTs;
   var p = paquetes.find(function(x){return x.id===modalOrdenId;});
   if(p){
     var motivo = '';
-    if(motivoElegido === undefined && requiereMotivo(estado)){
-      // 03-11-2026: el motivo se elige por alternativas (o "Otro" para escribir). Pasando de
-      // Retorno → Devuelta a Alas se ofrece "Mantener" el motivo original del retorno.
-      var idModalPendiente = modalOrdenId;
-      var previoModal = (estado === 'devuelto' && p.estado === 'retorno') ? (p.motivo||'') : '';
-      pedirMotivo(estado, previoModal,
-        function(m){ marcarDesdeModal(estado, m); },
-        function(){ delete _ultimoMarcarTs[idModalPendiente]; });
-      return;
+    if(estado === 'devuelto' && p.estado === 'retorno'){
+      // Pasando de Retorno → Devuelta a Alas: conserva el motivo original del retorno
+      // (ya quedó registrado por qué no se pudo entregar) salvo que se quiera anotar algo más.
+      motivo = prompt('¿Algo que anotar sobre esta devolución a Alas? (opcional)', p.motivo||'') || '';
+    } else if(requiereMotivo(estado)){
+      motivo = prompt('¿Por qué se marca '+tituloParaMotivo(estado)+'? (opcional)') || '';
     }
-    motivo = String(motivoElegido || '').trim();
+    motivo = motivo.trim();
     var grupo = calcularGrupoMultibulto(p);
     if(grupo.length > 1){
       alert('📦 Esta orden tiene '+grupo.length+' paquetes — se van a marcar TODOS como '+tituloParaMotivo(estado)+' juntos.');
@@ -3554,8 +3450,23 @@ function importarExcel(input){
         if(v.indexOf('J05')!==-1 || v.indexOf('PRINCIPAL')!==-1) return 'Principal';
         return null;
       }
+      // CAMBIO 03-11-2026: ALAS ya no usa J06; TODO viene como J05. Principal vs Ramal ahora se saca
+      // de la COMUNA (Osorno = Principal; cualquier otra comuna = Ramal). Un "J06" o "Ramal"
+      // explícito en BASE sigue valiendo como Ramal.
+      function tipoDesdeComuna(c){
+        var v = String(c||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+        if(!v) return null;
+        return v==='osorno' ? 'Principal' : 'Ramal';
+      }
+      function tipoDeFila(row){
+        if(idx.tipo!==undefined && row[idx.tipo]) return String(row[idx.tipo]).trim();
+        var b = idx.base!==undefined ? tipoDesdeBase(row[idx.base]) : null;
+        if(b==='Ramal') return 'Ramal';
+        var c = idx.comuna!==undefined ? tipoDesdeComuna(row[idx.comuna]) : null;
+        return c || b || null;
+      }
       var tipoPorDefecto = 'Principal';
-      if(idx.tipo === undefined && idx.base === undefined){
+      if(idx.tipo === undefined && idx.base === undefined && idx.comuna === undefined){
         var elegido = prompt('Este archivo no trae ni "Tipo Destino" ni "BASE" (J05/J06).\n\n¿Cómo se marcan TODAS estas órdenes? Escribe: Principal o Ramal', 'Principal');
         if(elegido && elegido.trim().toLowerCase().indexOf('ramal')===0){
           tipoPorDefecto = 'Ramal';
@@ -3682,9 +3593,7 @@ function importarExcel(input){
           dir:row[idx.dir]?String(row[idx.dir]).trim():'',
           comuna:row[idx.comuna]?String(row[idx.comuna]).trim():'',
           region:row[idx.region]?String(row[idx.region]).trim():'',
-          tipo: (idx.tipo!==undefined && row[idx.tipo]) ? String(row[idx.tipo]).trim() :
-                (idx.base!==undefined && tipoDesdeBase(row[idx.base])) ? tipoDesdeBase(row[idx.base]) :
-                tipoPorDefecto,
+          tipo: tipoDeFila(row) || tipoPorDefecto,
           b2b:row[idx.b2b]?String(row[idx.b2b]).trim():'',
           estado:'pendiente', ts:Date.now(),
           diaRutaFecha: diaRutaFechaImport,
@@ -4085,7 +3994,6 @@ function traerOrdenesDesdeNube(){
         // avisoWaEnviado es de una sola vía (como sinAgrupar): una vez que cualquier
         // celular lo marcó true, se propaga a los demás y ya no vuelve a false.
         if(row[21]===true || row[21]==='TRUE'){ if(!local.avisoWaEnviado){ local.avisoWaEnviado = true; cambio = true; } }
-        if(row[23]===true || row[23]==='TRUE'){ if(!local.avisoLlegadaEnviado){ local.avisoLlegadaEnviado = true; cambio = true; } }
         // El estado solo se pisa si la nube tiene un cambio MÁS NUEVO que lo que hay acá
         // (para no borrar, por ejemplo, una entrega que Cristian acaba de marcar en su
         // celular pero que todavía no alcanzó a subir a la nube).
@@ -4109,7 +4017,6 @@ function traerOrdenesDesdeNube(){
           intentosAgotados: row[15]===true||row[15]==='TRUE', numRuta: cloudNumRuta,
           esRetiro: row[18]===true||row[18]==='TRUE', intercambio: row[19]===true||row[19]==='TRUE',
           observacion: cloudObservacion, avisoWaEnviado: row[21]===true||row[21]==='TRUE',
-          avisoLlegadaEnviado: row[23]===true||row[23]==='TRUE',
           motivo: String(row[22]||'').trim()
         });
         agregadas++;
@@ -4610,7 +4517,7 @@ function renderComunasDeTipo(items, diaSemana, tipo){
         ? '<a class="dir-maps" href="'+urlMapsCard+'" target="_blank" rel="noopener" onclick="event.stopPropagation()">🗺️ '+escHtml(dirMostrar)+'</a>'
         : escHtml(dirMostrar);
       html+='<div class="paquete-dir">'+dirHtml+(p.tel?' · '+escHtml(p.tel):'')+'</div>';
-      html+='<div class="paquete-codigo">'+p.codigo+' <span class="badge '+badgeClass+'">'+badgeTxt+'</span> <span style="font-size:0.65rem;font-weight:700;color:'+((p.tipo||'Principal').toLowerCase()==='ramal'?'var(--naranja)':'var(--azul2)')+';">'+((p.tipo||'Principal').toLowerCase()==='ramal'?'🛣 J06':'🏙 J05')+'</span></div>';
+      html+='<div class="paquete-codigo">'+p.codigo+' <span class="badge '+badgeClass+'">'+badgeTxt+'</span> <span style="font-size:0.65rem;font-weight:700;color:'+((p.tipo||'Principal').toLowerCase()==='ramal'?'var(--naranja)':'var(--azul2)')+';">'+((p.tipo||'Principal').toLowerCase()==='ramal'?'🛣 Ramal':'🏙 Principal')+'</span></div>';
       if(perfilActual==='comercial' && p.estado!=='pendiente' && p.estado!=='entregado' && p.motivo && String(p.motivo).trim()){
         html+='<div style="margin-top:4px;background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:4px 8px;font-size:0.82rem;font-weight:700;color:#b91c1c;">Motivo: '+escHtml(p.motivo)+'</div>';
       }
@@ -4624,13 +4531,7 @@ function renderComunasDeTipo(items, diaSemana, tipo){
           // Ya se mandó el aviso: el botón cambia a "llamar por WhatsApp" (sin texto
           // precargado) — distinto color + check para que se note de un vistazo.
           var linkWaLlamada = armarLinkWhatsAppLlamada(p);
-          // 03-11-2026: en modo Operativo, mientras no se haya mandado el 2º mensaje, el mismo
-          // botón pasa a ser "llego en 10 min" (ámbar). Al tocarlo se abre el chat con el texto
-          // listo y vuelve al ✅💬 de siempre para llamar al llegar.
-          var linkWaLlegada = (perfilActual==='operativo' && !p.avisoLlegadaEnviado) ? armarLinkWhatsAppLlegada(p) : null;
-          if(linkWaLlegada){
-            html+='<a href="'+linkWaLlegada+'" target="_blank" onclick="marcarAvisoLlegadaEnviado('+p.id+')"><button class="btn btn-sm" style="background:#f59e0b;color:#fff;" title="Mensaje: llego en 10 min">⏱️💬</button></a>';
-          } else if(linkWaLlamada){
+          if(linkWaLlamada){
             html+='<a href="'+linkWaLlamada+'" target="_blank"><button class="btn btn-sm" style="background:#128C7E;color:#fff;" title="Aviso ya enviado — abre el chat para llamar">✅💬</button></a>';
           }
         } else {
@@ -4884,49 +4785,6 @@ function armarLinkWhatsAppLlamada(p){
   return 'https://wa.me/'+telLimpio;
 }
 
-
-// ════════════════════════════════════════
-// 2º MENSAJE PREDETERMINADO: "llego en unos 10 minutos" (AGREGADO 03-11-2026)
-// Lo manda Cristian DESDE SU PROPIO WhatsApp (se abre el chat con el texto ya escrito),
-// después de que ya salió el aviso de las 9 am (avisoWaEnviado = true). Solo aparece en
-// modo Operativo. Se manda UNO a UNO, cuando Cristian está cerca (no en lote), y no
-// menciona ninguna llamada: la llamada la hace al llegar, desde el botón ✅💬.
-// ════════════════════════════════════════
-function nombrePropioWa(t){
-  t = String(t||'').trim();
-  if(!t) return '';
-  // Si viene todo en MAYÚSCULAS ("MARIA ESTER"), lo deja como nombre propio ("Maria Ester").
-  if(t === t.toUpperCase() && t !== t.toLowerCase()) t = t.toLowerCase();
-  // La primera letra de cada palabra siempre en mayúscula ("maria jose" -> "Maria Jose").
-  return t.replace(/(^|\s)(\S)/g, function(m, a, b){ return a + b.toUpperCase(); });
-}
-// Nombre de quien escribe: el repartidor de ESTE celular ("OP. Cristian" -> "Cristian").
-function nombreRemitenteWa(){
-  var inf = getRepartidorInfo(usuarioActual);
-  var n = inf ? String(inf.nombre||'').replace(/^OP\.?\s*/i,'').trim() : '';
-  return n || 'Cristian';
-}
-function armarLinkWhatsAppLlegada(p){
-  var telLimpio = normalizarTelChile(p.tel);
-  if(!telLimpio) return null;
-  var nombreCompleto = String(p.nombre||'').trim().replace(/[\s.\-]+$/,'');
-  var esEmpresa = /\b(S\.?\s?P\.?\s?A|SPA|LTDA|LIMITADA|S\.\s?A|EIRL|E\.I\.R\.L|SOCIEDAD)\b\.?/i.test(nombreCompleto) || esNombreNegocio(nombreCompleto);
-  var primerNombre = nombreSaludo(p.nombre);
-  var nombre = '';
-  if(esEmpresa) nombre = nombrePropioWa(nombreCompleto);
-  else if(primerNombre && !/^\.$/.test(primerNombre)) nombre = nombrePropioWa(primerNombre);
-  var quien = nombreRemitenteWa();
-  var saludo = nombre ? ('Hola '+nombre+', soy '+quien+' de Muspel.') : ('Hola, soy '+quien+' de Muspel.');
-  var marca = String(p.b2b||'').trim();
-  var texto;
-  if(p.esRetiro){
-    texto = saludo+' Llego en unos 10 minutos aprox. a tu domicilio a retirar el producto'+(marca?' de '+marca:'')+', para que puedas entregármelo.';
-  } else {
-    texto = saludo+' Llego en unos 10 minutos aprox. a tu domicilio con tu pedido'+(marca?' de '+marca:'')+', para que puedas recibirlo.';
-  }
-  return 'https://wa.me/'+telLimpio+'?text='+encodeURIComponent(texto);
-}
-
 // Marca que el primer aviso por WhatsApp ya se envió para este pedido (y todo su grupo
 // si es multibulto) — cambia el botón a "ya avisado" y sincroniza el cambio a Sheets para
 // que se vea igual en todos los celulares (el de Kathy y el de Cristian).
@@ -4960,45 +4818,24 @@ function marcarAvisoWaEnviado(id){
   renderPaquetes();
 }
 
-// Marca que el 2º mensaje ("llego en 10 min") ya se mandó para este pedido (y todo su grupo
-// si es multibulto). Igual que el aviso: es de una sola vía y se sincroniza a Sheets
-// (columna 24 de "Ordenes") para que quede igual en todos los celulares.
-function marcarAvisoLlegadaEnviado(id){
-  var p = paquetes.find(function(x){ return x.id === id; });
-  if(!p || p.avisoLlegadaEnviado) return;
-  var grupo = calcularGrupoMultibulto(p);
-  grupo.forEach(function(item){ item.avisoLlegadaEnviado = true; });
-  p.avisoLlegadaEnviado = true;
-  guardarStorage();
-  codigosUnicos(grupo.length?grupo:[p]).forEach(function(cod){
-    enviarASheets('cambio_estado', {codigo:cod, nombre:p.nombre, estado:p.estado, motivo:p.motivo||'', avisoLlegadaEnviado:'si', soloDatos:true, fecha:new Date().toLocaleString('es-CL')});
-  });
-  renderPaquetes();
-}
-
 var _ultimoMarcarTs = {}; // por id de paquete, para no bloquear marcar 2 pedidos distintos seguidos
-function marcar(id, estado, motivoElegido){
+function marcar(id, estado){
   // Evita que un doble toque/doble clic en los íconos rápidos (✅🔁⚠️📮) dispare el mismo
   // cambio de estado 2 veces si el usuario toca más rápido de lo que tarda en
   // desaparecer el botón al re-dibujar la lista.
-  if(motivoElegido === undefined){
-    var ahoraMarcarTs = Date.now();
-    if(_ultimoMarcarTs[id] && (ahoraMarcarTs - _ultimoMarcarTs[id] < 3000)) return;
-    _ultimoMarcarTs[id] = ahoraMarcarTs;
-  }
+  var ahoraMarcarTs = Date.now();
+  if(_ultimoMarcarTs[id] && (ahoraMarcarTs - _ultimoMarcarTs[id] < 3000)) return;
+  _ultimoMarcarTs[id] = ahoraMarcarTs;
 
   var p = paquetes.find(function(x){return x.id===id;});
   if(p){
     var motivo = '';
-    if(motivoElegido === undefined && requiereMotivo(estado)){
-      // 03-11-2026: el motivo se elige por alternativas (o "Otro" para escribir).
-      var previoMarcar = (estado === 'devuelto' && p.estado === 'retorno') ? (p.motivo||'') : '';
-      pedirMotivo(estado, previoMarcar,
-        function(m){ marcar(id, estado, m); },
-        function(){ delete _ultimoMarcarTs[id]; });
-      return;
+    if(estado === 'devuelto' && p.estado === 'retorno'){
+      motivo = prompt('¿Algo que anotar sobre esta devolución a Alas? (opcional)', p.motivo||'') || '';
+    } else if(requiereMotivo(estado)){
+      motivo = prompt('¿Por qué se marca '+tituloParaMotivo(estado)+'? (opcional)') || '';
     }
-    motivo = String(motivoElegido || '').trim();
+    motivo = motivo.trim();
     var grupo = calcularGrupoMultibulto(p);
     if(grupo.length > 1){
       alert('📦 Esta orden tiene '+grupo.length+' paquetes — se van a marcar TODOS como '+tituloParaMotivo(estado)+' juntos.');
@@ -5149,14 +4986,13 @@ function limpiarQR(){
   document.getElementById('qr-multibulto-acciones').style.display = 'none';
 }
 
-function marcarTodoMultibulto(estado, motivoElegido){
+function marcarTodoMultibulto(estado){
   if(!qrPaqueteActual) return;
   var motivo = '';
-  if(motivoElegido === undefined && requiereMotivo(estado)){
-    pedirMotivo(estado, '', function(m){ marcarTodoMultibulto(estado, m); });
-    return;
+  if(requiereMotivo(estado)){
+    motivo = prompt('¿Por qué se marca '+tituloParaMotivo(estado)+'? (opcional, aplica a todos los bultos)') || '';
   }
-  motivo = String(motivoElegido || '').trim();
+  motivo = motivo.trim();
   // Marcar la orden escaneada
   qrPaqueteActual.estado = estado;
   qrPaqueteActual.motivo = motivo;
@@ -5179,14 +5015,13 @@ function marcarTodoMultibulto(estado, motivoElegido){
   qrPaqueteActual=null;
   qrMultibultoActual=[];
 }
-function marcarDesdeQR(estado, motivoElegido){
+function marcarDesdeQR(estado){
   if(!qrPaqueteActual) return;
   var motivo = '';
-  if(motivoElegido === undefined && requiereMotivo(estado)){
-    pedirMotivo(estado, '', function(m){ marcarDesdeQR(estado, m); });
-    return;
+  if(requiereMotivo(estado)){
+    motivo = prompt('¿Por qué se marca '+tituloParaMotivo(estado)+'? (opcional)') || '';
   }
-  motivo = String(motivoElegido || '').trim();
+  motivo = motivo.trim();
   var grupo = calcularGrupoMultibulto(qrPaqueteActual);
   if(grupo.length > 1){
     alert('📦 Esta orden tiene '+grupo.length+' paquetes — se van a marcar TODOS como '+tituloParaMotivo(estado)+' juntos.');
