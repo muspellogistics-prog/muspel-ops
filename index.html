@@ -170,7 +170,7 @@
   .modal-titulo{font-size:1rem;font-weight:700;color:var(--azul);margin-bottom:4px;}
   .modal-codigo{font-size:0.72rem;color:#94a3b8;font-family:monospace;margin-bottom:14px;}
   .modal-campo{display:flex;flex-direction:column;margin-bottom:10px;}
-  .modal-campo-acciones-tel{display:flex;gap:8px;margin:-2px 0 14px 0;}
+  .modal-campo-acciones-tel{display:flex;flex-wrap:wrap;gap:8px;margin:-2px 0 14px 0;}
   .modal-campo-label{font-size:0.68rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;}
   .modal-campo-valor{font-size:0.88rem;color:var(--texto);}
   .modal-acciones{display:flex;gap:8px;margin-top:16px;}
@@ -279,6 +279,7 @@
         <div class="modal-campo-acciones-tel" id="modal-tel-acciones" style="display:none;">
           <a id="modal-tel-llamar" href="#" style="flex:1;text-decoration:none;"><button class="btn btn-verde" style="width:100%;margin-bottom:0;">📞 Llamar</button></a>
           <a id="modal-tel-whatsapp" href="#" target="_blank" style="flex:1;text-decoration:none;"><button class="btn btn-primary" style="width:100%;margin-bottom:0;">💬 WhatsApp</button></a>
+          <a id="modal-tel-llego10" href="#" target="_blank" style="flex:1 1 100%;text-decoration:none;display:none;"><button class="btn" style="width:100%;margin-bottom:0;background:#f59e0b;color:#1f1300;">🚐 Llego en 10 min</button></a>
         </div>
         <div class="modal-campo">
           <span class="modal-campo-label">🚚 Tipo ruta</span>
@@ -334,7 +335,7 @@
   <div class="tab active" onclick="showTab('resumen')">📊 Resumen</div>
   <div class="tab solo-comercial" onclick="showTab('importar')">📥 Importar</div>
   <div class="tab" onclick="showTab('paquetes')">📦 Órdenes</div>
-  <div class="tab" onclick="showTab('qr')">📷 QR</div>
+  <div class="tab" style="display:none;" onclick="showTab('qr')">📷 QR</div>
   <div class="tab solo-comercial" onclick="showTab('cierre')">✅ Cierre</div>
   <div class="tab solo-comercial" onclick="showTab('dashboard')">📈 Dashboard</div>
   <div class="tab solo-comercial" onclick="showTab('historial')">🗂 Historial</div>
@@ -2887,6 +2888,20 @@ function abrirModal(id){
       var idParaAviso = p.id;
       btnModalWa.onclick = function(){ if(!avisoWaOk(idParaAviso)) return false; marcarAvisoWaEnviado(idParaAviso); };
     }
+    // 04-11-2026: botón "Llego en 10 min" (modo operativo, solo pedidos pendientes de hoy)
+    var btnLlego10 = document.getElementById('modal-tel-llego10');
+    var link10m = (perfilActual!=='comercial' && p.estado==='pendiente' && diasHastaRutaPedido(p)===0) ? armarLinkWhatsAppLlego10(p) : null;
+    if(btnLlego10){
+      if(link10m){
+        btnLlego10.href = link10m;
+        btnLlego10.style.display = 'block';
+        var _pid10 = p.id;
+        btnLlego10.onclick = function(){ marcarLlego10(_pid10); };
+        btnLlego10.firstChild.textContent = llego10Enviado(p) ? '✅ 🚐 Llego en 10 min (ya enviado)' : '🚐 Llego en 10 min';
+      } else {
+        btnLlego10.style.display = 'none';
+      }
+    }
     telAcciones.style.display = 'flex';
   }else{
     telAcciones.style.display = 'none';
@@ -3030,7 +3045,127 @@ function tituloParaMotivo(estado){
   return estado;
 }
 
-function marcarDesdeModal(estado){
+// ════════════════════════════════════════
+// AGREGADO 04-11-2026: motivo por ALTERNATIVAS (un toque) + opción "Otro" para escribir.
+// Reemplaza el prompt() de texto libre al marcar Retorno / Dañado / Devuelta a Alas.
+// Si se cancela, NO se marca nada (antes un "cancelar" igual marcaba el pedido).
+// ════════════════════════════════════════
+var MOTIVOS_RAPIDOS = {
+  retorno: ['No contesta','Dirección no encontrada','Ausente / nadie en el domicilio','Rechazó el pedido','Sin tiempo en la ruta'],
+  daniado: ['Caja golpeada','Producto roto','Producto mojado','Embalaje abierto'],
+  devuelto: ['Cliente no lo quiere','Agotó los 3 intentos','Dirección inexistente']
+};
+function pedirMotivo(estado, p, cb){
+  var viejo = document.getElementById('overlay-motivo');
+  if(viejo) viejo.remove();
+  var ov = document.createElement('div');
+  ov.id = 'overlay-motivo';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.6);z-index:10000;display:flex;align-items:center;justify-content:center;padding:12px;';
+  var caja = document.createElement('div');
+  caja.style.cssText = 'background:#fff;border-radius:14px;padding:14px;max-width:380px;width:100%;max-height:92vh;overflow:auto;';
+  ov.appendChild(caja);
+  function cerrar(){ ov.remove(); }
+  function elegir(texto){ cerrar(); cb(String(texto||'').trim()); }
+  function btn(texto, estilo, fn){
+    var b = document.createElement('button');
+    b.className = 'btn btn-outline';
+    b.style.cssText = 'margin:0;min-height:46px;font-size:0.85rem;padding:6px 8px;'+(estilo||'');
+    b.textContent = texto;
+    b.onclick = fn;
+    return b;
+  }
+  function pantallaOpciones(){
+    caja.innerHTML = '';
+    var t = document.createElement('div');
+    t.style.cssText = 'font-weight:800;font-size:1rem;margin-bottom:2px;';
+    t.textContent = '¿Por qué? ' + tituloParaMotivo(estado);
+    caja.appendChild(t);
+    var sub = document.createElement('div');
+    sub.style.cssText = 'font-size:0.75rem;color:#64748b;margin-bottom:10px;';
+    sub.textContent = String(p && p.nombre || '') + (p && p.b2b ? ' · ' + p.b2b : '');
+    caja.appendChild(sub);
+    // Pasar de Retorno a Devuelta a Alas: se puede conservar el motivo original del retorno
+    if(estado === 'devuelto' && p && p.estado === 'retorno' && p.motivo && String(p.motivo).trim()){
+      var mant = btn('Mantener: ' + String(p.motivo).trim(), 'width:100%;margin-bottom:8px;background:#ecfdf5;border-color:#10b981;color:#065f46;font-weight:700;', function(){ elegir(p.motivo); });
+      caja.appendChild(mant);
+    }
+    var grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px;';
+    (MOTIVOS_RAPIDOS[estado] || []).forEach(function(m){
+      grid.appendChild(btn(m, '', function(){ elegir(m); }));
+    });
+    grid.appendChild(btn('✏️ Otro…', 'border-color:#2563eb;color:#1d4ed8;font-weight:700;', pantallaOtro));
+    caja.appendChild(grid);
+    caja.appendChild(btn('Cancelar (no marcar)', 'width:100%;margin-top:10px;border-color:#cbd5e1;color:#64748b;', function(){ cerrar(); }));
+  }
+  function pantallaOtro(){
+    caja.innerHTML = '';
+    var t = document.createElement('div');
+    t.style.cssText = 'font-weight:800;font-size:1rem;margin-bottom:8px;';
+    t.textContent = 'Escribe el motivo';
+    caja.appendChild(t);
+    var ta = document.createElement('textarea');
+    ta.style.cssText = 'width:100%;min-height:80px;border:1px solid #cbd5e1;border-radius:8px;padding:8px;font-size:1rem;box-sizing:border-box;';
+    ta.placeholder = 'Ej: cliente viajó, local cerrado…';
+    caja.appendChild(ta);
+    var fila = document.createElement('div');
+    fila.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;';
+    fila.appendChild(btn('← Volver', '', pantallaOpciones));
+    var ok = btn('Guardar', 'background:#10b981;border-color:#10b981;color:#fff;font-weight:700;', function(){
+      var v = ta.value.trim();
+      if(!v){ ta.style.borderColor = '#dc2626'; ta.focus(); return; }
+      elegir(v);
+    });
+    fila.appendChild(ok);
+    caja.appendChild(fila);
+    setTimeout(function(){ ta.focus(); }, 50);
+  }
+  pantallaOpciones();
+  document.body.appendChild(ov);
+}
+
+// ════════════════════════════════════════
+// AGREGADO 04-11-2026: mensaje predeterminado "llego en ~10 min" (modo operativo).
+// Sale del WhatsApp personal de Cristian, tono cercano (no usa el número en los avisos
+// automáticos). NO marca el aviso automático como enviado; solo recuerda en este celular
+// que ya se mandó hoy (botón con ✅).
+// ════════════════════════════════════════
+function armarLinkWhatsAppLlego10(p){
+  var telLimpio = normalizarTelChile(p.tel);
+  if(!telLimpio) return null;
+  var primerNombre = nombreSaludo(p.nombre);
+  var esNombrePersona = primerNombre && !/^\.$/.test(primerNombre);
+  var saludoNombre = esNombrePersona ? primerNombre : 'estimado/a';
+  var nombreCompleto = String(p.nombre||'').trim().replace(/[\s.\-]+$/,'');
+  if(/\b(S\.?\s?P\.?\s?A|SPA|LTDA|LIMITADA|S\.\s?A|EIRL|E\.I\.R\.L|SOCIEDAD)\b\.?/i.test(nombreCompleto) || esNombreNegocio(nombreCompleto)) saludoNombre = nombreCompleto;
+  var marca = String(p.b2b||'').trim();
+  var pedidoTxt = marca ? 'tu pedido de '+marca : 'tu pedido';
+  var msg = 'Hola '+saludoNombre+', soy Cristian de Muspel. Llego en unos 10 minutos aprox. a tu domicilio con '+pedidoTxt+', para que puedas recibirlo';
+  return 'https://wa.me/'+telLimpio+'?text='+encodeURIComponent(msg);
+}
+function _llego10Hoy(){
+  var d = new Date(), k = d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();
+  var o = {};
+  try{ o = JSON.parse(localStorage.getItem('muspel_llego10')||'{}') || {}; }catch(e){ o = {}; }
+  if(o.dia !== k){ o = {dia:k, cods:{}}; }
+  return o;
+}
+function llego10Enviado(p){
+  var o = _llego10Hoy();
+  return !!(o.cods && o.cods[String(p.codigo)]);
+}
+function marcarLlego10(id){
+  var p = paquetes.find(function(x){ return x.id === id; });
+  if(!p) return;
+  try{
+    var o = _llego10Hoy();
+    o.cods[String(p.codigo)] = 1;
+    localStorage.setItem('muspel_llego10', JSON.stringify(o));
+  }catch(e){}
+  setTimeout(function(){ try{ renderPaquetes(); }catch(e){} }, 400);
+}
+
+function marcarDesdeModal(estado, _conMotivo){
   if(!modalOrdenId) return;
   // Misma protección contra doble toque que en marcar() — reusa el mismo registro de
   // tiempos, con el id del pedido abierto en el modal.
@@ -3040,13 +3175,12 @@ function marcarDesdeModal(estado){
   var p = paquetes.find(function(x){return x.id===modalOrdenId;});
   if(p){
     var motivo = '';
-    if(estado === 'devuelto' && p.estado === 'retorno'){
-      // Pasando de Retorno → Devuelta a Alas: conserva el motivo original del retorno
-      // (ya quedó registrado por qué no se pudo entregar) salvo que se quiera anotar algo más.
-      motivo = prompt('¿Algo que anotar sobre esta devolución a Alas? (opcional)', p.motivo||'') || '';
-    } else if(requiereMotivo(estado)){
-      motivo = prompt('¿Por qué se marca '+tituloParaMotivo(estado)+'? (opcional)') || '';
+    if(requiereMotivo(estado) && !_conMotivo){
+      delete _ultimoMarcarTs[modalOrdenId];
+      pedirMotivo(estado, p, function(m){ marcarDesdeModal(estado, {m:m}); });
+      return;
     }
+    if(_conMotivo) motivo = String(_conMotivo.m||'');
     motivo = motivo.trim();
     var grupo = calcularGrupoMultibulto(p);
     if(grupo.length > 1){
@@ -4541,6 +4675,13 @@ function renderComunasDeTipo(items, diaSemana, tipo){
             html+='<a href="'+linkWaTarjeta+'" target="_blank" onclick="if(!avisoWaOk('+p.id+')) return false; marcarAvisoWaEnviado('+p.id+')"><button class="btn btn-sm" style="background:'+(_esMan?'#1d4ed8':'#25D366')+';color:#fff;" title="'+(_esMan?'Enviar aviso de MAÑANA (día anterior)':'Enviar aviso de HOY')+'">'+(_esMan?'🌙💬':'💬')+'</button></a>';
           }
         }
+        // 04-11-2026: mensaje "llego en ~10 min" (solo modo operativo, solo hoy)
+        if(perfilActual!=='comercial' && diasHastaRutaPedido(p)===0){
+          var link10 = armarLinkWhatsAppLlego10(p);
+          if(link10){
+            html+='<a href="'+link10+'" target="_blank" style="grid-column:1/-1;" onclick="marcarLlego10('+p.id+')"><button class="btn btn-sm" style="background:#f59e0b;color:#1f1300;width:100%;" title="Avisar que llegas en unos 10 minutos">'+(llego10Enviado(p)?'✅ 🚐 10 min':'🚐 10 min')+'</button></a>';
+          }
+        }
         html+='</div>';
       } else if(p.estado==='retorno'){
         // Acceso rápido desde la tarjeta para marcar la devolución EFECTIVA a Alas
@@ -4819,7 +4960,7 @@ function marcarAvisoWaEnviado(id){
 }
 
 var _ultimoMarcarTs = {}; // por id de paquete, para no bloquear marcar 2 pedidos distintos seguidos
-function marcar(id, estado){
+function marcar(id, estado, _conMotivo){
   // Evita que un doble toque/doble clic en los íconos rápidos (✅🔁⚠️📮) dispare el mismo
   // cambio de estado 2 veces si el usuario toca más rápido de lo que tarda en
   // desaparecer el botón al re-dibujar la lista.
@@ -4830,11 +4971,12 @@ function marcar(id, estado){
   var p = paquetes.find(function(x){return x.id===id;});
   if(p){
     var motivo = '';
-    if(estado === 'devuelto' && p.estado === 'retorno'){
-      motivo = prompt('¿Algo que anotar sobre esta devolución a Alas? (opcional)', p.motivo||'') || '';
-    } else if(requiereMotivo(estado)){
-      motivo = prompt('¿Por qué se marca '+tituloParaMotivo(estado)+'? (opcional)') || '';
+    if(requiereMotivo(estado) && !_conMotivo){
+      delete _ultimoMarcarTs[id];
+      pedirMotivo(estado, p, function(m){ marcar(id, estado, {m:m}); });
+      return;
     }
+    if(_conMotivo) motivo = String(_conMotivo.m||'');
     motivo = motivo.trim();
     var grupo = calcularGrupoMultibulto(p);
     if(grupo.length > 1){
