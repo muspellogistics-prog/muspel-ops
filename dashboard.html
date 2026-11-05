@@ -58,6 +58,7 @@
   .loading{text-align:center;padding:40px;color:var(--gris);}
   @media (max-width:600px){ .card-value{font-size:1.4rem;} }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -72,8 +73,8 @@
   <div class="tabs">
     <div class="tab active" data-tab="operacion">📊 Operación</div>
     <div class="tab" data-tab="finanzas">💰 Finanzas</div>
-    <div class="tab" data-tab="rentabilidad">📈 Rentabilidad</div>
-    <div class="tab" data-tab="proyeccion">🎯 Proyección</div>
+    <div class="tab" data-tab="balance">📒 Balance</div>
+    <div class="tab" style="display:none;" data-tab="proyeccion">🎯 Proyección</div>
     <div class="tab" data-tab="personal">🏠 Personal</div>
   </div>
 </div>
@@ -97,9 +98,9 @@
       <div class="card"><div class="card-label">Órdenes totales del mes (incl. WOM)</div><div class="card-value" id="op-ord-total-mes">—</div></div>
       <div class="card"><div class="card-label">Órdenes entregadas del mes</div><div class="card-value" id="op-ord-mes">—</div></div>
       <div class="card"><div class="card-label">Efectividad acumulada</div><div class="card-value verde" id="op-ef-mes">—</div></div>
-      <div class="card"><div class="card-label">Incidencias del mes</div><div class="card-value naranja" id="op-inc-mes">—</div><div class="card-sub" id="op-inc-mes-sub">—</div></div>
+      <div class="card" style="display:none;"><div class="card-label">Incidencias del mes</div><div class="card-value naranja" id="op-inc-mes">—</div><div class="card-sub" id="op-inc-mes-sub">—</div></div>
     </div>
-    <div class="panel">
+    <div class="panel" style="display:none;">
       <div class="titulo-seccion" style="margin-top:0;">Desglose: devuelta B2C vs. B2B (retiro) — mes en curso</div>
       <div style="font-size:0.78rem;color:#64748b;margin-bottom:8px;">Alas etiqueta ambas como "devolución" en su sistema, pero el retiro (B2B) se paga aparte — por eso van separadas acá.</div>
       <div class="grid">
@@ -152,32 +153,12 @@
       <div class="panel-nota">Paquetes = lo entregado físicamente; órdenes = lo que se paga (un multibulto cuenta como 1). Si un día se cerró dos veces, sale sumado en una sola fila. Los montos quedan ocultos hasta que toques el botón 👁 de arriba (oculta todos los montos de esta pestaña).</div>
       <div id="detalle-facturar"></div>
     </div>
-    <div class="panel" id="panel-pago-repartidor">
-      <div class="titulo-seccion" style="margin-top:0;">🧮 Pago a repartidor por boleta de honorarios (ej. Luchín)</div>
-      <div class="panel-nota">Ingresa lo acordado y te calcula cuánto debe ir en la boleta y cuánta retención se descuenta. Los montos se ocultan/muestran con el 👁 de arriba.</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:10px;">
-        <label style="font-size:0.78rem;font-weight:700;">Pago líquido acordado ($)<input id="pg-liq" type="number" value="500000" oninput="calcPagoRep()" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;"></label>
-        <label style="font-size:0.78rem;font-weight:700;">Bono BRUTO total ($)<input id="pg-bono" type="number" value="130000" oninput="calcPagoRep()" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;"></label>
-        <label style="font-size:0.78rem;font-weight:700;">Retención honorarios (%)<input id="pg-ret" type="number" step="0.01" value="15.25" oninput="calcPagoRep()" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;"></label>
-      </div>
-      <div id="pg-resultado"></div>
-      <div class="titulo-seccion" style="margin-top:14px;">📦 Bono según órdenes efectivamente entregadas</div>
-      <div class="panel-nota">Cuenta las órdenes entregadas por el repartidor en el rango (un multibulto cuenta 1; no cuenta retiros). El bono se paga por orden; los paquetes salen solo de referencia. Usa los días ya cerrados y lo que quedó asignado a OP. Luchín en la OPS.</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:10px;">
-        <label style="font-size:0.78rem;font-weight:700;">Desde<input id="pg-desde" type="date" value="2026-10-06" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;"></label>
-        <label style="font-size:0.78rem;font-weight:700;">Hasta<input id="pg-hasta" type="date" value="2026-10-17" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;"></label>
-        <label style="font-size:0.78rem;font-weight:700;">Repartidor<select id="pg-rep" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;"><option value="op2">OP. Luchín</option><option value="cristian">OP. Cristian</option></select></label>
-        <label style="font-size:0.78rem;font-weight:700;">Bono bruto por orden ($)<input id="pg-porord" type="number" value="500" placeholder="ej. 500" oninput="pintarBonoOrdenes()" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;"></label>
-      </div>
-      <button onclick="contarEntregasRep()" style="background:var(--azul);color:#fff;border:0;border-radius:10px;padding:10px 16px;font-weight:700;cursor:pointer;">Contar entregas</button>
-      <div id="pg-ordenes" style="margin-top:10px;"></div>
-    </div>
     <div class="panel">
       <div class="titulo-seccion" style="margin-top:0;">🏦 Flujo de Caja Real — cuándo se mueve la plata de verdad</div>
       <div class="panel-nota">No es lo mismo que "Cuánto facturar" de arriba (eso es el mes de la orden). Acá se ve CUÁNDO entra y sale la plata realmente: los costos usan la fecha real de pago (columna "Fecha" en Costos), y el ingreso se corre en el tiempo según cuándo paga ALAS: julio se pagó en septiembre, agosto en octubre, y desde septiembre se paga al mes siguiente (septiembre se paga a fin de octubre, octubre a fin de noviembre, y así).</div>
       <table><thead><tr><th>Mes</th><th class="num">Entra</th><th class="num">Sale</th><th class="num">Flujo del mes</th><th class="num">Saldo acumulado</th></tr></thead><tbody id="tabla-flujo-real"></tbody></table>
     </div>
-    <div class="panel">
+    <div class="panel" style="display:none;">
       <div class="titulo-seccion" style="margin-top:0;">🤝 Retiro de Socios (50% Kathy / 50% Cristian)</div>
       <div class="panel-nota">
         Antes de repartir entre ustedes, se aparta primero un % para reserva de la empresa y un % para el fondo de crecimiento (próxima camioneta, etc.) — tú decides los porcentajes, estos son solo un punto de partida:
@@ -217,25 +198,30 @@
     </div>
   </div>
 
-  <!-- RENTABILIDAD -->
-  <div class="seccion" id="tab-rentabilidad">
-    <div class="banner-info">Costo y margen por orden entregada, y cuántas órdenes al mes se necesitan para cubrir los costos fijos (punto de equilibrio).</div>
-    <div class="titulo-seccion" style="margin-top:0;">Hasta hoy (mes en curso, acumulado real)</div>
-    <div class="grid">
-      <div class="card"><div class="card-label">Costo por orden</div><div class="card-value" id="rent-costo-orden">—</div></div>
-      <div class="card"><div class="card-label">Margen por orden</div><div class="card-value" id="rent-margen-orden">—</div></div>
-      <div class="card"><div class="card-label">Punto de equilibrio</div><div class="card-value" id="rent-pe">—</div><div class="card-sub">órdenes / mes</div></div>
-    </div>
-    <div class="titulo-seccion">Proyectado a fin de mes</div>
-    <div style="font-size:0.75rem;color:#64748b;margin:-6px 0 8px 0;" id="rent-nota-proyeccion"></div>
-    <div class="grid">
-      <div class="card" style="border-top:3px solid #1e3a5f;"><div class="card-label">Costo por orden</div><div class="card-value" id="rent-costo-orden-proy" style="color:#1e3a5f;">—</div></div>
-      <div class="card" style="border-top:3px solid #1e3a5f;"><div class="card-label">Margen por orden</div><div class="card-value" id="rent-margen-orden-proy" style="color:#1e3a5f;">—</div></div>
-      <div class="card" style="border-top:3px solid #1e3a5f;"><div class="card-label">Punto de equilibrio</div><div class="card-value" id="rent-pe-proy" style="color:#1e3a5f;">—</div><div class="card-sub">órdenes / mes</div></div>
-    </div>
+  <!-- BALANCE 8 COLUMNAS -->
+  <div class="seccion" id="tab-balance">
+    <div class="banner-info">Sube el Excel que te envía Marcela y se arma solo el balance de 8 columnas, con el resultado: ¿ganancia o pérdida? El archivo se lee en tu computador o celular; no se sube a ningún lado.</div>
     <div class="panel">
-      <div class="titulo-seccion" style="margin-top:0;">Costos fijos considerados</div>
-      <table><thead><tr><th>Concepto</th><th class="num">Monto mensual</th></tr></thead><tbody id="tabla-fijos"></tbody></table>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+        <label style="font-size:0.8rem;font-weight:700;">Período
+          <input id="bal-periodo" type="text" placeholder="ej. Octubre 2026" oninput="balGuardarPeriodo()" style="display:block;padding:8px;border:1px solid #cbd5e1;border-radius:8px;min-width:170px;">
+        </label>
+        <label style="font-size:0.8rem;font-weight:700;">Excel de Marcela
+          <input id="bal-archivo" type="file" accept=".xlsx,.xls,.csv" onchange="balLeerArchivo(this.files[0])" style="display:block;padding:6px 0;">
+        </label>
+        <button onclick="balLimpiar()" style="background:#fff;color:#b91c1c;border:1px solid #b91c1c;border-radius:10px;padding:8px 14px;font-weight:700;cursor:pointer;">Limpiar</button>
+      </div>
+      <div class="panel-nota" style="margin-top:8px;">El Excel necesita una columna con el nombre de la cuenta y columnas Débitos y Créditos (o Debe y Haber). Si trae Saldo deudor y Saldo acreedor, también sirve. Opcional: una columna "Código" y otra "Tipo" (Inventario o Resultado).</div>
+      <div id="bal-msg" class="panel-nota" style="color:#b91c1c;"></div>
+    </div>
+    <div id="bal-veredicto"></div>
+    <div class="panel" id="bal-panel-tabla" style="display:none;">
+      <div class="titulo-seccion" style="margin-top:0;">Balance de 8 columnas</div>
+      <div class="panel-nota">Cada cuenta va a <b>Inventario</b> (lo que tiene y lo que debe la empresa) o a <b>Resultado</b> (ingresos y gastos). Si alguna quedó mal clasificada, cámbiala en la última columna y el resultado se recalcula.</div>
+      <div style="overflow-x:auto;">
+        <table style="font-size:0.78rem;min-width:900px;"><thead><tr><th>Cuenta</th><th class="num">Débitos</th><th class="num">Créditos</th><th class="num">Saldo deudor</th><th class="num">Saldo acreedor</th><th class="num">Activo</th><th class="num">Pasivo</th><th class="num">Pérdida</th><th class="num">Ganancia</th><th>Va a</th></tr></thead><tbody id="bal-tbody"></tbody></table>
+      </div>
+      <div id="bal-cuadre" class="panel-nota" style="margin-top:8px;"></div>
     </div>
   </div>
 
@@ -428,7 +414,10 @@ function juntarCierresPorDia(arr){
               .sort((x,y) => clave(x.fecha) < clave(y.fecha) ? -1 : (clave(x.fecha) > clave(y.fecha) ? 1 : 0));
 }
 
+function _hmSync(d){ return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0'); }
+let _ultimoIntentoSync = 0;
 async function cargarDatos(){
+  _ultimoIntentoSync = Date.now();
   const mesTexto = mesActualTexto();
   document.getElementById('header-fecha').textContent = 'Mes en curso: ' + mesTexto;
   document.getElementById('sync-badge').textContent = '🔄 Sincronizando...';
@@ -532,17 +521,17 @@ async function cargarDatos(){
       const esIntercambio = registros.some(r => r.intercambio);
       resumenPorCodigo.push({codigo: clave, mesOrigen: mesDeFecha(primero.fecha), fechaOrigen: primero.fecha, estadoFinal: ultimo.estado, b2b: ultimo.b2b||'', esRetiro: ultimo.esRetiro||false, intercambio: esIntercambio});
     });
-    document.getElementById('sync-badge').textContent = '☁️ Sincronizado (toca para actualizar)';
+    window._ultimaSync = new Date();
+    const _bd = document.getElementById('sync-badge'); _bd.textContent = '☁️ Actualizado a las ' + _hmSync(window._ultimaSync) + ' (toca para actualizar)'; _bd.style.background = ''; _bd.style.fontWeight = '';
     document.getElementById('loading').style.display = 'none';
   } catch(e){
-    document.getElementById('sync-badge').textContent = '⚠️ Sin conexión (toca para reintentar)';
+    const _bd = document.getElementById('sync-badge'); _bd.textContent = '⚠️ Sin conexión' + (window._ultimaSync ? ' — datos de las ' + _hmSync(window._ultimaSync) : '') + ' (toca para reintentar)'; _bd.style.background = '#b91c1c'; _bd.style.fontWeight = '700';
     document.getElementById('loading').textContent = 'No se pudo conectar con Google Sheets. Revisa tu internet.';
   }
 
   pintarOperacion(mesTexto);
   pintarFinanzas(mesTexto);
   pintarFlujoReal();
-  pintarRentabilidad(mesTexto);
   pintarPersonal(mesTexto);
   autocompletarOrdenesProyeccion();
   calcularProyeccion();
@@ -882,60 +871,6 @@ function pintarDetalleFacturar(){
 }
 
 
-// ---- Pago a repartidor (boleta de honorarios) ----
-function _pesoPg(n){ return '$' + Math.round(n||0).toLocaleString('es-CL'); }
-function calcPagoRep(){
-  const liq = Number(document.getElementById('pg-liq').value)||0;
-  const bono = Number(document.getElementById('pg-bono').value)||0;
-  const r = (Number(document.getElementById('pg-ret').value)||0)/100;
-  const f = 1 - r;
-  const bolLiq = liq / f, retLiq = bolLiq - liq;
-  const retBono = bono * r, bonoLiq = bono - retBono;
-  const bolTot = bolLiq + bono, retTot = retLiq + retBono, liqTot = liq + bonoLiq;
-  const fila = (a,b,c,d,neg) => `<tr${neg?' style="background:#1e293b;color:#fff;font-weight:800;"':''}><td>${a}</td><td class="num plata">${b}</td><td class="num plata">${c}</td><td class="num plata">${d}</td></tr>`;
-  document.getElementById('pg-resultado').innerHTML =
-    '<table style="font-size:0.82rem;"><thead><tr><th></th><th class="num">Boleta (bruto)</th><th class="num">Retención</th><th class="num">Líquido a recibir</th></tr></thead><tbody>' +
-    fila('Pago base', _pesoPg(bolLiq), _pesoPg(retLiq), _pesoPg(liq)) +
-    fila('Bono (bruto)', _pesoPg(bono), _pesoPg(retBono), _pesoPg(bonoLiq)) +
-    fila('TOTAL', _pesoPg(bolTot), _pesoPg(retTot), _pesoPg(liqTot), true) + '</tbody></table>' +
-    '<div class="panel-nota" style="margin-top:6px;">La retención (' + (r*100).toFixed(2) + '%) la paga el repartidor al SII a través de la boleta; Muspel declara y paga esa retención. Confirma el porcentaje vigente con el SII.</div>';
-  pintarBonoOrdenes();
-}
-let _pgOrdenes = null;
-async function contarEntregasRep(){
-  const box = document.getElementById('pg-ordenes');
-  box.innerHTML = '<div class="panel-nota">Buscando…</div>';
-  try{
-    const rep = document.getElementById('pg-rep').value;
-    const d = document.getElementById('pg-desde').value.replace(/-/g,'');
-    const h = document.getElementById('pg-hasta').value.replace(/-/g,'');
-    const ra = await fetch(SHEETS_URL + '?tipo=asignaciones').then(r=>r.json());
-    const asg = {};
-    ((ra && ra.asignaciones) || []).forEach(a => {
-      if(!a.codigo) return;
-      const prev = asg[a.codigo];
-      if(!prev || Number(a.ts||0) >= Number(prev.ts||0)) asg[a.codigo] = a;
-    });
-    const filas = (window._detalleRaw||[]).slice(1);
-    const ordenes = {}, porDia = {}, paqs = {};
-    filas.forEach(row => {
-      const m = String(row[0]||'').trim().match(/^(\d{1,2})-(\d{1,2})-(\d{4})/); if(!m) return;
-      const k = m[3] + m[2].padStart(2,'0') + m[1].padStart(2,'0');
-      if(k < d || k > h) return;
-      if(String(row[7]||'').toLowerCase() !== 'entregado') return;
-      if(String(row[10]||'').trim().toLowerCase() === 'si') return;
-      const a = asg[row[1]]; if(!a || a.repartidor !== rep) return;
-      const clave = (String(row[2]||'').trim().replace(/-\d{1,2}(\/\d{1,2})?$/, '') || row[1]);
-      if(!paqs[row[1]]){ paqs[row[1]] = k; porDia[k] = porDia[k] || {o:0,p:0}; porDia[k].p++; }
-      if(ordenes[clave]) return;
-      ordenes[clave] = k;
-      porDia[k].o++;
-    });
-    _pgOrdenes = {total: Object.keys(ordenes).length, paq: Object.keys(paqs).length, porDia};
-    pintarBonoOrdenes();
-  }catch(e){ box.innerHTML = '<div class="panel-nota" style="color:#b91c1c;">No pude leer los datos. Intenta de nuevo.</div>'; }
-}
-function usarBonoEnCalculo(v){ document.getElementById('pg-bono').value = Math.round(v); calcPagoRep(); }
 // Estimativo del mes: no-WOM entregadas × (tarifa + bono) + WOM entregadas × tarifa (sin bono).
 function pintarEstimativo(){
   const el = document.getElementById('est-cards');
@@ -955,22 +890,6 @@ function pintarEstimativo(){
     `<div class="card"><div class="card-label">Total estimado del mes</div><div class="card-value plata verde">${formatoPesos(total)}</div><div class="card-sub">${c.noWom + c.wom} órdenes entregadas · ALAS puede calcular otro monto</div></div>`;
 }
 (function(){ try{ const t = localStorage.getItem('muspel_est_tarifa'), b = localStorage.getItem('muspel_est_bono'); window.addEventListener('DOMContentLoaded', function(){ if(t){ const e = document.getElementById('est-tarifa'); if(e) e.value = t; } if(b){ const e = document.getElementById('est-bono'); if(e) e.value = b; } }); }catch(e){} })();
-function pintarBonoOrdenes(){
-  const box = document.getElementById('pg-ordenes'); if(!box || !_pgOrdenes) return;
-  const n = _pgOrdenes.total, pq = _pgOrdenes.paq;
-  const r = (Number(document.getElementById('pg-ret').value)||0)/100;
-  const tarifa = Number(document.getElementById('pg-porord').value)||0;
-  const dias = Object.keys(_pgOrdenes.porDia).sort();
-  const bonoTot = tarifa * n;
-  let h = `<div class="grid"><div class="card"><div class="card-label">Órdenes entregadas (multibulto = 1)</div><div class="card-value">${n}</div></div><div class="card"><div class="card-label">Paquetes (referencia)</div><div class="card-value">${pq}</div></div>`;
-  if(n && tarifa) h += `<div class="card"><div class="card-label">Bono: ${_pesoPg(tarifa)} × ${n} órdenes</div><div class="card-value plata">${_pesoPg(bonoTot)} <span style="font-size:0.7rem;">bruto · líquido ${_pesoPg(bonoTot*(1-r))}</span></div></div>`;
-  h += '</div>';
-  if(n && tarifa) h += `<button onclick="usarBonoEnCalculo(${bonoTot})" style="margin:6px 0;background:#16a34a;color:#fff;border:0;border-radius:10px;padding:9px 14px;font-weight:700;cursor:pointer;">Usar ${_pesoPg(bonoTot)} como bono en la boleta</button>`;
-  if(dias.length) h += '<div class="panel-nota">Órdenes por día: ' + dias.map(k => k.slice(6)+'-'+k.slice(4,6)+': '+_pgOrdenes.porDia[k].o).join(' · ') + '</div>';
-  if(!pq) h += '<div class="panel-nota">No encontré entregas en ese rango. Revisa que los días estén cerrados y que las órdenes estén asignadas a ese operativo en la OPS.</div>';
-  box.innerHTML = h;
-}
-
 function pintarFinanzas(mesTexto){
   const delMes = cierres.filter(c => perteneceAlMes(c.fecha, mesTexto));
   const ingresoMes = ingresoNetoMes(mesTexto, delMes.reduce((a,c)=>a+c.ingresos,0));
@@ -978,7 +897,6 @@ function pintarFinanzas(mesTexto){
   const costosMes = costosDelMes.reduce((a,c)=>a+c.monto,0);
   const flujo = ingresoMes - costosMes;
 
-  calcPagoRep();
   document.getElementById('fin-ingreso').textContent = formatoPesos(ingresoMes);
   document.getElementById('fin-costos').textContent = formatoPesos(costosMes);
   const flujoEl = document.getElementById('fin-flujo');
@@ -1144,64 +1062,6 @@ function calcularRetiroSocios(){
   pintarAcumuladoFondos();
 }
 
-function pintarRentabilidad(mesTexto){
-  const delMes = cierres.filter(c => perteneceAlMes(c.fecha, mesTexto));
-  const ingresoMes = ingresoNetoMes(mesTexto, delMes.reduce((a,c)=>a+c.ingresos,0));
-  const liqRent = liquidacionAlas(mesTexto);
-  const ordMes = liqRent ? liqRent.ordenes : delMes.reduce((a,c)=>a+c.entregadosOrdenes,0);
-  const fijosDelMes = costos.filter(c => normalizarMes(c.mes) === normalizarMes(mesTexto) && c.fijo === 'Sí');
-  const costosFijos = fijosDelMes.reduce((a,c)=>a+c.monto,0);
-  const costosTotalesMes = costos.filter(c => normalizarMes(c.mes) === normalizarMes(mesTexto)).reduce((a,c)=>a+c.monto,0);
-
-  const costoOrden = ordMes>0 ? costosTotalesMes/ordMes : 0;
-  const margenOrden = ordMes>0 ? (ingresoMes-costosTotalesMes)/ordMes : 0;
-  const pe = margenOrden>0 ? Math.round(costosFijos/margenOrden) : 0;
-
-  document.getElementById('rent-costo-orden').textContent = formatoPesos(costoOrden);
-  document.getElementById('rent-margen-orden').textContent = formatoPesos(margenOrden);
-  const peEl = document.getElementById('rent-pe');
-  if(ordMes === 0){
-    peEl.textContent = '—';
-    peEl.style.fontSize = '';
-  } else if(margenOrden > 0){
-    peEl.textContent = pe;
-    peEl.style.fontSize = '';
-  } else {
-    peEl.textContent = 'No aplica';
-    peEl.style.fontSize = '1.1rem';
-  }
-
-  // Proyectado a fin de mes: usa el mismo ritmo diario (día más reciente cerrado) × días
-  // hábiles (lunes a sábado) del mes en curso, igual que en la pestaña Proyección — así
-  // no se ve una alarma falsa los primeros días del mes, cuando los costos fijos del mes
-  // completo ya están cargados pero casi no hay órdenes entregadas todavía.
-  const ultimo = cierres.length ? cierres[cierres.length-1] : null;
-  const ritmoDiario = ultimo ? (ultimo.entregadosOrdenes||0) : 0;
-  const hoy = new Date();
-  const diasHabiles = diasLunesASabadoDelMes(hoy.getFullYear(), hoy.getMonth());
-  const ordProyectadas = ritmoDiario>0 ? Math.round(ritmoDiario*diasHabiles) : 0;
-  const notaProy = document.getElementById('rent-nota-proyeccion');
-  if(ordProyectadas>0){
-    notaProy.textContent = `Según el ÚLTIMO DÍA CERRADO (${formatoFechaLegible(ultimo.fecha)}, no hoy): ${ritmoDiario} órdenes × ${diasHabiles} días hábiles del mes = ${ordProyectadas} órdenes proyectadas.`;
-  } else {
-    notaProy.textContent = 'Aún no hay días cerrados este mes para proyectar.';
-  }
-  const ingresoProyectado = ordProyectadas * (ordMes>0 ? (ingresoMes/ordMes) : (Number(document.getElementById('in-valor').value)||2070));
-  const costoOrdenProy = ordProyectadas>0 ? costosTotalesMes/ordProyectadas : 0;
-  const margenOrdenProy = ordProyectadas>0 ? (ingresoProyectado-costosTotalesMes)/ordProyectadas : 0;
-  const peProy = margenOrdenProy>0 ? Math.round(costosFijos/margenOrdenProy) : 0;
-  document.getElementById('rent-costo-orden-proy').textContent = ordProyectadas>0 ? formatoPesos(costoOrdenProy) : '—';
-  document.getElementById('rent-margen-orden-proy').textContent = ordProyectadas>0 ? formatoPesos(margenOrdenProy) : '—';
-  const peProyEl = document.getElementById('rent-pe-proy');
-  if(ordProyectadas === 0){ peProyEl.textContent = '—'; peProyEl.style.fontSize = ''; }
-  else if(margenOrdenProy > 0){ peProyEl.textContent = peProy; peProyEl.style.fontSize = ''; }
-  else { peProyEl.textContent = 'No aplica'; peProyEl.style.fontSize = '1.1rem'; }
-
-  document.getElementById('tabla-fijos').innerHTML = fijosDelMes.map(c => `
-    <tr><td>${c.descripcion}</td><td class="num">${formatoPesos(c.monto)}</td></tr>
-  `).join('') || '<tr><td colspan="2" style="text-align:center;color:#94a3b8;">Sin costos fijos registrados este mes</td></tr>';
-}
-
 // Proyección automática de órdenes del mes, en base a lo cargado HOY: toma las órdenes
 // del día más reciente cerrado como "ritmo diario" y lo multiplica por la cantidad de
 // días hábiles (lunes a sábado, sin domingo) que tiene el mes en curso completo. Solo
@@ -1278,9 +1138,111 @@ document.querySelectorAll('.tab').forEach(tab => {
   });
 });
 
+// ---- Balance de 8 columnas (Excel de Marcela) ----
+let _balFilas = [];
+function _balNum(v){
+  if(typeof v === 'number') return isFinite(v) ? v : 0;
+  let s = String(v==null?'':v).trim(); if(!s) return 0;
+  let neg = /^\(.*\)$/.test(s) || s.startsWith('-');
+  s = s.replace(/[^\d,.]/g,'');
+  if(s.indexOf(',')>=0) s = s.replace(/\./g,'').replace(',','.'); else if((s.match(/\./g)||[]).length>1 || /\.\d{3}$/.test(s)) s = s.replace(/\./g,'');
+  const n = parseFloat(s); return isNaN(n) ? 0 : (neg ? -n : n);
+}
+function _balTipoAuto(cod, nombre, tipoTxt){
+  const t = String(tipoTxt||'').toLowerCase();
+  if(t){ if(/result|gasto|ingreso|p[eé]rdida|ganancia/.test(t)) return 'R'; if(/inventario|activo|pasivo|balance|patrimonio/.test(t)) return 'I'; }
+  const c = String(cod||'').trim();
+  if(/^[123]/.test(c)) return 'I';
+  if(/^[4-9]/.test(c)) return 'R';
+  const n = String(nombre||'').toLowerCase();
+  if(/venta|ingreso|servicio|arriendo|honorario|gasto|costo|remuneraci|sueldo|combustible|peaje|inter[eé]s|depreciaci|mantenci|seguro|comisi|internet|tel[eé]fon|luz|electric|contab|asesor|publicidad|patente|multa|correcci[oó]n monetaria|diferencia de cambio/.test(n)) return 'R';
+  return 'I';
+}
+function balParsear(rows){
+  let h = -1, ix = {};
+  for(let i=0;i<Math.min(rows.length,40);i++){
+    const r = rows[i].map(x=>String(x==null?'':x).toLowerCase().trim());
+    const nom = r.findIndex(x=>/cuenta|nombre|descripci/.test(x) && !/c[oó]digo|^n[°º]/.test(x));
+    let deb = r.findIndex(x=>/d[eé]bit|^debe/.test(x)), cre = r.findIndex(x=>/cr[eé]dit|^haber/.test(x));
+    const sd = r.findIndex(x=>/deudor/.test(x)), sa = r.findIndex(x=>/acreedor/.test(x));
+    if(nom>=0 && ((deb>=0 && cre>=0) || (sd>=0 && sa>=0))){
+      if(deb<0 || cre<0){ deb = sd; cre = sa; }
+      h = i; ix = {nom, deb, cre, cod: r.findIndex(x=>/c[oó]digo|^cod|^n[°º]|^nro/.test(x)), tipo: r.findIndex(x=>/^tipo|clasific/.test(x))}; break;
+    }
+  }
+  if(h<0) return null;
+  const out = [];
+  for(let i=h+1;i<rows.length;i++){
+    const r = rows[i]; const nombre = String(r[ix.nom]==null?'':r[ix.nom]).trim();
+    if(!nombre || /^total|^suma|^sumas/i.test(nombre) || r.slice(0,3).some(x=>/^\s*(total|suma)/i.test(String(x)))) continue;
+    const d = _balNum(r[ix.deb]), c = _balNum(r[ix.cre]);
+    if(!d && !c) continue;
+    out.push({nombre, cod: ix.cod>=0 ? r[ix.cod] : '', d, c, tipo: _balTipoAuto(ix.cod>=0?r[ix.cod]:'', nombre, ix.tipo>=0?r[ix.tipo]:'')});
+  }
+  return out;
+}
+function balLeerArchivo(file){
+  if(!file) return;
+  const msg = document.getElementById('bal-msg'); msg.textContent = '';
+  if(typeof XLSX === 'undefined'){ msg.textContent = 'No pude cargar el lector de Excel. Revisa tu conexión a internet y recarga la página.'; return; }
+  const fr = new FileReader();
+  fr.onload = e => {
+    try{
+      const wb = XLSX.read(e.target.result, {type:'array'});
+      let filas = null;
+      for(const nombreHoja of wb.SheetNames){
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[nombreHoja], {header:1, defval:''});
+        filas = balParsear(rows); if(filas && filas.length) break;
+      }
+      if(!filas || !filas.length){ msg.textContent = 'No encontré las columnas. Necesito: nombre de la cuenta, Débitos y Créditos (o Saldo deudor y Saldo acreedor). Mándame el Excel y lo ajusto.'; return; }
+      const prev = balCargarTipos();
+      filas.forEach(f => { const k = f.nombre.toLowerCase(); if(prev[k]) f.tipo = prev[k]; });
+      _balFilas = filas;
+      try{ localStorage.setItem('muspel_bal_filas', JSON.stringify(filas)); }catch(err){}
+      balPintar();
+    }catch(err){ msg.textContent = 'No pude leer el archivo: ' + err.message; }
+  };
+  fr.readAsArrayBuffer(file);
+}
+function balCargarTipos(){ try{ return JSON.parse(localStorage.getItem('muspel_bal_tipos')||'{}')||{}; }catch(e){ return {}; } }
+function balCambiarTipo(i, v){
+  _balFilas[i].tipo = v;
+  try{ const t = balCargarTipos(); t[_balFilas[i].nombre.toLowerCase()] = v; localStorage.setItem('muspel_bal_tipos', JSON.stringify(t)); localStorage.setItem('muspel_bal_filas', JSON.stringify(_balFilas)); }catch(e){}
+  balPintar();
+}
+function balGuardarPeriodo(){ try{ localStorage.setItem('muspel_bal_periodo', document.getElementById('bal-periodo').value); }catch(e){} balPintar(); }
+function balLimpiar(){ _balFilas = []; try{ localStorage.removeItem('muspel_bal_filas'); }catch(e){} document.getElementById('bal-archivo').value=''; balPintar(); }
+function balPintar(){
+  const ver = document.getElementById('bal-veredicto'), pan = document.getElementById('bal-panel-tabla');
+  if(!_balFilas.length){ ver.innerHTML=''; pan.style.display='none'; return; }
+  let T = {d:0,c:0,sd:0,sa:0,act:0,pas:0,per:0,gan:0};
+  const f$ = n => n ? formatoPesos(n) : '';
+  const filas = _balFilas.map((f,i)=>{
+    const sd = Math.max(f.d-f.c,0), sa = Math.max(f.c-f.d,0);
+    const act = f.tipo==='I' ? sd : 0, pas = f.tipo==='I' ? sa : 0, per = f.tipo==='R' ? sd : 0, gan = f.tipo==='R' ? sa : 0;
+    T.d+=f.d; T.c+=f.c; T.sd+=sd; T.sa+=sa; T.act+=act; T.pas+=pas; T.per+=per; T.gan+=gan;
+    return `<tr><td>${String(f.nombre).replace(/</g,'&lt;')}</td><td class="num">${f$(f.d)}</td><td class="num">${f$(f.c)}</td><td class="num">${f$(sd)}</td><td class="num">${f$(sa)}</td><td class="num">${f$(act)}</td><td class="num">${f$(pas)}</td><td class="num">${f$(per)}</td><td class="num">${f$(gan)}</td><td><select onchange="balCambiarTipo(${i}, this.value)" style="font-size:0.74rem;padding:3px;border:1px solid #cbd5e1;border-radius:6px;"><option value="I"${f.tipo==='I'?' selected':''}>Inventario</option><option value="R"${f.tipo==='R'?' selected':''}>Resultado</option></select></td></tr>`;
+  }).join('');
+  const tot = `<tr style="background:#1e293b;color:#fff;font-weight:800;"><td>TOTALES</td><td class="num">${formatoPesos(T.d)}</td><td class="num">${formatoPesos(T.c)}</td><td class="num">${formatoPesos(T.sd)}</td><td class="num">${formatoPesos(T.sa)}</td><td class="num">${formatoPesos(T.act)}</td><td class="num">${formatoPesos(T.pas)}</td><td class="num">${formatoPesos(T.per)}</td><td class="num">${formatoPesos(T.gan)}</td><td></td></tr>`;
+  document.getElementById('bal-tbody').innerHTML = filas + tot;
+  pan.style.display = '';
+  const util = T.gan - T.per;
+  const periodo = (document.getElementById('bal-periodo').value||'').trim();
+  const esGan = util >= 0;
+  ver.innerHTML = `<div class="grid"><div class="card" style="border-top:4px solid ${esGan?'var(--verde)':'var(--rojo)'};"><div class="card-label">Resultado${periodo?' — '+periodo.replace(/</g,'&lt;'):''}</div><div class="card-value ${esGan?'verde':'rojo'}">${esGan?'GANANCIA':'PÉRDIDA'} de ${formatoPesos(Math.abs(util))}</div></div><div class="card"><div class="card-label">Ingresos (columna Ganancia)</div><div class="card-value">${formatoPesos(T.gan)}</div></div><div class="card"><div class="card-label">Gastos (columna Pérdida)</div><div class="card-value">${formatoPesos(T.per)}</div></div></div>`;
+  const okMov = Math.abs(T.d-T.c) < 1, okSal = Math.abs(T.sd-T.sa) < 1;
+  document.getElementById('bal-cuadre').innerHTML = (okMov && okSal) ? '✅ El balance cuadra (Débitos = Créditos y Saldo deudor = Saldo acreedor).' : `⚠️ El balance no cuadra: Débitos − Créditos = ${formatoPesos(T.d-T.c)}; Saldo deudor − Saldo acreedor = ${formatoPesos(T.sd-T.sa)}. Revisa que el Excel traiga todas las cuentas.`;
+}
+(function(){ try{ const f = JSON.parse(localStorage.getItem('muspel_bal_filas')||'[]'); if(Array.isArray(f) && f.length) _balFilas = f; const p = localStorage.getItem('muspel_bal_periodo'); window.addEventListener('DOMContentLoaded', function(){ const e = document.getElementById('bal-periodo'); if(e && p) e.value = p; balPintar(); }); }catch(e){} })();
+
 cargarPctRetiroGuardados();
 cargarDatos();
 setInterval(cargarDatos, 30000); // se refresca solo cada 30 segundos
+// Al volver a la página (o desbloquear el celular / recuperar internet) se actualiza al tiro,
+// porque el celular pausa el refresco automático con la pestaña en segundo plano.
+document.addEventListener('visibilitychange', function(){ if(!document.hidden && Date.now() - _ultimoIntentoSync > 5000) cargarDatos(); });
+window.addEventListener('focus', function(){ if(Date.now() - _ultimoIntentoSync > 5000) cargarDatos(); });
+window.addEventListener('online', function(){ cargarDatos(); });
 </script>
 
 </body>
