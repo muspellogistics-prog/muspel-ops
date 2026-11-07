@@ -911,6 +911,42 @@ function paqueteConDireccionRepetida(p){
 // Cuenta ÓRDENES distintas (no bultos). A Muspel le pagan por orden: esto es lo que se muestra primero.
 function nOrdenes(arr){ return agruparOrdenes(arr).length; }
 
+// AGREGADO 06-11-2026 — BOOZ: cada 10 bultos del mismo folio = 1 orden (11 bultos = 2 órdenes).
+// Solo para Booz, por ahora. Los bultos siguen agrupados por folio para entregarse/marcarse
+// juntos (claveGrupoOrden no cambia); solo el CONTEO de órdenes se parte en tramos de 10.
+// Se ordenan primero los bultos entregados, así que órdenes entregadas = bultos entregados ÷ 10
+// (redondeado hacia arriba) y lo que queda en retorno no suma una orden extra entregada.
+var BOOZ_BULTOS_POR_ORDEN = 10;
+function esBoozPaquete(p){
+  var b = String((p && p.b2b) || '').trim().toUpperCase();
+  var f = String((p && p.folio) || '').trim().toUpperCase();
+  return b.indexOf('BOOZ') !== -1 || f.indexOf('BOOZ') === 0;
+}
+function _setTramo(p, n){
+  try{ Object.defineProperty(p, '_tramo', {value:n, writable:true, configurable:true, enumerable:false}); }
+  catch(e){ p._tramo = n; }
+}
+// Clave de la ORDEN que se paga (para contar). Igual a claveGrupoOrden salvo en los tramos
+// 2, 3… de un pedido Booz con más de 10 bultos.
+function claveOrdenPago(p){
+  var k = claveGrupoOrden(p);
+  if(k && p && p._tramo > 0) return k + '#' + p._tramo;
+  return k;
+}
+function _asignarTramosBooz(porFolio){
+  Object.keys(porFolio).forEach(function(fb){
+    var g = porFolio[fb];
+    g.forEach(function(p){ _setTramo(p, 0); });
+    if(g.length <= BOOZ_BULTOS_POR_ORDEN || !esBoozPaquete(g[0])) return;
+    g.map(function(p,i){ return {p:p, i:i}; })
+     .sort(function(a,b){
+       var da = a.p.estado==='entregado' ? 0 : 1, db = b.p.estado==='entregado' ? 0 : 1;
+       return (da-db) || (a.i-b.i);
+     })
+     .forEach(function(o, idx){ _setTramo(o.p, Math.floor(idx / BOOZ_BULTOS_POR_ORDEN)); });
+  });
+}
+
 function agruparOrdenes(arr){
   var porFolio = {};
   arr.forEach(function(p){
@@ -920,14 +956,23 @@ function agruparOrdenes(arr){
       porFolio[fb].push(p);
     }
   });
+  _asignarTramosBooz(porFolio);
+  var porClave = {};
+  arr.forEach(function(p){
+    var k = claveOrdenPago(p);
+    if(k){
+      if(!porClave[k]) porClave[k] = [];
+      porClave[k].push(p);
+    }
+  });
   var asignado = {};
   var grupos = [];
   arr.forEach(function(p){
     if(asignado[p.id]) return;
-    var fb = claveGrupoOrden(p);
-    if(fb && porFolio[fb] && porFolio[fb].length > 1){
-      porFolio[fb].forEach(function(x){ asignado[x.id] = true; });
-      grupos.push(porFolio[fb]);
+    var k = claveOrdenPago(p);
+    if(k && porClave[k] && porClave[k].length > 1){
+      porClave[k].forEach(function(x){ asignado[x.id] = true; });
+      grupos.push(porClave[k]);
       return;
     }
     asignado[p.id] = true;
@@ -5270,7 +5315,7 @@ function exportarExcelDia(){
   var _valExp=valorPorEntregaNeto(_efExp);
   var _grupos={};
   agruparOrdenes(paquetes).forEach(function(g){
-    var key=claveGrupoOrden(g[0]) || ('__solo_'+g[0].id);
+    var key=claveOrdenPago(g[0]) || ('__solo_'+g[0].id);
     _grupos[key]=g;
   });
   var _keyDe={};
@@ -5832,7 +5877,7 @@ function exportarReporteMensualAhora(){
     var _keyDeH={};
     var _completaH={};
     agruparOrdenes(h.detalle).forEach(function(g){
-      var key=claveGrupoOrden(g[0]) || ('__solo_'+g[0].id);
+      var key=claveOrdenPago(g[0]) || ('__solo_'+g[0].id);
       g.forEach(function(p){ _keyDeH[p.id]=key; });
       _completaH[key]=g.every(function(p){return p.estado==='entregado';});
     });
@@ -6030,7 +6075,7 @@ function exportarDiaHistorial(idx){
   var _keyDeH={};
   var _completaH={};
   agruparOrdenes(h.detalle).forEach(function(g){
-    var key=claveGrupoOrden(g[0]) || ('__solo_'+g[0].id);
+    var key=claveOrdenPago(g[0]) || ('__solo_'+g[0].id);
     g.forEach(function(p){ _keyDeH[p.id]=key; });
     _completaH[key]=g.every(function(p){return p.estado==='entregado';});
   });
