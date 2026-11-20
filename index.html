@@ -1160,6 +1160,13 @@ function textoProblemasCliente(pr){
 
 // Buscador: por nombre, teléfono, folio o dirección. Mira el historial completo + lo
 // que está cargado hoy en este equipo.
+// 20-11-2026: hora de entrega (hora de Chile) a partir de la marca de tiempo del estado.
+function horaEntregaTxt(ts, estado){
+  if(estado!=='entregado') return '';
+  var n=Number(ts);
+  if(!n || n<1000000000000) return '';
+  try{ return new Date(n).toLocaleTimeString('es-CL',{timeZone:'America/Santiago',hour:'2-digit',minute:'2-digit',hour12:false}); }catch(e){ return ''; }
+}
 function buscarCliente(){
   var input = document.getElementById('buscar-cliente-input');
   var out = document.getElementById('buscar-cliente-resultado');
@@ -1182,11 +1189,11 @@ function buscarCliente(){
     }
     var res = [];
     paquetes.forEach(function(p){
-      if(calza(p.nombre, p.tel, p.folio, p.codigo, p.dir)) res.push({hoy:true, fecha:'HOY', nombre:p.nombre, folio:p.folio||p.codigo, dir:p.dir, estado:p.estado, motivo:p.motivo||'', tel:p.tel||'', b2b:p.b2b||''});
+      if(calza(p.nombre, p.tel, p.folio, p.codigo, p.dir)) res.push({hoy:true, fecha:'HOY', nombre:p.nombre, folio:p.folio||p.codigo, dir:p.dir, estado:p.estado, motivo:p.motivo||'', tel:p.tel||'', b2b:p.b2b||'', hora:horaEntregaTxt(p.ts,p.estado)});
     });
     historialFilasRemotas.forEach(function(f){
       if(!f) return;
-      if(calza(f[3], f[12], f[2], f[1], f[4])) res.push({fecha:String(f[0]||''), nombre:f[3]||'', folio:f[2]||f[1]||'', dir:f[4]||'', estado:String(f[7]||''), motivo:f[8]||'', tel:f[12]||'', b2b:f[9]||'', repartidor:f[19]||''});
+      if(calza(f[3], f[12], f[2], f[1], f[4])) res.push({fecha:String(f[0]||''), nombre:f[3]||'', folio:f[2]||f[1]||'', dir:f[4]||'', estado:String(f[7]||''), motivo:f[8]||'', tel:f[12]||'', b2b:f[9]||'', repartidor:f[19]||'', hora:horaEntregaTxt(f[20],String(f[7]||''))});
     });
     if(!res.length){ out.innerHTML = '<div style="color:#64748b;">❌ No aparece en el historial ni en las órdenes de hoy. Es cliente nuevo.</div>'; return; }
     res.sort(function(a,b){ if(a.hoy) return -1; if(b.hoy) return 1; return fechaOrdenable(a.fecha) < fechaOrdenable(b.fecha) ? 1 : -1; });
@@ -1196,7 +1203,7 @@ function buscarCliente(){
       var color = r.estado==='entregado'?'var(--verde)':(r.estado==='pendiente'?'#64748b':'var(--rojo)');
       html += '<div style="border:1px solid var(--borde);border-radius:8px;padding:7px 9px;margin-bottom:5px;font-size:0.76rem;">'
         + '<div style="display:flex;justify-content:space-between;gap:6px;"><strong>'+r.nombre+'</strong><span style="color:'+color+';font-weight:700;white-space:nowrap;">'+textoEstado(r.estado)+'</span></div>'
-        + '<div style="color:#475569;">📅 '+r.fecha+' · 📋 '+r.folio+(r.b2b?' · 🏪 '+r.b2b:'')+'</div>'
+        + '<div style="color:#475569;">📅 '+r.fecha+(r.hora?' · 🕐 entregado a las '+r.hora:'')+' · 📋 '+r.folio+(r.b2b?' · 🏪 '+r.b2b:'')+'</div>'
         + '<div style="color:#475569;">📍 '+r.dir+'</div>'
         + (r.tel?'<div style="color:#475569;">📞 '+r.tel+'</div>':'')
         + (r.motivo?'<div style="color:var(--rojo);">Motivo: '+r.motivo+'</div>':'')
@@ -5351,7 +5358,7 @@ function exportarExcelDia(){
     _ordenCompleta[k]=_grupos[k].every(function(p){return p.estado==='entregado';});
   });
   var _yaContado={};
-  var ws_data=[['Código','Folio','Marca (B2B)','Nombre','Teléfono','Dirección','Comuna','Tipo','Estado','Motivo','Orden Completa','Ingreso Neto (por orden)','Efectividad Mes %','Repartidor']];
+  var ws_data=[['Código','Folio','Marca (B2B)','Nombre','Teléfono','Dirección','Comuna','Tipo','Estado','Motivo','Orden Completa','Ingreso Neto (por orden)','Efectividad Mes %','Repartidor','Hora de entrega']];
   paquetes.forEach(function(p){
     var key=_keyDe[p.id];
     var completa=_ordenCompleta[key];
@@ -5359,7 +5366,7 @@ function exportarExcelDia(){
     // WOM se paga a tarifa base fija, sin bono, sin importar la efectividad del mes.
     var valorEstaOrden = esWomPaquete(p) ? TARIFA_BASE : _valExp;
     if(completa && !_yaContado[key]){ ingresoFila=valorEstaOrden; _yaContado[key]=true; }
-    ws_data.push([p.codigo,p.folio,p.b2b||'',p.nombre,p.tel,p.dir,p.comuna,p.tipo,p.estado,p.motivo||'',completa?'Sí':'No',ingresoFila,_efExp,nombreRepartidor(getRepartidor(p))]);
+    ws_data.push([p.codigo,p.folio,p.b2b||'',p.nombre,p.tel,p.dir,p.comuna,p.tipo,p.estado,p.motivo||'',completa?'Sí':'No',ingresoFila,_efExp,nombreRepartidor(getRepartidor(p)),horaEntregaTxt(p.ts,p.estado)]);
   });
   var wb=XLSX.utils.book_new();
   var ws=XLSX.utils.aoa_to_sheet(ws_data);
@@ -6104,13 +6111,13 @@ function exportarDiaHistorial(idx){
     _completaH[key]=g.every(function(p){return p.estado==='entregado';});
   });
   var _yaContadoH={};
-  var ws_data=[['Codigo','Folio','Nombre','Telefono','Direccion','Comuna','Tipo','Estado','Motivo','Orden Completa','Ingreso Neto (por orden)']];
+  var ws_data=[['Codigo','Folio','Nombre','Telefono','Direccion','Comuna','Tipo','Estado','Motivo','Orden Completa','Ingreso Neto (por orden)','Hora de entrega']];
   h.detalle.forEach(function(p){
     var key=_keyDeH[p.id];
     var completa=_completaH[key];
     var ingresoFila=0;
     if(completa && !_yaContadoH[key]){ ingresoFila=_valHist; _yaContadoH[key]=true; }
-    ws_data.push([p.codigo,p.folio,p.nombre,p.tel,p.dir,p.comuna,p.tipo,p.estado,p.motivo||'',completa?'Si':'No',ingresoFila]);
+    ws_data.push([p.codigo,p.folio,p.nombre,p.tel,p.dir,p.comuna,p.tipo,p.estado,p.motivo||'',completa?'Si':'No',ingresoFila,horaEntregaTxt(p.ts,p.estado)]);
   });
   var wb=XLSX.utils.book_new();
   var ws=XLSX.utils.aoa_to_sheet(ws_data);
