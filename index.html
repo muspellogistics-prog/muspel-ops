@@ -2936,7 +2936,7 @@ function abrirModal(id){
     }
     // 04-11-2026: botón "Llego en 10 min" (modo operativo, solo pedidos pendientes de hoy)
     var btnLlego10 = document.getElementById('modal-tel-llego10');
-    var link10m = (perfilActual!=='comercial' && p.estado==='pendiente' && diasHastaRutaPedido(p)===0) ? armarLinkWhatsAppLlego10(p) : null;
+    var link10m = (false && perfilActual!=='comercial' && p.estado==='pendiente' && diasHastaRutaPedido(p)===0) ? armarLinkWhatsAppLlego10(p) : null;
     if(btnLlego10){
       if(link10m){
         btnLlego10.href = link10m;
@@ -4745,7 +4745,7 @@ function renderComunasDeTipo(items, diaSemana, tipo){
           }
         }
         // 04-11-2026: mensaje "llego en ~10 min" (solo modo operativo, solo hoy)
-        if(perfilActual!=='comercial' && diasHastaRutaPedido(p)===0){
+        if(false && perfilActual!=='comercial' && diasHastaRutaPedido(p)===0){ // 20-11-2026: oculto, confunde; ahora avisa solo el sistema
           var link10 = armarLinkWhatsAppLlego10(p);
           if(link10){
             html+='<a href="'+link10+'" target="_blank" style="grid-column:1/-1;" onclick="marcarLlego10('+p.id+')"><button class="btn btn-sm" style="background:#f59e0b;color:#1f1300;width:100%;" title="Avisar que llegas en unos 10 minutos">'+(llego10Enviado(p)?'✅ 🚐 10 min':'🚐 10 min')+'</button></a>';
