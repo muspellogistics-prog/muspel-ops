@@ -493,6 +493,7 @@
   </div>
   </div>
   <div id="panel-asignacion"></div>
+  <button class="btn btn-verde solo-operativo" id="btn-salida" onclick="avisarSalida()" style="margin-bottom:6px;">📍 Salí: avisar al siguiente cliente</button>
   <button class="btn btn-outline solo-operativo" id="btn-ver-todas" onclick="toggleVerTodas()" style="margin-bottom:6px;display:none;">👀 Ver todas las órdenes</button>
   <button class="btn btn-primary" onclick="generarRutaOptimizada()" style="margin-bottom:6px;display:none;">🗺 Generar ruta optimizada del día</button>
   <button class="btn btn-verde" id="btn-siguiente-tramo" onclick="siguienteTramo()" style="display:none;margin-bottom:10px;">▶ Siguiente tramo</button>
@@ -4417,6 +4418,29 @@ function recalcularRutaDesdeUbicacionActual(){
 // Mantener abrirRutaGoogleMaps como alias por compatibilidad
 function abrirRutaGoogleMaps(){ generarRutaOptimizada(); }
 function siguienteTramo(){ generarRutaOptimizada(); }
+// Botón "Salí": avisa al siguiente cliente pendiente cuántos minutos faltan (calculado con Google Maps desde la última entrega marcada)
+function avisarSalida(){
+  var btn = document.getElementById('btn-salida');
+  function fin(){ if(btn) btn.disabled = false; }
+  if(btn) btn.disabled = true;
+  function pedir(cont){
+    return fetch(SHEETS_URL, {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({tipo:'aviso_salida', contenido: cont})}).then(function(r){ return r.json(); });
+  }
+  pedir({modo:'previa'}).then(function(p){
+    if(!p || !p.ok){ alert('⚠️ ' + ((p && p.error) || 'No se pudo calcular el tiempo')); fin(); return; }
+    if(p.yaAvisado){ alert('A ' + p.cliente + ' ya se le avisó su llegada.'); fin(); return; }
+    var m = prompt('Saliste de ' + p.desde + ' hacia ' + p.hacia + '.\n\nSe le avisa a ' + p.cliente + ' que llegas en cuántos minutos?\n(Puedes cambiar el número)', String(p.minutos));
+    if(m === null){ fin(); return; }
+    var n = parseInt(m, 10);
+    if(!n || n < 1 || n > 180){ alert('Escribe un número de minutos válido (1 a 180)'); fin(); return; }
+    return pedir({modo:'enviar', minutos:n}).then(function(e){
+      if(e && e.ok) alert('✅ Aviso enviado a ' + e.cliente + ' (' + n + ' min)' + (e.prueba ? '\n[PRUEBA: llegó solo a tu celular]' : ''));
+      else alert('⚠️ ' + ((e && e.error) || 'No se pudo enviar'));
+      fin();
+    });
+  }).catch(function(){ alert('Sin conexión con la OPS. Intenta de nuevo.'); fin(); });
+}
+
 function actualizarBotonRuta(){}
 
 function recalcularConOrigen(origenCoords, pendientes){
