@@ -1161,10 +1161,13 @@ function textoProblemasCliente(pr){
 // Buscador: por nombre, teléfono, folio o dirección. Mira el historial completo + lo
 // que está cargado hoy en este equipo.
 // 20-11-2026: hora de entrega (hora de Chile) a partir de la marca de tiempo del estado.
-function horaEntregaTxt(ts, estado){
+// 21-11-2026: se usa ts_estado (hora del cambio a 'entregado'); p.ts es la hora en que se CARGÓ la orden (ej. 23:55 de la noche anterior).
+function horaEntregaTxt(ts, estado, soloHoy){
   if(estado!=='entregado') return '';
   var n=Number(ts);
   if(!n || n<1000000000000) return '';
+  // soloHoy: si la marca no es de HOY (ej. la hora en que se cargó la ruta anoche), no se muestra una hora falsa
+  if(soloHoy){ try{ var _d=function(t){ return new Date(t).toLocaleDateString('en-CA',{timeZone:'America/Santiago'}); }; if(_d(n)!==_d(Date.now())) return ''; }catch(e){} }
   try{ return new Date(n).toLocaleTimeString('es-CL',{timeZone:'America/Santiago',hour:'2-digit',minute:'2-digit',hour12:false}); }catch(e){ return ''; }
 }
 function buscarCliente(){
@@ -1189,7 +1192,7 @@ function buscarCliente(){
     }
     var res = [];
     paquetes.forEach(function(p){
-      if(calza(p.nombre, p.tel, p.folio, p.codigo, p.dir)) res.push({hoy:true, fecha:'HOY', nombre:p.nombre, folio:p.folio||p.codigo, dir:p.dir, estado:p.estado, motivo:p.motivo||'', tel:p.tel||'', b2b:p.b2b||'', hora:horaEntregaTxt(p.ts,p.estado)});
+      if(calza(p.nombre, p.tel, p.folio, p.codigo, p.dir)) res.push({hoy:true, fecha:'HOY', nombre:p.nombre, folio:p.folio||p.codigo, dir:p.dir, estado:p.estado, motivo:p.motivo||'', tel:p.tel||'', b2b:p.b2b||'', hora:horaEntregaTxt(p.ts_estado||p.ts,p.estado,true)});
     });
     historialFilasRemotas.forEach(function(f){
       if(!f) return;
@@ -5366,7 +5369,7 @@ function exportarExcelDia(){
     // WOM se paga a tarifa base fija, sin bono, sin importar la efectividad del mes.
     var valorEstaOrden = esWomPaquete(p) ? TARIFA_BASE : _valExp;
     if(completa && !_yaContado[key]){ ingresoFila=valorEstaOrden; _yaContado[key]=true; }
-    ws_data.push([p.codigo,p.folio,p.b2b||'',p.nombre,p.tel,p.dir,p.comuna,p.tipo,p.estado,p.motivo||'',completa?'Sí':'No',ingresoFila,_efExp,nombreRepartidor(getRepartidor(p)),horaEntregaTxt(p.ts,p.estado)]);
+    ws_data.push([p.codigo,p.folio,p.b2b||'',p.nombre,p.tel,p.dir,p.comuna,p.tipo,p.estado,p.motivo||'',completa?'Sí':'No',ingresoFila,_efExp,nombreRepartidor(getRepartidor(p)),horaEntregaTxt(p.ts_estado||p.ts,p.estado)]);
   });
   var wb=XLSX.utils.book_new();
   var ws=XLSX.utils.aoa_to_sheet(ws_data);
@@ -6117,7 +6120,7 @@ function exportarDiaHistorial(idx){
     var completa=_completaH[key];
     var ingresoFila=0;
     if(completa && !_yaContadoH[key]){ ingresoFila=_valHist; _yaContadoH[key]=true; }
-    ws_data.push([p.codigo,p.folio,p.nombre,p.tel,p.dir,p.comuna,p.tipo,p.estado,p.motivo||'',completa?'Si':'No',ingresoFila,horaEntregaTxt(p.ts,p.estado)]);
+    ws_data.push([p.codigo,p.folio,p.nombre,p.tel,p.dir,p.comuna,p.tipo,p.estado,p.motivo||'',completa?'Si':'No',ingresoFila,horaEntregaTxt(p.ts_estado||p.ts,p.estado)]);
   });
   var wb=XLSX.utils.book_new();
   var ws=XLSX.utils.aoa_to_sheet(ws_data);
