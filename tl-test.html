@@ -4656,7 +4656,7 @@ function renderPaquetes(){
   // pedido de Kathy, ahora es una sola lista continua ordenada de punta a punta; J05/J06
   // queda como una etiqueta chica en cada tarjeta en vez de una sección aparte.
   var diaSemana = new Date().getDay();
-  lista.innerHTML = renderComunasDeTipo(filtered, diaSemana, null);
+  lista.innerHTML = tlBannerRuta() + renderComunasDeTipo(filtered, diaSemana, null);
 }
 
 // Arma el HTML de los grupos por comuna — antes vivía por separado dentro de cada sección
@@ -6548,7 +6548,23 @@ function tlAlAbrir(){ tlRender(); tlCargar(); }
 // Las filas TL del Excel de ruta se guardan aparte (tlOrdenes) y solo se mezclan al DIBUJAR la lista,
 // con su N° de ruta, en dorado y con la etiqueta TL. No entran a paquetes: no tocan totales, cierre ni pagos de ALAS.
 function tlEstadoRuta(o){ var e=tlMapaEstado(o); return (e==='entregado'||e==='retorno'||e==='daniado'||e==='devuelto')?e:(e==='no_entregado'?'retorno':'pendiente'); }
+// TL (clientes propios): el retiro y la entrega van asignados a Cristian por ahora.
+var TL_REPARTIDOR = 'cristian';
+function tlVisibleParaUsuario(){
+  try{
+    if(perfilActual==='comercial') return filtroRepartidorComercial==='todos' || filtroRepartidorComercial===TL_REPARTIDOR;
+    return (usuarioEsJefe() && verTodasOperativo) || usuarioActual===TL_REPARTIDOR;
+  }catch(e){ return true; }
+}
+function tlBannerRuta(){
+  var its = tlItemsRuta(); if(!its.length) return '';
+  var c = function(es){ return its.filter(function(p){ return es.indexOf(tlMapaEstado(p.o))>=0; }).length; };
+  return '<div style="background:#f7e9b8;border:1px solid #b8860b;border-left:6px solid #b8860b;border-radius:10px;padding:8px 12px;margin-bottom:10px;font-size:0.8rem;color:#5c4504;">'+
+    '<b>🚂 TL · '+its.length+' orden(es)</b> — retiro y entrega a cargo de '+tlEsc(nombreRepartidor(TL_REPARTIDOR))+'<br>'+
+    '✅ '+c(['entregado'])+' entregadas · 🔁 '+c(['retorno'])+' retorno · ⚠️ '+c(['daniado'])+' dañadas · ⏳ '+c(['retirado','en_ruta'])+' pendientes</div>';
+}
 function tlItemsRuta(){
+  if(!tlVisibleParaUsuario()) return [];
   tlCargarCache_si_vacio();
   var hoy = tlHoy();
   return tlOrdenes.filter(function(o){
