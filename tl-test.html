@@ -775,16 +775,19 @@
     <div style="font-size:0.68rem;color:#94a3b8;margin-top:6px;">Se cobra por orden entregada. Valores con IVA incluido.</div>
   </div>
 
+  <div class="card-title" style="margin:6px 4px;">📦 Inventario TL</div>
+  <div class="stats-grid" id="tl-stats">
+    <div class="stat" style="border-top:4px solid #b8860b;"><div class="stat-n" id="tl-n-retirado" style="color:#8a6508;">0</div><div class="stat-label">En bodega</div></div>
+    <div class="stat" style="border-top:4px solid #b8860b;"><div class="stat-n" id="tl-n-en_ruta" style="color:#8a6508;">0</div><div class="stat-label">En ruta</div></div>
+    <div class="stat verde"><div class="stat-n" id="tl-n-entregado">0</div><div class="stat-label">Entregadas</div></div>
+    <div class="stat" style="border-top:4px solid #ea580c;"><div class="stat-n" id="tl-n-retorno" style="color:#ea580c;">0</div><div class="stat-label">Retorno</div></div>
+    <div class="stat rojo"><div class="stat-n" id="tl-n-daniado">0</div><div class="stat-label">Dañadas</div></div>
+    <div class="stat rojo"><div class="stat-n" id="tl-n-devuelto">0</div><div class="stat-label">Devueltas</div></div>
+  </div>
+
   <details class="card" id="tl-det-ordenes">
     <summary class="card-title" style="cursor:pointer;margin-bottom:0;border-bottom:none;padding-bottom:0;">📋 Órdenes TL retiradas (detalle)</summary>
     <div style="margin-top:10px;">
-  <div class="stats-grid" id="tl-stats">
-    <div class="stat" style="border-top:4px solid #b8860b;"><div class="stat-n" id="tl-n-retirado" style="color:#8a6508;">0</div><div class="stat-label">Retiradas</div></div>
-    <div class="stat" style="border-top:4px solid #b8860b;"><div class="stat-n" id="tl-n-en_ruta" style="color:#8a6508;">0</div><div class="stat-label">En ruta</div></div>
-    <div class="stat verde"><div class="stat-n" id="tl-n-entregado">0</div><div class="stat-label">Entregadas</div></div>
-    <div class="stat rojo"><div class="stat-n" id="tl-n-no_entregado">0</div><div class="stat-label">No entregadas</div></div>
-  </div>
-
   <div class="card" style="padding:10px 12px;">
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
       <select class="form-input" id="tl-f-cliente" onchange="tlCambiarCliente(this.value)" style="flex:1;margin:0;"></select>
@@ -6264,10 +6267,16 @@ if(paquetes.length === 0){
 // de TL. Aquí en GitHub NO va ningún dato de clientes: solo en el celular y en el Sheets.
 // ════════════════════════════════════════════════════════════════════════
 var TL_ESTADOS = {
-  retirado:{txt:'Retirada', ico:'📥'}, en_ruta:{txt:'En ruta', ico:'🚐'},
-  entregado:{txt:'Entregada', ico:'✅'}, no_entregado:{txt:'No entregada', ico:'↩️'}
+  retirado:{txt:'En bodega', ico:'📥'}, en_ruta:{txt:'En ruta', ico:'🚐'},
+  entregado:{txt:'Entregada', ico:'✅'}, retorno:{txt:'Retorno (en bodega)', ico:'🔁'},
+  daniado:{txt:'Dañada', ico:'⚠️'}, devuelto:{txt:'Devuelta al cliente', ico:'📮'}, no_entregado:{txt:'No entregada', ico:'↩️'}
 };
-var TL_MOTIVOS = ['Nadie en el domicilio','Dirección incorrecta','Cliente rechazó','Sin contacto','Otro'];
+// Motivos por alternativas, igual que en la OPS (un toque) + «Otro» para escribir
+var TL_MOTIVOS = {
+  retorno:['No contesta','Dirección no encontrada','Ausente / nadie en el domicilio','Rechazó el pedido','Sin tiempo en la ruta'],
+  daniado:['Caja golpeada','Producto roto','Producto mojado','Embalaje abierto'],
+  devuelto:['Cliente no lo quiere','Agotó los 3 intentos','Dirección inexistente']
+};
 var TL_TALLAS = ['S','M','L'];
 var TL_POR_PAG = 8;
 var tlOrdenes = [];
@@ -6397,21 +6406,23 @@ function tlImportarPegado(){
 function tlCambiarEstado(id, estado, motivo){
   var o = tlOrdenes.find(function(x){ return x.id===id; }); if(!o) return;
   o.estado = estado; o.motivo = motivo||''; o.actualizado = new Date().toISOString();
-  if(estado==='entregado'){ o.fecha_entrega = tlHoy(); o.hora_entrega = tlHora(); }
-  if(estado==='no_entregado'){ o.fecha_entrega = tlHoy(); o.hora_entrega = tlHora(); }
-  if(estado==='retirado'||estado==='en_ruta'){ o.fecha_entrega=''; o.hora_entrega=''; }
+  if(estado==='entregado'||estado==='retorno'||estado==='daniado'||estado==='devuelto'||estado==='no_entregado'){ o.fecha_entrega = tlHoy(); o.hora_entrega = tlHora(); }
+  if(estado==='retirado'||estado==='en_ruta'){ o.fecha_entrega=''; o.hora_entrega=''; o.motivo=''; }
   tlGuardarCache(); tlRender(); tlSubirOrdenes([o]);
 }
-function tlPedirMotivo(id){
+function tlPedirMotivo(id, estado){
   var caja = document.getElementById('tl-motivo-'+id); if(!caja) return;
-  caja.innerHTML = '<div style="font-size:0.72rem;font-weight:700;margin-top:8px;">¿Por qué no se entregó?</div>' + TL_MOTIVOS.map(function(m,i){
-    return '<button class="btn btn-outline" style="width:auto;margin:3px 4px 0 0;padding:6px 10px;font-size:0.72rem;" onclick="tlMotivoElegido(\''+id+'\','+i+')">'+tlEsc(m)+'</button>';
-  }).join('');
+  var tit = estado==='retorno' ? '¿Por qué vuelve? (queda en bodega para reintentar)' : estado==='daniado' ? '¿Qué le pasó a la caja?' : '¿Por qué se devuelve al cliente?';
+  var lista = (TL_MOTIVOS[estado]||[]).concat(['Otro']);
+  caja.innerHTML = '<div style="font-size:0.72rem;font-weight:700;margin-top:8px;">'+tit+'</div>' + lista.map(function(m,i){
+    return '<button class="btn btn-outline" style="width:auto;margin:3px 4px 0 0;padding:6px 10px;font-size:0.72rem;" onclick="tlMotivoElegido(\''+id+'\',\''+estado+'\','+i+')">'+tlEsc(m)+'</button>';
+  }).join('') + '<button class="btn btn-outline" style="width:auto;margin:3px 0 0 0;padding:6px 10px;font-size:0.72rem;" onclick="tlRender()">✖ Cancelar</button>';
 }
-function tlMotivoElegido(id, i){
-  var m = TL_MOTIVOS[i];
+function tlMotivoElegido(id, estado, i){
+  var lista = (TL_MOTIVOS[estado]||[]).concat(['Otro']);
+  var m = lista[i];
   if(m==='Otro'){ var t = prompt('Escribe el motivo:'); if(!t) return; m = t; }
-  tlCambiarEstado(id, 'no_entregado', m);
+  tlCambiarEstado(id, estado, m);
 }
 
 // ── Pantalla ──
@@ -6423,7 +6434,8 @@ function tlVisibles(){
   return tlOrdenes.filter(function(o){
     if(tlFiltroCliente && o.cliente!==tlFiltroCliente) return false;
     var e = tlMapaEstado(o);
-    if(tlFiltroEstado==='activas') return e==='retirado'||e==='en_ruta';
+    if(tlFiltroEstado==='activas') return e==='retirado'||e==='en_ruta'||e==='retorno';
+    if(tlFiltroEstado==='otras') return e==='daniado'||e==='devuelto'||e==='no_entregado';
     if(tlFiltroEstado==='todas') return true;
     return e===tlFiltroEstado;
   }).sort(function(a,b){ return String(b.fecha_retiro||'').localeCompare(String(a.fecha_retiro||'')) || String(a.n_pedido||'').localeCompare(String(b.n_pedido||''),undefined,{numeric:true}); });
@@ -6440,16 +6452,21 @@ function tlTarjeta(o){
   h += '<div style="text-align:right;font-size:0.72rem;font-weight:700;white-space:nowrap;">'+est.ico+' '+est.txt+'<div style="font-weight:600;color:#6b5206;">Talla '+tlEsc(o.talla||'S')+'</div></div></div>';
   h += '<a href="'+mapa+'" target="_blank" rel="noopener" style="display:block;margin-top:6px;font-size:0.85rem;color:#1a3a5c;font-weight:600;text-decoration:underline;">📍 '+tlEsc(o.direccion)+', '+tlEsc(o.comuna||'Osorno')+'</a>';
   if(o.obs) h += '<div style="font-size:0.75rem;color:#6b5206;margin-top:4px;">📝 '+tlEsc(o.obs)+'</div>';
-  if(e==='no_entregado' && o.motivo) h += '<div style="font-size:0.75rem;color:#b91c1c;margin-top:4px;">Motivo: '+tlEsc(o.motivo)+'</div>';
+  if((e==='no_entregado'||e==='retorno'||e==='daniado'||e==='devuelto') && o.motivo) h += '<div style="font-size:0.75rem;color:#b91c1c;margin-top:4px;">'+est.ico+' '+tlEsc(o.motivo)+'</div>';
   if(e==='entregado' && o.hora_entrega) h += '<div style="font-size:0.72rem;color:#1a7a4a;margin-top:4px;">Entregada '+tlEsc(o.fecha_entrega)+' a las '+tlEsc(o.hora_entrega)+'</div>';
   h += '<div class="solo-comercial" style="font-size:0.72rem;color:#6b5206;margin-top:4px;">'+tlPesos(o.tarifa)+'</div>';
   h += '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">';
-  if(e==='retirado') h += '<button class="btn btn-primary" style="width:auto;flex:1;margin:0;" onclick="tlCambiarEstado(\''+o.id+'\',\'en_ruta\')">🚐 En ruta</button>';
+  var B = function(cls,txt,fn,extra){ return '<button class="btn '+cls+'" style="width:auto;flex:1 1 30%;margin:0;'+(extra||'')+'" onclick="'+fn+'">'+txt+'</button>'; };
   if(e==='retirado'||e==='en_ruta'){
-    h += '<button class="btn" style="width:auto;flex:1;margin:0;background:#1a7a4a;color:#fff;" onclick="tlCambiarEstado(\''+o.id+'\',\'entregado\')">✅ Entregada</button>';
-    h += '<button class="btn btn-rojo" style="width:auto;flex:1;margin:0;" onclick="tlPedirMotivo(\''+o.id+'\')">↩️ No entregada</button>';
+    if(e==='retirado') h += B('btn-primary','🚐 En ruta',"tlCambiarEstado('"+o.id+"','en_ruta')");
+    h += B('','✅ Entregada',"tlCambiarEstado('"+o.id+"','entregado')",'background:#1a7a4a;color:#fff;');
+    h += B('btn-naranja','🔁 Retorno',"tlPedirMotivo('"+o.id+"','retorno')");
+    h += B('btn-rojo','⚠️ Dañada',"tlPedirMotivo('"+o.id+"','daniado')");
+  } else if(e==='retorno'||e==='daniado'){
+    h += B('btn-rojo','📮 Devuelta al cliente',"tlPedirMotivo('"+o.id+"','devuelto')");
+    h += B('btn-outline','↺ Volver a en ruta',"tlCambiarEstado('"+o.id+"','en_ruta')");
   } else {
-    h += '<button class="btn btn-outline" style="width:auto;flex:1;margin:0;" onclick="tlCambiarEstado(\''+o.id+'\',\'en_ruta\')">↺ Volver a en ruta</button>';
+    h += B('btn-outline','↺ Volver a en ruta',"tlCambiarEstado('"+o.id+"','en_ruta')");
   }
   if(tel) h += '<a href="https://wa.me/'+tel+'" target="_blank" rel="noopener" class="btn btn-outline" style="width:auto;margin:0;text-decoration:none;">💬</a>';
   if(o.foto_url) h += '<a href="'+tlEsc(o.foto_url)+'" target="_blank" rel="noopener" class="btn btn-outline" style="width:auto;margin:0;text-decoration:none;">📷</a>';
@@ -6465,10 +6482,15 @@ function tlRender(){
   selC.innerHTML = '<option value="">Todos los clientes</option>' + cls.map(function(c){ return '<option value="'+tlEsc(c)+'"'+(c===tlFiltroCliente?' selected':'')+'>'+tlEsc(c)+'</option>'; }).join('');
   document.getElementById('tl-dl-clientes').innerHTML = cls.map(function(c){ return '<option value="'+tlEsc(c)+'">'; }).join('');
   var base = tlOrdenes.filter(function(o){ return !tlFiltroCliente || o.cliente===tlFiltroCliente; });
-  ['retirado','en_ruta','entregado','no_entregado'].forEach(function(e){
-    document.getElementById('tl-n-'+e).textContent = base.filter(function(o){ return tlMapaEstado(o)===e; }).length;
-  });
-  var fs = [['activas','Por entregar'],['entregado','Entregadas'],['no_entregado','No entregadas'],['todas','Todas']];
+  var cuenta = function(es){ return base.filter(function(o){ return es.indexOf(tlMapaEstado(o))>=0; }).length; };
+  var setN = function(id,n){ var el=document.getElementById(id); if(el) el.textContent=n; };
+  setN('tl-n-retirado', cuenta(['retirado','retorno']));   // en bodega = lo que Muspel tiene físicamente
+  setN('tl-n-en_ruta', cuenta(['en_ruta']));
+  setN('tl-n-entregado', cuenta(['entregado']));
+  setN('tl-n-retorno', cuenta(['retorno']));
+  setN('tl-n-daniado', cuenta(['daniado']));
+  setN('tl-n-devuelto', cuenta(['devuelto','no_entregado']));
+  var fs = [['activas','Por entregar'],['entregado','Entregadas'],['retorno','Retorno'],['otras','Dañadas / Devueltas'],['todas','Todas']];
   document.getElementById('tl-f-estados').innerHTML = fs.map(function(f){
     var on = f[0]===tlFiltroEstado;
     return '<button class="btn '+(on?'btn-primary':'btn-outline')+'" style="width:auto;flex:0 0 auto;margin:0;padding:6px 12px;font-size:0.75rem;" onclick="tlCambiarFiltro(\''+f[0]+'\')">'+f[1]+'</button>';
@@ -6496,11 +6518,16 @@ function tlRenderContabilidad(){
   var por = {};
   tlOrdenes.forEach(function(o){
     var e = tlMapaEstado(o);
-    var fecha = (e==='entregado'||e==='no_entregado') ? o.fecha_entrega : o.fecha_retiro;
+    var cerrada = (e==='entregado'||e==='retorno'||e==='daniado'||e==='devuelto'||e==='no_entregado');
+    var fecha = cerrada ? o.fecha_entrega : o.fecha_retiro;
     if(String(fecha||'').slice(0,7)!==mes) return;
-    var c = por[o.cliente||'(sin cliente)'] = por[o.cliente||'(sin cliente)'] || {ent:0,no:0,pend:0,total:0,tallas:{}};
+    var k = o.cliente||'(sin cliente)';
+    var c = por[k] = por[k] || {ent:0,ret:0,dan:0,dev:0,pend:0,total:0,tallas:{}};
     if(e==='entregado'){ c.ent++; c.total += Number(o.tarifa)||0; var t=o.talla||'S'; c.tallas[t]=(c.tallas[t]||0)+1; }
-    else if(e==='no_entregado') c.no++; else c.pend++;
+    else if(e==='retorno'||e==='no_entregado') c.ret++;
+    else if(e==='daniado') c.dan++;
+    else if(e==='devuelto') c.dev++;
+    else c.pend++;
   });
   var nombres = Object.keys(por).sort();
   if(!nombres.length){ cont.innerHTML = '<div class="alerta alerta-info">Sin órdenes en este mes.</div>'; return; }
@@ -6509,7 +6536,7 @@ function tlRenderContabilidad(){
     var c = por[n]; granTotal += c.total;
     var tallas = Object.keys(c.tallas).sort().map(function(t){ return c.tallas[t]+'×'+t; }).join(' · ');
     return '<div style="border:1px solid #e5d28f;background:#fbf3d6;border-radius:8px;padding:10px;margin-bottom:8px;"><div style="font-weight:800;">'+tlEsc(n)+'</div>'+
-      '<div style="font-size:0.8rem;margin-top:4px;">✅ <b>'+c.ent+'</b> entregadas'+(tallas?' ('+tlEsc(tallas)+')':'')+' · ↩️ '+c.no+' no entregadas · ⏳ '+c.pend+' pendientes</div>'+
+      '<div style="font-size:0.8rem;margin-top:4px;">✅ <b>'+c.ent+'</b> entregadas'+(tallas?' ('+tlEsc(tallas)+')':'')+' · 🔁 '+c.ret+' retorno · ⚠️ '+c.dan+' dañadas · 📮 '+c.dev+' devueltas · ⏳ '+c.pend+' pendientes</div>'+
       '<div style="font-size:1.05rem;font-weight:800;color:#8a6508;margin-top:4px;">'+tlPesos(c.total)+'</div></div>';
   }).join('') + (nombres.length>1 ? '<div style="font-weight:800;text-align:right;">Total TL del mes: '+tlPesos(granTotal)+'</div>' : '');
 }
@@ -6520,7 +6547,7 @@ function tlAlAbrir(){ tlRender(); tlCargar(); }
 // ═══ TL dentro de la ruta numerada (AGREGADO 23-11-2026) ═══
 // Las filas TL del Excel de ruta se guardan aparte (tlOrdenes) y solo se mezclan al DIBUJAR la lista,
 // con su N° de ruta, en dorado y con la etiqueta TL. No entran a paquetes: no tocan totales, cierre ni pagos de ALAS.
-function tlEstadoRuta(o){ var e=tlMapaEstado(o); return e==='entregado'?'entregado':(e==='no_entregado'?'devuelto':'pendiente'); }
+function tlEstadoRuta(o){ var e=tlMapaEstado(o); return (e==='entregado'||e==='retorno'||e==='daniado'||e==='devuelto')?e:(e==='no_entregado'?'retorno':'pendiente'); }
 function tlItemsRuta(){
   tlCargarCache_si_vacio();
   var hoy = tlHoy();
@@ -6555,7 +6582,7 @@ function tlCapturarFilaRuta(row, idx){
   var hoy = tlHoy();
   var ex = tlOrdenes.find(function(o){
     if(o.cliente!==cliente) return false;
-    var e = tlMapaEstado(o); if(e==='entregado') return false;
+    var e = tlMapaEstado(o); if(e==='entregado'||e==='devuelto') return false;
     if(pedido && o.n_pedido) return String(o.n_pedido)===pedido;
     return o.destinatario===nombre && o.direccion===dir;
   });
@@ -6570,6 +6597,7 @@ function tlCapturarFilaRuta(row, idx){
          talla:talla, tarifa:tlTarifaSugerida(comuna, talla), estado:'retirado', motivo:'', fecha_entrega:'', hora_entrega:'', foto_url:'', factura:'', obs:c('obs')};
     tlOrdenes.push(o);
   }
+  if(tlMapaEstado(o)==='retorno'){ o.estado='retirado'; o.motivo=''; o.fecha_entrega=''; o.hora_entrega=''; } // vuelve a salir en esta ruta
   o.num_ruta = num===''?'':String(num); o.fecha_ruta = hoy; o.actualizado = new Date().toISOString();
   return {orden:o, res:res};
 }
