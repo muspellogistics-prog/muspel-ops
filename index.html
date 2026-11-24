@@ -339,6 +339,7 @@
   <div class="tab solo-comercial" onclick="showTab('cierre')">✅ Cierre</div>
   <div class="tab solo-comercial" onclick="showTab('dashboard')">📈 Dashboard</div>
   <div class="tab solo-comercial" onclick="showTab('historial')">🗂 Historial</div>
+  <div class="tab solo-comercial" onclick="showTab('tl')" style="color:#f2d27a;">🚂 TL</div>
 </div>
 
 <!-- ══════════════════════════════════════════ -->
@@ -759,6 +760,86 @@
     <div style="font-size:0.78rem;color:#64748b;margin-bottom:10px;">Borra las órdenes que están cargadas ahora mismo en el teléfono (ej. datos de prueba), sin guardarlas en el historial ni afectar días ya cerrados. Úsalo antes de empezar a operar de verdad.</div>
     <button class="btn btn-rojo" onclick="vaciarOrdenesActuales()">🗑 Vaciar órdenes actuales</button>
   </div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- TAB: TL (Tren Logístico) — clientes propios de Muspel, separados de ALAS -->
+<!-- ══════════════════════════════════════════ -->
+<div class="content" id="tab-tl">
+  <div class="alerta alerta-warn" id="tl-banner" style="display:none;"></div>
+
+  <div class="card solo-comercial" style="border-top:4px solid #b8860b;">
+    <div class="card-title">🧾 Ingresos TL (aparte de ALAS)</div>
+    <input type="month" class="form-input" id="tl-c-mes" onchange="tlRenderContabilidad()" style="margin-bottom:8px;">
+    <div id="tl-contabilidad"></div>
+    <div style="font-size:0.68rem;color:#94a3b8;margin-top:6px;">Se cobra por orden entregada. Valores con IVA incluido.</div>
+  </div>
+
+  <div class="card-title" style="margin:6px 4px;">📦 Inventario TL</div>
+  <div class="stats-grid" id="tl-stats">
+    <div class="stat" style="border-top:4px solid #b8860b;"><div class="stat-n" id="tl-n-retirado" style="color:#8a6508;">0</div><div class="stat-label">En bodega</div></div>
+    <div class="stat" style="border-top:4px solid #b8860b;"><div class="stat-n" id="tl-n-en_ruta" style="color:#8a6508;">0</div><div class="stat-label">En ruta</div></div>
+    <div class="stat verde"><div class="stat-n" id="tl-n-entregado">0</div><div class="stat-label">Entregadas</div></div>
+    <div class="stat" style="border-top:4px solid #ea580c;"><div class="stat-n" id="tl-n-retorno" style="color:#ea580c;">0</div><div class="stat-label">Retorno</div></div>
+    <div class="stat rojo"><div class="stat-n" id="tl-n-daniado">0</div><div class="stat-label">Dañadas</div></div>
+    <div class="stat rojo"><div class="stat-n" id="tl-n-devuelto">0</div><div class="stat-label">Devueltas</div></div>
+  </div>
+
+  <details class="card" id="tl-det-ordenes">
+    <summary class="card-title" style="cursor:pointer;margin-bottom:0;border-bottom:none;padding-bottom:0;">📋 Órdenes TL retiradas (detalle)</summary>
+    <div style="margin-top:10px;">
+  <div class="card" style="padding:10px 12px;">
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+      <select class="form-input" id="tl-f-cliente" onchange="tlCambiarCliente(this.value)" style="flex:1;margin:0;"></select>
+      <button class="btn btn-outline" style="width:auto;margin:0;padding:8px 12px;" onclick="tlCargar(true)">🔄</button>
+    </div>
+    <div id="tl-f-estados" style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;"></div>
+  </div>
+
+  <div id="tl-lista"></div>
+  <div id="tl-pager" style="display:flex;justify-content:space-between;align-items:center;margin:4px 0 12px;"></div>
+
+    </div>
+  </details>
+
+  <details class="card" id="tl-det-nueva">
+    <summary class="card-title" style="cursor:pointer;margin-bottom:0;border-bottom:none;padding-bottom:0;">➕ Ingresar orden TL</summary>
+    <div style="margin-top:10px;">
+      <input type="text" class="form-input" id="tl-in-cliente" list="tl-dl-clientes" placeholder="Cliente (ej. Ecopilauco)" style="margin-bottom:8px;">
+      <datalist id="tl-dl-clientes"></datalist>
+      <input type="text" class="form-input" id="tl-in-pedido" placeholder="N° de pedido" style="margin-bottom:8px;">
+      <input type="text" class="form-input" id="tl-in-dest" placeholder="Nombre y apellido del destinatario" style="margin-bottom:8px;">
+      <input type="text" class="form-input" id="tl-in-dir" placeholder="Calle y número (casa/depto entre paréntesis)" style="margin-bottom:8px;">
+      <input type="text" class="form-input" id="tl-in-comuna" placeholder="Comuna" value="Osorno" oninput="tlSugerirTarifa()" style="margin-bottom:8px;">
+      <input type="tel" class="form-input" id="tl-in-tel" placeholder="Teléfono" style="margin-bottom:8px;">
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <select class="form-input" id="tl-in-talla" onchange="tlSugerirTarifa()" style="flex:1;margin:0;"><option selected>S</option><option>M</option><option>L</option></select>
+        <input type="number" class="form-input solo-comercial" id="tl-in-tarifa" placeholder="Tarifa (pesos)" style="flex:1;margin:0;">
+      </div>
+      <input type="text" class="form-input" id="tl-in-obs" placeholder="Observación (opcional)" style="margin-bottom:8px;">
+      <button class="btn btn-primary" onclick="tlGuardarOrden()">💾 Guardar orden</button>
+    </div>
+  </details>
+
+  <details class="card solo-comercial" id="tl-det-pegar">
+    <summary class="card-title" style="cursor:pointer;margin-bottom:0;border-bottom:none;padding-bottom:0;">📋 Pegar varias órdenes (desde Excel/Sheets)</summary>
+    <div style="margin-top:10px;">
+      <div style="font-size:0.72rem;color:#64748b;margin-bottom:6px;">Columnas en este orden: Cliente · N° pedido · Nombre · Calle y número · Comuna · Teléfono · Talla. Una orden por fila.</div>
+      <textarea class="form-input" id="tl-in-pegar" rows="5" placeholder="Pega aquí las filas" style="margin-bottom:8px;"></textarea>
+      <button class="btn btn-primary" onclick="tlImportarPegado()">📥 Importar</button>
+    </div>
+  </details>
+
+  <details class="card solo-comercial" id="tl-det-config">
+    <summary class="card-title" style="cursor:pointer;margin-bottom:0;border-bottom:none;padding-bottom:0;">⚙️ Conexión con el Sheets de Muspel</summary>
+    <div style="margin-top:10px;">
+      <input type="text" class="form-input" id="tl-cfg-url" placeholder="URL del script TL (termina en /exec)" style="margin-bottom:8px;">
+      <input type="password" class="form-input" id="tl-cfg-clave" placeholder="Clave TL" style="margin-bottom:8px;">
+      <button class="btn btn-primary" onclick="tlGuardarConfig()">💾 Guardar conexión</button>
+      <div style="font-size:0.72rem;color:#64748b;margin-top:8px;">Para el celular de Cristian: abre la OPS una vez con el link que aparece abajo (guarda la conexión en ese teléfono).</div>
+      <input type="text" class="form-input" id="tl-cfg-link" readonly onclick="this.select()" style="margin-top:6px;font-size:0.7rem;">
+    </div>
+  </details>
 </div>
 
 <script>
@@ -3375,6 +3456,7 @@ function showTab(name){
   event.target.classList.add('active');
   if(name==='paquetes') renderPaquetes();
   if(name==='resumen') actualizarResumen();
+  if(name==='tl') tlAlAbrir();
   if(name==='cierre') actualizarCierre();
   if(name==='historial'){
     renderHistorial();
@@ -3623,6 +3705,8 @@ function importarExcel(input){
         if(h==='B2B') idx.b2b=i;
         if(h==='BULTO DE ENTREGA') idx.bulto=i;
         if(h==='N'||h==='N°'||h==='NRO'||h==='NUMERO'||h==='NÚMERO') idx.numRuta=i;
+        if(h==='TL'||h==='CLIENTE TL'||h==='CLIENTE PROPIO') idx.tl=i;
+        if(h==='TALLA') idx.talla=i;
         if(h==='INTERCAMBIO') idx.intercambio=i;
         if(h==='DESIGNACION'||h==='DESIGNACIÓN'||h==='DESIGNADO'||h==='REPARTIDOR') idx.designacion=i;
         // AGREGADO 02-10-2026: FAMILIA ("Recibido Virtual" = retiro de producto) y una
@@ -3725,9 +3809,12 @@ function importarExcel(input){
         var retiro = /VIRTUAL|RETIRO|DEVOLUC/.test(fam) || (!inter && /RETIR|DEVOLUC/.test(obsN));
         return {esRetiro:retiro, intercambio:inter, obs:obsTxt};
       }
+      var listaTL = [];
       for(var r=headerRowIdx+1;r<data.length;r++){
         if(filasOcultas[r]){ ocultasSalteadas++; continue; }
         var row=data[r];
+        // AGREGADO 23-11-2026: filas TL (clientes propios) van aparte, con su N° de ruta; no entran a paquetes.
+        if(row && tlEsFilaRuta(row, idx)){ var rTL = tlCapturarFilaRuta(row, idx); if(rTL.orden.destinatario||rTL.orden.direccion) listaTL.push(rTL.orden); continue; }
         if(!row||!row[idx.codigo]) continue;
         var codigo=String(row[idx.codigo]).trim();
         if(!codigo) continue;
@@ -3816,6 +3903,7 @@ function importarExcel(input){
         nuevos++;
       }
       aplicarDesignacionesExcel();
+      var avisoTL = tlTerminarImportacionRuta(listaTL);
       guardarStorage();
       actualizarResumen();
       if(actualizadosNumRuta>0) renderPaquetes();
@@ -3825,7 +3913,7 @@ function importarExcel(input){
         status.innerHTML += '<br><span style="color:var(--azul);font-weight:600;">🔢 '+actualizadosNumRuta+' pedido(s) ya existentes actualizaron su número de parada.</span>';
       }
       var avisoEspeciales = (cuentaRetiros||cuentaIntercambios) ? '<br><span style="color:#9a3412;font-weight:700;">'+(cuentaRetiros?'📮 '+cuentaRetiros+' retiro(s) de producto':'')+(cuentaRetiros&&cuentaIntercambios?' · ':'')+(cuentaIntercambios?'🔀 '+cuentaIntercambios+' intercambio(s)':'')+' detectados en el archivo.</span>' : '';
-      status.innerHTML += avisoEspeciales;
+      status.innerHTML += avisoEspeciales + avisoTL;
       if(cuentaUbic>0){ status.innerHTML += '<br><span style="color:var(--azul);font-weight:700;">📍 '+cuentaUbic+' orden(es) con ubicación guardada de un pedido anterior (ya quedó copiada en su observación).</span>'; }
       if(ocultasSalteadas>0){
         status.innerHTML += '<br><span style="color:var(--naranja);font-weight:600;">👁️‍🗨️ '+ocultasSalteadas+' fila(s) ocultas en el Excel se saltaron (no se importaron).</span>';
@@ -4552,7 +4640,8 @@ function renderPaquetes(){
   if(!lista) return;
   renderPanelAsignacion();
   aplicarUsuario();
-  var base = paquetesVisibles(); // AGREGADO 24-09-2026: cada repartidor ve solo lo suyo
+  var base = paquetesVisibles().concat(tlItemsRuta()); // TL (clientes propios) se mezcla solo al dibujar, con su N°
+  // AGREGADO 24-09-2026: cada repartidor ve solo lo suyo
   var filtered = filtroActual==='todos' ? base : base.filter(function(p){return p.estado===filtroActual;});
   if(filtered.length===0){
     var msgVacio = 'No hay órdenes en este filtro.';
@@ -4567,7 +4656,7 @@ function renderPaquetes(){
   // pedido de Kathy, ahora es una sola lista continua ordenada de punta a punta; J05/J06
   // queda como una etiqueta chica en cada tarjeta en vez de una sección aparte.
   var diaSemana = new Date().getDay();
-  lista.innerHTML = renderComunasDeTipo(filtered, diaSemana, null);
+  lista.innerHTML = tlBannerRuta() + renderComunasDeTipo(filtered, diaSemana, null);
 }
 
 // Arma el HTML de los grupos por comuna — antes vivía por separado dentro de cada sección
@@ -4659,6 +4748,7 @@ function renderComunasDeTipo(items, diaSemana, tipo){
         html+='<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:6px 10px;margin-bottom:4px;font-size:0.72rem;font-weight:700;color:#92400e;">📦 MULTIBULTO — '+grupo.length+' bultos del mismo pedido</div>';
       }
       grupo.forEach(function(p){
+      if(p.tl){ html+=tlTarjetaRuta(p); return; }
       // Número de bulto dentro de su grupo (1 de 3, 2 de 3...) — para distinguir tarjetas
       // que se ven idénticas (mismo nombre, mismo folio, mismo código) cuando son varios
       // bultos del mismo pedido.
@@ -6169,5 +6259,373 @@ if(paquetes.length === 0){
   });
 }
 </script>
+<script>
+// ════════════════════════════════════════════════════════════════════════
+// TL (TREN LOGÍSTICO) — clientes propios de Muspel (AGREGADO 23-11-2026)
+// Todo lo de TL vive aparte de ALAS: no toca paquetes, cierre, efectividad ni pagos de ALAS.
+// Los datos se guardan en el Sheets de Muspel (hoja "TL_Ordenes") mediante un script propio
+// de TL. Aquí en GitHub NO va ningún dato de clientes: solo en el celular y en el Sheets.
+// ════════════════════════════════════════════════════════════════════════
+var TL_ESTADOS = {
+  retirado:{txt:'En bodega', ico:'📥'}, en_ruta:{txt:'En ruta', ico:'🚐'},
+  entregado:{txt:'Entregada', ico:'✅'}, retorno:{txt:'Retorno (en bodega)', ico:'🔁'},
+  daniado:{txt:'Dañada', ico:'⚠️'}, devuelto:{txt:'Devuelta al cliente', ico:'📮'}, no_entregado:{txt:'No entregada', ico:'↩️'}
+};
+// Motivos por alternativas, igual que en la OPS (un toque) + «Otro» para escribir
+var TL_MOTIVOS = {
+  retorno:['No contesta','Dirección no encontrada','Ausente / nadie en el domicilio','Rechazó el pedido','Sin tiempo en la ruta'],
+  daniado:['Caja golpeada','Producto roto','Producto mojado','Embalaje abierto'],
+  devuelto:['Cliente no lo quiere','Agotó los 3 intentos','Dirección inexistente']
+};
+var TL_TALLAS = ['S','M','L'];
+var TL_POR_PAG = 8;
+var tlOrdenes = [];
+var tlFiltroEstado = 'activas';
+var tlFiltroCliente = '';
+var tlPagina = 0;
+
+// Conexión (URL del script TL + clave). Se guarda en el celular; también por link ?tlu=...&tlk=...
+(function(){
+  try{
+    var mu = /[?&]tlu=([^&]+)/.exec(location.search), mk = /[?&]tlk=([^&]+)/.exec(location.search);
+    if(mu) localStorage.setItem('tl_url', decodeURIComponent(mu[1]));
+    if(mk) localStorage.setItem('tl_clave', decodeURIComponent(mk[1]));
+  }catch(e){}
+})();
+function tlCfg(){ try{ return {url: localStorage.getItem('tl_url')||'', clave: localStorage.getItem('tl_clave')||''}; }catch(e){ return {url:'',clave:''}; } }
+function tlEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function tlHoy(){ var d=new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+function tlHora(){ var d=new Date(); return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
+function tlPesos(n){ return String(Math.round(Number(n)||0)).replace(/\B(?=(\d{3})+(?!\d))/g,'.')+' pesos'; }
+function tlNuevaId(){ return 'TL-'+tlHoy().replace(/-/g,'')+'-'+Math.random().toString(36).slice(2,7).toUpperCase(); }
+
+// Tarifa sugerida = tarifas de la cotización de Ecopilauco (con IVA incluido):
+// Osorno ciudad S 4.500 · M 5.100 · L 5.700 / otras comunas S 5.500 · M 6.100 · L 6.700.
+// La XL no se transporta. Es solo una sugerencia: cada orden guarda su tarifa y se puede editar.
+function tlTarifaSugerida(comuna, talla){
+  var base = String(comuna||'').trim().toLowerCase()==='osorno' ? 4500 : 5500;
+  var extra = {S:0, M:600, L:1200}[String(talla||'S').toUpperCase()];
+  return base + (extra==null?0:extra);
+}
+function tlSugerirTarifa(){
+  var el = document.getElementById('tl-in-tarifa'); if(!el) return;
+  el.value = tlTarifaSugerida(document.getElementById('tl-in-comuna').value, document.getElementById('tl-in-talla').value);
+}
+
+// ── Conexión con el Sheets ──
+function tlAviso(msg){ var b=document.getElementById('tl-banner'); if(!b) return; if(msg){ b.style.display='block'; b.innerHTML=msg; } else { b.style.display='none'; } }
+function tlCargarCache(){ try{ tlOrdenes = JSON.parse(localStorage.getItem('tl_cache')||'[]')||[]; }catch(e){ tlOrdenes=[]; } }
+function tlGuardarCache(){ try{ localStorage.setItem('tl_cache', JSON.stringify(tlOrdenes)); }catch(e){} }
+function tlCola(){ try{ return JSON.parse(localStorage.getItem('tl_cola')||'[]')||[]; }catch(e){ return []; } }
+function tlGuardarCola(c){ try{ localStorage.setItem('tl_cola', JSON.stringify(c)); }catch(e){} }
+function tlEnviar(accion, payload){
+  var cfg = tlCfg();
+  if(!cfg.url || !cfg.clave) return Promise.reject(new Error('sin conexión configurada'));
+  var cuerpo = Object.assign({clave: cfg.clave, accion: accion}, payload);
+  return fetch(cfg.url, {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(cuerpo)})
+    .then(function(r){ return r.json(); })
+    .then(function(j){ if(!j || !j.ok) throw new Error((j&&j.error)||'error'); return j; });
+}
+function tlSubirOrdenes(ordenes){
+  // Guarda en el Sheets; si falla (sin señal), deja las órdenes en cola y reintenta al recargar.
+  return tlEnviar('guardar_varias', {ordenes: ordenes}).then(function(){ return true; }).catch(function(){
+    var c = tlCola(); ordenes.forEach(function(o){ c = c.filter(function(x){ return x.id!==o.id; }); c.push(o); }); tlGuardarCola(c);
+    return false;
+  });
+}
+function tlCargar(manual){
+  var cfg = tlCfg();
+  tlCargarCache();
+  if(!cfg.url || !cfg.clave){
+    tlAviso('⚙️ Falta conectar TL con el Sheets de Muspel. Mientras tanto las órdenes quedan solo en este celular.'+(perfilActual==='comercial'?' Hazlo en «Conexión con el Sheets» abajo.':' Pídele a Kathy el link de conexión.'));
+    tlRender(); return;
+  }
+  var pend = tlCola();
+  var paso = pend.length ? tlEnviar('guardar_varias', {ordenes: pend}).then(function(){ tlGuardarCola([]); }).catch(function(){}) : Promise.resolve();
+  paso.then(function(){
+    return fetch(cfg.url + '?tipo=tl&clave=' + encodeURIComponent(cfg.clave)).then(function(r){ return r.json(); });
+  }).then(function(j){
+    if(!j || !j.ok) throw new Error((j&&j.error)||'error');
+    var locales = tlCola();
+    var porId = {}; (j.ordenes||[]).forEach(function(o){ porId[o.id]=o; });
+    locales.forEach(function(o){ porId[o.id]=o; });
+    tlOrdenes = Object.keys(porId).map(function(k){ return porId[k]; });
+    tlGuardarCache(); tlAviso(''); tlRender();
+  }).catch(function(e){
+    tlAviso('📡 No pude leer el Sheets ahora ('+tlEsc(e.message)+'). Muestro lo guardado en este celular.'); tlRender();
+  });
+}
+function tlGuardarConfig(){
+  var u = document.getElementById('tl-cfg-url').value.trim(), k = document.getElementById('tl-cfg-clave').value.trim();
+  if(!u || !k){ alert('Faltan la URL o la clave.'); return; }
+  try{ localStorage.setItem('tl_url', u); localStorage.setItem('tl_clave', k); }catch(e){}
+  tlCargar(true);
+}
+
+// ── Órdenes ──
+function tlMapaEstado(o){ return TL_ESTADOS[o.estado] ? o.estado : 'retirado'; }
+function tlLeerOrden(o){ // normaliza lo que viene del Sheets (todo texto)
+  o.estado = tlMapaEstado(o); o.tarifa = Number(o.tarifa)||0; return o;
+}
+function tlGuardarOrden(){
+  var g = function(id){ return document.getElementById(id).value.trim(); };
+  var o = {
+    id: tlNuevaId(), cliente: g('tl-in-cliente'), fecha_retiro: tlHoy(), n_pedido: g('tl-in-pedido'),
+    destinatario: g('tl-in-dest'), direccion: g('tl-in-dir'), comuna: g('tl-in-comuna')||'Osorno',
+    telefono: g('tl-in-tel'), talla: g('tl-in-talla')||'S', tarifa: Number(g('tl-in-tarifa'))||0,
+    estado:'retirado', motivo:'', fecha_entrega:'', hora_entrega:'', foto_url:'', factura:'', obs: g('tl-in-obs'), actualizado: new Date().toISOString(), num_ruta:'', fecha_ruta:''
+  };
+  if(!o.cliente){ alert('Falta el cliente.'); return; }
+  if(!o.direccion){ alert('Falta la dirección.'); return; }
+  if(!o.tarifa) o.tarifa = tlTarifaSugerida(o.comuna, o.talla);
+  tlOrdenes.push(o); tlGuardarCache(); tlRender();
+  tlSubirOrdenes([o]);
+  ['tl-in-pedido','tl-in-dest','tl-in-dir','tl-in-tel','tl-in-obs'].forEach(function(id){ document.getElementById(id).value=''; });
+  tlSugerirTarifa();
+}
+function tlImportarPegado(){
+  var txt = document.getElementById('tl-in-pegar').value;
+  var filas = txt.split(/\r?\n/).map(function(l){ return l.split('\t'); }).filter(function(c){ return c.join('').trim()!==''; });
+  if(!filas.length){ alert('No hay filas para importar.'); return; }
+  var nuevas = [], salteadas = 0;
+  filas.forEach(function(c){
+    var t = function(i){ return String(c[i]==null?'':c[i]).trim(); };
+    if(/^cliente$/i.test(t(0))) return; // encabezado
+    if(!t(0) || !t(3)){ salteadas++; return; }
+    var comuna = t(4)||'Osorno', talla = (t(6)||'S').toUpperCase();
+    if(TL_TALLAS.indexOf(talla)<0) talla='S';
+    nuevas.push({id: tlNuevaId(), cliente:t(0), fecha_retiro:tlHoy(), n_pedido:t(1), destinatario:t(2), direccion:t(3), comuna:comuna,
+      telefono:t(5), talla:talla, tarifa:tlTarifaSugerida(comuna, talla), estado:'retirado', motivo:'', fecha_entrega:'', hora_entrega:'',
+      foto_url:'', factura:'', obs:'', actualizado:new Date().toISOString(), num_ruta:'', fecha_ruta:''});
+  });
+  nuevas.forEach(function(o){ tlOrdenes.push(o); });
+  tlGuardarCache(); tlRender(); if(nuevas.length) tlSubirOrdenes(nuevas);
+  document.getElementById('tl-in-pegar').value='';
+  alert(nuevas.length+' orden(es) importadas'+(salteadas?' · '+salteadas+' fila(s) sin cliente o dirección quedaron fuera':'')+'.');
+}
+function tlCambiarEstado(id, estado, motivo){
+  var o = tlOrdenes.find(function(x){ return x.id===id; }); if(!o) return;
+  o.estado = estado; o.motivo = motivo||''; o.actualizado = new Date().toISOString();
+  if(estado==='entregado'||estado==='retorno'||estado==='daniado'||estado==='devuelto'||estado==='no_entregado'){ o.fecha_entrega = tlHoy(); o.hora_entrega = tlHora(); }
+  if(estado==='retirado'||estado==='en_ruta'){ o.fecha_entrega=''; o.hora_entrega=''; o.motivo=''; }
+  tlGuardarCache(); tlRender(); tlSubirOrdenes([o]);
+}
+function tlPedirMotivo(id, estado){
+  var caja = document.getElementById('tl-motivo-'+id); if(!caja) return;
+  var tit = estado==='retorno' ? '¿Por qué vuelve? (queda en bodega para reintentar)' : estado==='daniado' ? '¿Qué le pasó a la caja?' : '¿Por qué se devuelve al cliente?';
+  var lista = (TL_MOTIVOS[estado]||[]).concat(['Otro']);
+  caja.innerHTML = '<div style="font-size:0.72rem;font-weight:700;margin-top:8px;">'+tit+'</div>' + lista.map(function(m,i){
+    return '<button class="btn btn-outline" style="width:auto;margin:3px 4px 0 0;padding:6px 10px;font-size:0.72rem;" onclick="tlMotivoElegido(\''+id+'\',\''+estado+'\','+i+')">'+tlEsc(m)+'</button>';
+  }).join('') + '<button class="btn btn-outline" style="width:auto;margin:3px 0 0 0;padding:6px 10px;font-size:0.72rem;" onclick="tlRender()">✖ Cancelar</button>';
+}
+function tlMotivoElegido(id, estado, i){
+  var lista = (TL_MOTIVOS[estado]||[]).concat(['Otro']);
+  var m = lista[i];
+  if(m==='Otro'){ var t = prompt('Escribe el motivo:'); if(!t) return; m = t; }
+  tlCambiarEstado(id, estado, m);
+}
+
+// ── Pantalla ──
+function tlClientes(){ var s={}; tlOrdenes.forEach(function(o){ if(o.cliente) s[o.cliente]=1; }); return Object.keys(s).sort(); }
+function tlCambiarCliente(v){ tlFiltroCliente=v; tlPagina=0; tlRender(); }
+function tlCambiarFiltro(f){ tlFiltroEstado=f; tlPagina=0; tlRender(); }
+function tlCambiarPagina(d){ tlPagina = Math.max(0, tlPagina+d); tlRender(); }
+function tlVisibles(){
+  return tlOrdenes.filter(function(o){
+    if(tlFiltroCliente && o.cliente!==tlFiltroCliente) return false;
+    var e = tlMapaEstado(o);
+    if(tlFiltroEstado==='activas') return e==='retirado'||e==='en_ruta'||e==='retorno';
+    if(tlFiltroEstado==='otras') return e==='daniado'||e==='devuelto'||e==='no_entregado';
+    if(tlFiltroEstado==='todas') return true;
+    return e===tlFiltroEstado;
+  }).sort(function(a,b){ return String(b.fecha_retiro||'').localeCompare(String(a.fecha_retiro||'')) || String(a.n_pedido||'').localeCompare(String(b.n_pedido||''),undefined,{numeric:true}); });
+}
+function tlTarjeta(o){
+  var e = tlMapaEstado(o), est = TL_ESTADOS[e];
+  var mapa = 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(o.direccion+', '+(o.comuna||'Osorno')+', Chile');
+  var tel = (typeof normalizarTelChile==='function') ? normalizarTelChile(o.telefono) : String(o.telefono||'').replace(/\D/g,'');
+  var h = '<div class="card" style="background:#f7e9b8;border-left:6px solid #b8860b;padding:12px;">';
+  h += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">';
+  if(o.num_ruta!=='' && o.num_ruta!=null && !isNaN(Number(o.num_ruta))) h += '<div style="flex-shrink:0;background:#b8860b;color:#fff;border-radius:8px;min-width:38px;height:38px;display:flex;align-items:center;justify-content:center;font-size:1.15rem;font-weight:800;">'+tlEsc(o.num_ruta)+'</div>';
+  h += '<div style="min-width:0;flex:1;"><div style="font-weight:800;font-size:0.95rem;">'+tlEsc(o.destinatario||'(sin nombre)')+'</div>';
+  h += '<div style="font-size:0.72rem;color:#6b5206;margin-top:2px;"><span style="background:#b8860b;color:#fff;border-radius:6px;padding:1px 6px;font-weight:700;">TL</span> '+tlEsc(o.cliente)+(o.n_pedido?' · Pedido '+tlEsc(o.n_pedido):'')+'</div></div>';
+  h += '<div style="text-align:right;font-size:0.72rem;font-weight:700;white-space:nowrap;">'+est.ico+' '+est.txt+'<div style="font-weight:600;color:#6b5206;">Talla '+tlEsc(o.talla||'S')+'</div></div></div>';
+  h += '<a href="'+mapa+'" target="_blank" rel="noopener" style="display:block;margin-top:6px;font-size:0.85rem;color:#1a3a5c;font-weight:600;text-decoration:underline;">📍 '+tlEsc(o.direccion)+', '+tlEsc(o.comuna||'Osorno')+'</a>';
+  if(o.obs) h += '<div style="font-size:0.75rem;color:#6b5206;margin-top:4px;">📝 '+tlEsc(o.obs)+'</div>';
+  if((e==='no_entregado'||e==='retorno'||e==='daniado'||e==='devuelto') && o.motivo) h += '<div style="font-size:0.75rem;color:#b91c1c;margin-top:4px;">'+est.ico+' '+tlEsc(o.motivo)+'</div>';
+  if(e==='entregado' && o.hora_entrega) h += '<div style="font-size:0.72rem;color:#1a7a4a;margin-top:4px;">Entregada '+tlEsc(o.fecha_entrega)+' a las '+tlEsc(o.hora_entrega)+'</div>';
+  h += '<div class="solo-comercial" style="font-size:0.72rem;color:#6b5206;margin-top:4px;">'+tlPesos(o.tarifa)+'</div>';
+  h += '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">';
+  var B = function(cls,txt,fn,extra){ return '<button class="btn '+cls+'" style="width:auto;flex:1 1 30%;margin:0;'+(extra||'')+'" onclick="'+fn+'">'+txt+'</button>'; };
+  if(e==='retirado'||e==='en_ruta'){
+    if(e==='retirado') h += B('btn-primary','🚐 En ruta',"tlCambiarEstado('"+o.id+"','en_ruta')");
+    h += B('','✅ Entregada',"tlCambiarEstado('"+o.id+"','entregado')",'background:#1a7a4a;color:#fff;');
+    h += B('btn-naranja','🔁 Retorno',"tlPedirMotivo('"+o.id+"','retorno')");
+    h += B('btn-rojo','⚠️ Dañada',"tlPedirMotivo('"+o.id+"','daniado')");
+  } else if(e==='retorno'||e==='daniado'){
+    h += B('btn-rojo','📮 Devuelta al cliente',"tlPedirMotivo('"+o.id+"','devuelto')");
+    h += B('btn-outline','↺ Volver a en ruta',"tlCambiarEstado('"+o.id+"','en_ruta')");
+  } else {
+    h += B('btn-outline','↺ Volver a en ruta',"tlCambiarEstado('"+o.id+"','en_ruta')");
+  }
+  if(tel) h += '<a href="https://wa.me/'+tel+'" target="_blank" rel="noopener" class="btn btn-outline" style="width:auto;margin:0;text-decoration:none;">💬</a>';
+  if(o.foto_url) h += '<a href="'+tlEsc(o.foto_url)+'" target="_blank" rel="noopener" class="btn btn-outline" style="width:auto;margin:0;text-decoration:none;">📷</a>';
+  h += '</div><div id="tl-motivo-'+o.id+'"></div></div>';
+  return h;
+}
+function tlRender(){
+  tlCargarCache_si_vacio();
+  if(typeof renderPaquetes==='function'){ try{ renderPaquetes(); }catch(e){} }
+  tlOrdenes.forEach(tlLeerOrden);
+  var selC = document.getElementById('tl-f-cliente'); if(!selC) return;
+  var cls = tlClientes();
+  selC.innerHTML = '<option value="">Todos los clientes</option>' + cls.map(function(c){ return '<option value="'+tlEsc(c)+'"'+(c===tlFiltroCliente?' selected':'')+'>'+tlEsc(c)+'</option>'; }).join('');
+  document.getElementById('tl-dl-clientes').innerHTML = cls.map(function(c){ return '<option value="'+tlEsc(c)+'">'; }).join('');
+  var base = tlOrdenes.filter(function(o){ return !tlFiltroCliente || o.cliente===tlFiltroCliente; });
+  var cuenta = function(es){ return base.filter(function(o){ return es.indexOf(tlMapaEstado(o))>=0; }).length; };
+  var setN = function(id,n){ var el=document.getElementById(id); if(el) el.textContent=n; };
+  setN('tl-n-retirado', cuenta(['retirado','retorno']));   // en bodega = lo que Muspel tiene físicamente
+  setN('tl-n-en_ruta', cuenta(['en_ruta']));
+  setN('tl-n-entregado', cuenta(['entregado']));
+  setN('tl-n-retorno', cuenta(['retorno']));
+  setN('tl-n-daniado', cuenta(['daniado']));
+  setN('tl-n-devuelto', cuenta(['devuelto','no_entregado']));
+  var fs = [['activas','Por entregar'],['entregado','Entregadas'],['retorno','Retorno'],['otras','Dañadas / Devueltas'],['todas','Todas']];
+  document.getElementById('tl-f-estados').innerHTML = fs.map(function(f){
+    var on = f[0]===tlFiltroEstado;
+    return '<button class="btn '+(on?'btn-primary':'btn-outline')+'" style="width:auto;flex:0 0 auto;margin:0;padding:6px 12px;font-size:0.75rem;" onclick="tlCambiarFiltro(\''+f[0]+'\')">'+f[1]+'</button>';
+  }).join('');
+  var vis = tlVisibles(), paginas = Math.max(1, Math.ceil(vis.length/TL_POR_PAG));
+  if(tlPagina>=paginas) tlPagina = paginas-1;
+  var trozo = vis.slice(tlPagina*TL_POR_PAG, (tlPagina+1)*TL_POR_PAG);
+  document.getElementById('tl-lista').innerHTML = trozo.length ? trozo.map(tlTarjeta).join('') : '<div class="alerta alerta-info">No hay órdenes en esta vista.</div>';
+  document.getElementById('tl-pager').innerHTML = vis.length>TL_POR_PAG
+    ? '<button class="btn btn-outline" style="width:auto;margin:0;" '+(tlPagina===0?'disabled':'')+' onclick="tlCambiarPagina(-1)">‹ Anterior</button><span style="font-size:0.75rem;color:#64748b;">Página '+(tlPagina+1)+' de '+paginas+' · '+vis.length+' órdenes</span><button class="btn btn-outline" style="width:auto;margin:0;" '+(tlPagina>=paginas-1?'disabled':'')+' onclick="tlCambiarPagina(1)">Siguiente ›</button>'
+    : '<span style="font-size:0.75rem;color:#64748b;">'+vis.length+' orden(es)</span>';
+  var m = document.getElementById('tl-c-mes'); if(m && !m.value) m.value = tlHoy().slice(0,7);
+  tlRenderContabilidad();
+  var cfg = tlCfg(), li = document.getElementById('tl-cfg-link');
+  if(li){ var cu = document.getElementById('tl-cfg-url'); if(cu && !cu.value) cu.value = cfg.url;
+    li.value = (cfg.url&&cfg.clave) ? (location.origin+location.pathname+'?tlu='+encodeURIComponent(cfg.url)+'&tlk='+encodeURIComponent(cfg.clave)) : ''; }
+}
+var _tlCacheCargado = false;
+function tlCargarCache_si_vacio(){ if(!_tlCacheCargado && !tlOrdenes.length){ tlCargarCache(); } _tlCacheCargado = true; }
+
+// ── Contabilidad: órdenes ENTREGADAS del mes, por cliente (se cobra por orden entregada) ──
+function tlRenderContabilidad(){
+  var cont = document.getElementById('tl-contabilidad'); if(!cont) return;
+  var mes = (document.getElementById('tl-c-mes')||{}).value || tlHoy().slice(0,7);
+  var por = {};
+  tlOrdenes.forEach(function(o){
+    var e = tlMapaEstado(o);
+    var cerrada = (e==='entregado'||e==='retorno'||e==='daniado'||e==='devuelto'||e==='no_entregado');
+    var fecha = cerrada ? o.fecha_entrega : o.fecha_retiro;
+    if(String(fecha||'').slice(0,7)!==mes) return;
+    var k = o.cliente||'(sin cliente)';
+    var c = por[k] = por[k] || {ent:0,ret:0,dan:0,dev:0,pend:0,total:0,tallas:{}};
+    if(e==='entregado'){ c.ent++; c.total += Number(o.tarifa)||0; var t=o.talla||'S'; c.tallas[t]=(c.tallas[t]||0)+1; }
+    else if(e==='retorno'||e==='no_entregado') c.ret++;
+    else if(e==='daniado') c.dan++;
+    else if(e==='devuelto') c.dev++;
+    else c.pend++;
+  });
+  var nombres = Object.keys(por).sort();
+  if(!nombres.length){ cont.innerHTML = '<div class="alerta alerta-info">Sin órdenes en este mes.</div>'; return; }
+  var granTotal = 0;
+  cont.innerHTML = nombres.map(function(n){
+    var c = por[n]; granTotal += c.total;
+    var tallas = Object.keys(c.tallas).sort().map(function(t){ return c.tallas[t]+'×'+t; }).join(' · ');
+    return '<div style="border:1px solid #e5d28f;background:#fbf3d6;border-radius:8px;padding:10px;margin-bottom:8px;"><div style="font-weight:800;">'+tlEsc(n)+'</div>'+
+      '<div style="font-size:0.8rem;margin-top:4px;">✅ <b>'+c.ent+'</b> entregadas'+(tallas?' ('+tlEsc(tallas)+')':'')+' · 🔁 '+c.ret+' retorno · ⚠️ '+c.dan+' dañadas · 📮 '+c.dev+' devueltas · ⏳ '+c.pend+' pendientes</div>'+
+      '<div style="font-size:1.05rem;font-weight:800;color:#8a6508;margin-top:4px;">'+tlPesos(c.total)+'</div></div>';
+  }).join('') + (nombres.length>1 ? '<div style="font-weight:800;text-align:right;">Total TL del mes: '+tlPesos(granTotal)+'</div>' : '');
+}
+
+// Al abrir la pestaña
+function tlAlAbrir(){ tlRender(); tlCargar(); }
+
+// ═══ TL dentro de la ruta numerada (AGREGADO 23-11-2026) ═══
+// Las filas TL del Excel de ruta se guardan aparte (tlOrdenes) y solo se mezclan al DIBUJAR la lista,
+// con su N° de ruta, en dorado y con la etiqueta TL. No entran a paquetes: no tocan totales, cierre ni pagos de ALAS.
+function tlEstadoRuta(o){ var e=tlMapaEstado(o); return (e==='entregado'||e==='retorno'||e==='daniado'||e==='devuelto')?e:(e==='no_entregado'?'retorno':'pendiente'); }
+// TL (clientes propios): el retiro y la entrega van asignados a Cristian por ahora.
+var TL_REPARTIDOR = 'cristian';
+function tlVisibleParaUsuario(){
+  try{
+    if(perfilActual==='comercial') return filtroRepartidorComercial==='todos' || filtroRepartidorComercial===TL_REPARTIDOR;
+    return (usuarioEsJefe() && verTodasOperativo) || usuarioActual===TL_REPARTIDOR;
+  }catch(e){ return true; }
+}
+function tlBannerRuta(){
+  var its = tlItemsRuta(); if(!its.length) return '';
+  var c = function(es){ return its.filter(function(p){ return es.indexOf(tlMapaEstado(p.o))>=0; }).length; };
+  return '<div style="background:#f7e9b8;border:1px solid #b8860b;border-left:6px solid #b8860b;border-radius:10px;padding:8px 12px;margin-bottom:10px;font-size:0.8rem;color:#5c4504;">'+
+    '<b>🚂 TL · '+its.length+' orden(es)</b> — retiro y entrega a cargo de '+tlEsc(nombreRepartidor(TL_REPARTIDOR))+'<br>'+
+    '✅ '+c(['entregado'])+' entregadas · 🔁 '+c(['retorno'])+' retorno · ⚠️ '+c(['daniado'])+' dañadas · ⏳ '+c(['retirado','en_ruta'])+' pendientes</div>';
+}
+function tlItemsRuta(){
+  if(!tlVisibleParaUsuario()) return [];
+  tlCargarCache_si_vacio();
+  var hoy = tlHoy();
+  return tlOrdenes.filter(function(o){
+    if(o.num_ruta==='' || o.num_ruta==null || isNaN(Number(o.num_ruta))) return false;
+    var e = tlMapaEstado(o);
+    return o.fecha_ruta===hoy || e==='retirado' || e==='en_ruta';
+  }).map(function(o){
+    return {id:'tl:'+o.id, tl:true, o:o, estado:tlEstadoRuta(o), comuna:o.comuna||'Osorno', numRuta:Number(o.num_ruta),
+            nombre:o.destinatario, dir:o.direccion, folio:'', codigo:'', tipo:'Principal'};
+  });
+}
+function tlTarjetaRuta(p){ return tlTarjeta(p.o); }
+function tlEsFilaRuta(row, idx){
+  if(idx.tl!==undefined){
+    var v = String(row[idx.tl]==null?'':row[idx.tl]).trim();
+    if(v && !/^(no|0|false|-|n)$/i.test(v)) return true;
+  }
+  return idx.b2b!==undefined && /^TL(\b|[\s\-_:])/i.test(String(row[idx.b2b]||'').trim());
+}
+// Devuelve 'nueva' | 'actualizada'
+function tlCapturarFilaRuta(row, idx){
+  tlCargarCache_si_vacio();
+  var c = function(k){ return idx[k]!==undefined && row[idx[k]]!=null ? String(row[idx[k]]).trim() : ''; };
+  var marca = c('tl'); if(/^(si|sí|x|1|true|tl|y)$/i.test(marca)) marca='';
+  var b2b = c('b2b'); if(/^TL/i.test(b2b)) b2b = b2b.replace(/^TL[\s\-_:]*/i,'');
+  var cliente = marca || b2b || 'Ecopilauco';
+  var pedido = c('folio') || c('codigo');
+  var nombre = c('nombre'), dir = c('dir'), comuna = c('comuna') || 'Osorno', tel = c('tel');
+  var talla = (c('talla')||'S').toUpperCase(); if(TL_TALLAS.indexOf(talla)<0) talla='S';
+  var num = (idx.numRuta!==undefined && row[idx.numRuta]!=null && String(row[idx.numRuta]).trim()!=='') ? Number(row[idx.numRuta]) : '';
+  var hoy = tlHoy();
+  var ex = tlOrdenes.find(function(o){
+    if(o.cliente!==cliente) return false;
+    var e = tlMapaEstado(o); if(e==='entregado'||e==='devuelto') return false;
+    if(pedido && o.n_pedido) return String(o.n_pedido)===pedido;
+    return o.destinatario===nombre && o.direccion===dir;
+  });
+  var o, res;
+  if(ex){
+    o = ex; res='actualizada';
+    if(nombre) o.destinatario = nombre; if(dir) o.direccion = dir; if(c('comuna')) o.comuna = comuna; if(tel) o.telefono = tel;
+    if(c('talla')) o.talla = talla;
+  } else {
+    res='nueva';
+    o = {id:tlNuevaId(), cliente:cliente, fecha_retiro:hoy, n_pedido:pedido, destinatario:nombre, direccion:dir, comuna:comuna, telefono:tel,
+         talla:talla, tarifa:tlTarifaSugerida(comuna, talla), estado:'retirado', motivo:'', fecha_entrega:'', hora_entrega:'', foto_url:'', factura:'', obs:c('obs')};
+    tlOrdenes.push(o);
+  }
+  if(tlMapaEstado(o)==='retorno'){ o.estado='retirado'; o.motivo=''; o.fecha_entrega=''; o.hora_entrega=''; } // vuelve a salir en esta ruta
+  o.num_ruta = num===''?'':String(num); o.fecha_ruta = hoy; o.actualizado = new Date().toISOString();
+  return {orden:o, res:res};
+}
+// Se llama al terminar de leer el Excel de ruta con las órdenes TL encontradas
+function tlTerminarImportacionRuta(lista){
+  if(!lista.length) return '';
+  tlGuardarCache(); tlRender(); tlSubirOrdenes(lista);
+  return '<br><span style="color:#8a6508;font-weight:800;">🚂 '+lista.length+' orden(es) TL en la ruta (en dorado, con su N°). No suman a los totales de ALAS.</span>';
+}
+// Carga silenciosa al abrir la OPS para que Cristian vea las TL en su ruta sin entrar a la pestaña TL
+setTimeout(function(){ try{ var cfg=tlCfg(); if(cfg.url&&cfg.clave) tlCargar(); else tlCargarCache_si_vacio(); }catch(e){} }, 2500);
+</script>
+
 </body>
 </html>
