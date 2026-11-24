@@ -1279,7 +1279,15 @@ function buscarCliente(){
       if(!f) return;
       if(calza(f[3], f[12], f[2], f[1], f[4])) res.push({fecha:String(f[0]||''), nombre:f[3]||'', folio:f[2]||f[1]||'', dir:f[4]||'', estado:String(f[7]||''), motivo:f[8]||'', tel:f[12]||'', b2b:f[9]||'', repartidor:f[19]||'', hora:horaEntregaTxt(f[20],String(f[7]||''))});
     });
-    if(!res.length){ out.innerHTML = '<div style="color:#64748b;">❌ No aparece en el historial ni en las órdenes de hoy. Es cliente nuevo.</div>'; return; }
+    // 24-11-2026: también busca en las órdenes TL (por nombre, teléfono, dirección, pedido, quien recibió o su RUT)
+    var tlRes = [];
+    try{ tlCargarCache_si_vacio(); var qr = String(q).replace(/[^0-9kK]/g,'').toLowerCase();
+      tlOrdenes.forEach(function(o){
+        var rutd = String(o.recibe_rut||'').replace(/[^0-9kK]/g,'').toLowerCase();
+        var hit = calza(o.destinatario, o.telefono, o.n_pedido, o.id, o.direccion) || calza(o.recibe_nombre, '', '', '', '') || (qr.length>=6 && rutd && rutd.indexOf(qr)!==-1);
+        if(hit) tlRes.push(o);
+      }); }catch(e){}
+    if(!res.length && !tlRes.length){ out.innerHTML = '<div style="color:#64748b;">❌ No aparece en el historial ni en las órdenes de hoy. Es cliente nuevo.</div>'; return; }
     res.sort(function(a,b){ if(a.hoy) return -1; if(b.hoy) return 1; return fechaOrdenable(a.fecha) < fechaOrdenable(b.fecha) ? 1 : -1; });
     var malos = res.filter(function(r){ return r.estado==='retorno'||r.estado==='devuelto'||r.estado==='daniado'; }).length;
     var html = '<div style="font-weight:700;margin-bottom:6px;">'+res.length+' resultado(s)'+(malos?' — <span style="color:var(--rojo);">'+malos+' sin entregar</span>':'')+'</div>';
@@ -1295,6 +1303,18 @@ function buscarCliente(){
         + '</div>';
     });
     if(res.length > 60) html += '<div style="color:#64748b;">… y '+(res.length-60)+' más. Escribe algo más específico.</div>';
+    if(tlRes.length){
+      html = '<div style="font-weight:800;color:#8a6508;margin:4px 0;">🟡 Órdenes TL ('+tlRes.length+')</div>' + tlRes.slice(0,40).map(function(o){
+        var e = tlMapaEstado(o);
+        return '<div style="border:1px solid #e5d28f;background:#f7e9b8;border-radius:8px;padding:7px 9px;margin-bottom:5px;font-size:0.76rem;">'
+          + '<div style="display:flex;justify-content:space-between;gap:6px;"><strong>'+tlEsc(o.destinatario)+'</strong><span style="font-weight:700;white-space:nowrap;">'+TL_ESTADOS[e].ico+' '+TL_ESTADOS[e].txt+'</span></div>'
+          + '<div style="color:#475569;">🏪 '+tlEsc(o.cliente)+(o.n_pedido?' · '+tlEsc(o.n_pedido):'')+(o.fecha_entrega?' · 📅 '+tlEsc(o.fecha_entrega)+(o.hora_entrega?' '+tlEsc(o.hora_entrega):''):'')+'</div>'
+          + '<div style="color:#475569;">📍 '+tlEsc(o.direccion)+', '+tlEsc(o.comuna)+'</div>'
+          + (o.recibe_nombre||o.recibe_rut?'<div style="color:#1a5c3a;font-weight:700;">🪪 Recibió: '+tlEsc(o.recibe_nombre||'')+(o.recibe_rut?' · RUT '+tlEsc(o.recibe_rut):'')+'</div>':'')
+          + (o.foto_url?'<button class="btn btn-outline btn-sm" style="width:auto;margin:4px 0 0;" onclick="tlVerFoto(\''+o.id+'\')">📷 Ver foto de respaldo</button>':'')
+          + '</div>';
+      }).join('') + (res.length?'<div style="font-weight:800;margin:8px 0 4px;">📦 ALAS</div>':'') + html;
+    }
     out.innerHTML = html;
   }).catch(function(){ out.innerHTML = '<div style="color:var(--rojo);">❌ No se pudo conectar con la nube.</div>'; });
 }
@@ -6410,6 +6430,94 @@ function tlCambiarEstado(id, estado, motivo){
   if(estado==='retirado'||estado==='en_ruta'){ o.fecha_entrega=''; o.hora_entrega=''; o.motivo=''; }
   tlGuardarCache(); tlRender(); tlSubirOrdenes([o]);
 }
+
+// ── 24-11-2026: foto de la etiqueta (quien recibe: nombre y RUT) como respaldo de la entrega ──
+// La foto se comprime, se sube al script TL y queda en una carpeta PRIVADA de Drive ligada a la orden.
+var TL_FOTO_TMP = {};
+function tlFmtRut(v){
+  var t = String(v||'').replace(/[^0-9kK]/g,'').toUpperCase(); if(t.length<2) return t;
+  var cuerpo = t.slice(0,-1), dv = t.slice(-1);
+  return cuerpo.replace(/\B(?=(\d{3})+(?!\d))/g,'.')+'-'+dv;
+}
+function tlAbrirEntrega(id, soloFoto){
+  var caja = document.getElementById('tl-motivo-'+id); if(!caja) return;
+  var o = tlOrdenes.find(function(x){ return x.id===id; }); if(!o) return;
+  delete TL_FOTO_TMP[id];
+  caja.innerHTML = '<div style="margin-top:8px;padding:8px;border:1.5px solid #b8860b;border-radius:8px;background:#fffaf0;">'
+    + '<div style="font-size:0.78rem;font-weight:800;color:#6b5206;">📷 Foto de la etiqueta de quien recibe (nombre y RUT)</div>'
+    + '<label style="display:block;margin-top:6px;"><span class="btn btn-primary" style="display:block;text-align:center;margin:0;">📷 Tomar foto</span>'
+    + '<input type="file" accept="image/*" capture="environment" style="display:none;" onchange="tlFotoElegida(\''+id+'\',this)"></label>'
+    + '<img id="tl-prev-'+id+'" style="display:none;width:100%;max-height:220px;object-fit:contain;margin-top:6px;border-radius:6px;border:1px solid #e5d28f;">'
+    + '<input id="tl-rn-'+id+'" placeholder="Nombre de quien recibe" value="'+tlEsc(o.recibe_nombre||'')+'" style="width:100%;margin-top:6px;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:0.85rem;">'
+    + '<input id="tl-rr-'+id+'" placeholder="RUT (ej. 12.345.678-5)" value="'+tlEsc(o.recibe_rut||'')+'" inputmode="text" oninput="this.value=tlFmtRut(this.value)" style="width:100%;margin-top:6px;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:0.85rem;">'
+    + '<div id="tl-err-'+id+'" style="color:#b91c1c;font-size:0.75rem;margin-top:4px;"></div>'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">'
+    + '<button class="btn btn-verde" style="width:auto;flex:1 1 60%;margin:0;" onclick="tlConfirmarEntrega(\''+id+'\','+(soloFoto?1:0)+')">✅ '+(soloFoto?'Guardar foto':'Confirmar entrega')+'</button>'
+    + (soloFoto?'':'<button class="btn btn-outline" style="width:auto;flex:1 1 30%;margin:0;" onclick="tlConfirmarEntrega(\''+id+'\',0,1)">Sin foto</button>')
+    + '<button class="btn btn-outline" style="width:auto;margin:0;" onclick="tlRender()">✖</button></div></div>';
+}
+function tlFotoElegida(id, inp){
+  var f = inp.files && inp.files[0]; if(!f) return;
+  var rd = new FileReader();
+  rd.onload = function(){
+    var im = new Image();
+    im.onload = function(){
+      var M = 1400, w = im.width, h = im.height, k = Math.min(1, M/Math.max(w,h));
+      var cv = document.createElement('canvas'); cv.width = Math.round(w*k); cv.height = Math.round(h*k);
+      cv.getContext('2d').drawImage(im,0,0,cv.width,cv.height);
+      var d = cv.toDataURL('image/jpeg',0.72);
+      TL_FOTO_TMP[id] = d;
+      var pv = document.getElementById('tl-prev-'+id); if(pv){ pv.src = d; pv.style.display='block'; }
+    };
+    im.src = rd.result;
+  };
+  rd.readAsDataURL(f);
+}
+function tlColaFotos(){ try{ return JSON.parse(localStorage.getItem('tl_fotos_cola')||'[]')||[]; }catch(e){ return []; } }
+function tlGuardarColaFotos(c){ try{ localStorage.setItem('tl_fotos_cola', JSON.stringify(c)); return true; }catch(e){ return false; } }
+function tlConfirmarEntrega(id, soloFoto, sinFoto){
+  var o = tlOrdenes.find(function(x){ return x.id===id; }); if(!o) return;
+  var foto = TL_FOTO_TMP[id] || '';
+  var nom = (document.getElementById('tl-rn-'+id)||{}).value || '', rut = (document.getElementById('tl-rr-'+id)||{}).value || '';
+  var err = document.getElementById('tl-err-'+id);
+  if(!foto && !sinFoto){ if(err) err.textContent = 'Toma la foto de la etiqueta, o toca «Sin foto».'; return; }
+  o.recibe_nombre = nom.trim(); o.recibe_rut = rut.trim();
+  if(soloFoto){ o.actualizado = new Date().toISOString(); tlGuardarCache(); tlRender(); tlSubirOrdenes([o]); }
+  else { tlCambiarEstado(id,'entregado'); }
+  delete TL_FOTO_TMP[id];
+  if(foto){
+    var c = tlColaFotos().filter(function(x){ return x.id!==id; });
+    c.push({id:id, imagen:foto, recibe_nombre:o.recibe_nombre, recibe_rut:o.recibe_rut});
+    if(!tlGuardarColaFotos(c)) alert('Poco espacio en el celular: sube la foto cuando tengas señal y no cierres la app.');
+    setTimeout(tlSubirFotosPendientes, 1500);
+  }
+}
+var tlSubiendoFotos = false;
+function tlSubirFotosPendientes(){
+  if(tlSubiendoFotos) return;
+  var c = tlColaFotos(); if(!c.length) return;
+  tlSubiendoFotos = true;
+  var it = c[0];
+  tlEnviar('subir_foto', it).then(function(j){
+    var o = tlOrdenes.find(function(x){ return x.id===it.id; }); if(o){ o.foto_url = j.foto_url; tlGuardarCache(); }
+    tlGuardarColaFotos(tlColaFotos().filter(function(x){ return x.id!==it.id; }));
+    tlSubiendoFotos = false; tlRender(); setTimeout(tlSubirFotosPendientes, 300);
+  }).catch(function(){ tlSubiendoFotos = false; });
+}
+setTimeout(tlSubirFotosPendientes, 5000);
+setInterval(tlSubirFotosPendientes, 60000);
+function tlVerFoto(id){
+  var o = tlOrdenes.find(function(x){ return x.id===id; }) || {};
+  var ov = document.getElementById('tl-foto-ov'); if(ov) ov.remove();
+  ov = document.createElement('div'); ov.id='tl-foto-ov';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px;';
+  ov.onclick = function(){ ov.remove(); };
+  ov.innerHTML = '<div style="color:#fff;font-weight:700;margin-bottom:8px;text-align:center;">'+tlEsc(o.destinatario||'')+(o.recibe_nombre?'<br>Recibió: '+tlEsc(o.recibe_nombre):'')+(o.recibe_rut?' · RUT '+tlEsc(o.recibe_rut):'')+'</div><div id="tl-foto-cont" style="color:#fff;">🔄 Cargando foto...</div><div style="color:#cbd5e1;font-size:0.75rem;margin-top:8px;">Toca para cerrar</div>';
+  document.body.appendChild(ov);
+  tlEnviar('ver_foto',{id:id}).then(function(j){
+    var c = document.getElementById('tl-foto-cont'); if(c) c.innerHTML = '<img src="'+j.imagen+'" style="max-width:100%;max-height:75vh;border-radius:8px;">';
+  }).catch(function(){ var c = document.getElementById('tl-foto-cont'); if(c) c.textContent = '⚠️ No se pudo cargar la foto (revisa la señal).'; });
+}
 function tlPedirMotivo(id, estado){
   var caja = document.getElementById('tl-motivo-'+id); if(!caja) return;
   var tit = estado==='retorno' ? '¿Por qué vuelve? (queda en bodega para reintentar)' : estado==='daniado' ? '¿Qué le pasó a la caja?' : '¿Por qué se devuelve al cliente?';
@@ -6467,13 +6575,15 @@ function tlTarjeta(o){
   if(o.obs) h += '<div style="font-size:0.75rem;color:#6b5206;margin-top:4px;">📝 '+tlEsc(o.obs)+'</div>';
   if((e==='no_entregado'||e==='retorno'||e==='daniado'||e==='devuelto') && o.motivo) h += '<div style="margin-top:4px;background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:4px 8px;font-size:0.82rem;font-weight:700;color:#b91c1c;">Motivo: '+tlEsc(o.motivo)+'</div>';
   if(e==='entregado' && o.hora_entrega) h += '<div style="font-size:0.72rem;color:#1a7a4a;margin-top:4px;">Entregada '+tlEsc(o.fecha_entrega)+' a las '+tlEsc(o.hora_entrega)+'</div>';
+  if(e==='entregado' && (o.recibe_nombre||o.recibe_rut)) h += '<div style="font-size:0.78rem;color:#1a5c3a;margin-top:3px;font-weight:700;">🪪 Recibió: '+tlEsc(o.recibe_nombre||'')+(o.recibe_rut?' · RUT '+tlEsc(o.recibe_rut):'')+'</div>';
+  if(e==='entregado' && !o.foto_url) h += '<div style="font-size:0.72rem;color:#b45309;margin-top:3px;">📷 Falta la foto de respaldo</div>';
   h += '<div class="solo-comercial" style="font-size:0.72rem;color:#6b5206;margin-top:4px;">'+tlPesos(o.tarifa)+'</div>';
   h += '<div id="tl-motivo-'+o.id+'"></div>';
   h += '</div>';
   var B = function(cls2,txt,fn,tit){ return '<button class="btn '+cls2+' btn-sm" title="'+(tit||'')+'" onclick="'+fn+'">'+txt+'</button>'; };
   h += '<div class="paquete-acciones" onclick="event.stopPropagation()">';
   if(e==='retirado'||e==='en_ruta'){
-    h += B('btn-verde','✅',"tlCambiarEstado('"+o.id+"','entregado')",'Entregada');
+    h += B('btn-verde','✅',"tlAbrirEntrega('"+o.id+"')",'Entregada (con foto)');
     h += B('btn-naranja','🔁',"tlPedirMotivo('"+o.id+"','retorno')",'Retorno');
     h += B('btn-rojo','⚠️',"tlPedirMotivo('"+o.id+"','daniado')",'Dañada');
     if(tel){
@@ -6489,7 +6599,8 @@ function tlTarjeta(o){
   } else {
     h += B('btn-outline','↺',"tlCambiarEstado('"+o.id+"','en_ruta')",'Volver a en ruta');
   }
-  if(o.foto_url) h += '<a href="'+tlEsc(o.foto_url)+'" target="_blank" rel="noopener"><button class="btn btn-outline btn-sm" title="Foto de la etiqueta">📷</button></a>';
+  if(o.foto_url) h += B('btn-outline','📷',"tlVerFoto('"+o.id+"')",'Ver foto de quien recibió');
+  else if(e==='entregado') h += B('btn-outline','📷＋',"tlAbrirEntrega('"+o.id+"',1)",'Agregar foto de quien recibió');
   h += '</div></div>';
   return h;
 }
