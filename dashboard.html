@@ -38,7 +38,7 @@
   .plata-oculta .plata,.plata-oculta .card-value,.plata-oculta #tabla-facturacion td.num:nth-child(n+3),.plata-oculta #tabla-flujo-real td.num{filter:blur(7px);user-select:none;}
   .fila-banner-ojo{display:flex;gap:10px;align-items:stretch;margin-bottom:16px;}
   .fila-banner-ojo .banner-info{flex:1;margin-bottom:0;}
-  #ojo-plata{white-space:nowrap;border:1px solid #cbd5e1;background:#f1f5f9;color:#1e3a5f;border-radius:12px;padding:6px 14px;font-size:0.85rem;font-weight:700;cursor:pointer;}
+  #ojo-plata,#ojo-tl{white-space:nowrap;border:1px solid #cbd5e1;background:#f1f5f9;color:#1e3a5f;border-radius:12px;padding:6px 14px;font-size:0.85rem;font-weight:700;cursor:pointer;}
   .panel-nota{font-size:0.78rem;color:var(--gris);margin-bottom:12px;line-height:1.5;}
   table{width:100%;border-collapse:collapse;font-size:0.84rem;}
   th{background:var(--azul);color:#fff;text-align:left;padding:8px 10px;font-size:0.76rem;text-transform:uppercase;letter-spacing:0.3px;}
@@ -56,6 +56,13 @@
   .badge-fijo{display:inline-block;font-size:0.68rem;font-weight:700;padding:2px 8px;border-radius:10px;background:#dbeafe;color:#1e40af;}
   .badge-var{display:inline-block;font-size:0.68rem;font-weight:700;padding:2px 8px;border-radius:10px;background:#f1f5f9;color:#475569;}
   .loading{text-align:center;padding:40px;color:var(--gris);}
+  .tl-card{background:#fbf3d6;border:1px solid #e5d28f;border-radius:12px;padding:14px 16px;margin-bottom:10px;}
+  .tl-card h4{font-size:0.95rem;color:#8a6508;margin-bottom:6px;}
+  .tl-kpi .card-value{color:#8a6508;}
+  .tl-mini{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:0.8rem;color:#475569;margin-top:4px;}
+  .tl-tabla th{background:#8a6508;}
+  #tab-tl.plata-oculta .card-value:not(.plata){filter:none;user-select:auto;}
+  #tl-mes{border:1.5px solid var(--borde);border-radius:8px;padding:7px 10px;font-size:0.88rem;}
   @media (max-width:600px){ .card-value{font-size:1.4rem;} }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -74,6 +81,7 @@
     <div class="tab active" data-tab="operacion">📊 Operación</div>
     <div class="tab" data-tab="finanzas">💰 Finanzas</div>
     <div class="tab" data-tab="balance">📒 Balance</div>
+    <div class="tab" data-tab="tl" style="color:#e6c45a;">🟡 Clientes propios (TL)</div>
     <div class="tab" style="display:none;" data-tab="proyeccion">🎯 Proyección</div>
     <div class="tab" data-tab="personal">🏠 Personal</div>
   </div>
@@ -241,6 +249,19 @@
       <div class="card"><div class="card-label">Flujo proyectado</div><div class="card-value" id="proy-flujo">—</div></div>
     </div>
     <div style="font-size:0.72rem;color:#94a3b8;margin-top:6px;" id="proy-nota-costos"></div>
+  </div>
+
+  <!-- CLIENTES PROPIOS (TL) -->
+  <div class="seccion plata-oculta" id="tab-tl">
+    <div class="fila-banner-ojo"><div class="banner-info" style="border-left-color:#b8860b;background:#fbf3d6;color:#7c4a03;">Registro de lo que recibimos de nuestros clientes propios (TL): cuántas órdenes retiramos, cuántas se entregaron y cuánto ingreso dejan. Se lee directo del Sheets de TL, aparte de ALAS.</div><button id="ojo-tl" onclick="tlDashOjo()">👁 Ver montos</button></div>
+    <div id="tl-dash-aviso" class="banner-alerta" style="display:none;"></div>
+    <div class="input-row"><label for="tl-mes" style="min-width:auto;">Mes:</label><select id="tl-mes" onchange="tlDashPintar()"></select><button class="btn-tl" onclick="tlDashCargar(true)" style="border:1px solid #cbd5e1;background:#f1f5f9;border-radius:8px;padding:7px 12px;font-weight:700;cursor:pointer;">🔄 Actualizar</button></div>
+    <div class="titulo-seccion">Resumen del mes</div>
+    <div class="grid" id="tl-kpis"></div>
+    <div class="titulo-seccion">Por cliente</div>
+    <div id="tl-clientes"></div>
+    <div class="titulo-seccion">Historial mes a mes</div>
+    <div class="panel"><div style="overflow-x:auto;"><table class="tl-tabla"><thead><tr><th>Mes</th><th class="num">Recibidas</th><th class="num">Entregadas</th><th class="num">Ingreso</th><th class="num">Sin factura</th></tr></thead><tbody id="tl-hist"></tbody></table></div></div>
   </div>
 
   <!-- PERSONAL -->
@@ -1243,6 +1264,106 @@ setInterval(cargarDatos, 30000); // se refresca solo cada 30 segundos
 document.addEventListener('visibilitychange', function(){ if(!document.hidden && Date.now() - _ultimoIntentoSync > 5000) cargarDatos(); });
 window.addEventListener('focus', function(){ if(Date.now() - _ultimoIntentoSync > 5000) cargarDatos(); });
 window.addEventListener('online', function(){ cargarDatos(); });
+
+// ===== CLIENTES PROPIOS (TL) — AGREGADO 24-11-2026 =====
+// Lee el Sheets de TL con la misma conexión que usa la OPS (tl_url y tl_clave guardadas en este navegador).
+let tlDashOrdenes = [];
+function tlDashEsc(x){ return String(x==null?'':x).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function tlDashPesos(n){ return String(Math.round(Number(n)||0)).replace(/\B(?=(\d{3})+(?!\d))/g,'.')+' pesos'; }
+function tlDashEstado(o){
+  const e = String(o.estado||'').trim();
+  if(e==='en_ruta') return 'ruta';
+  if(e==='entregado') return 'ent';
+  if(e==='daniado') return 'dan';
+  if(e==='devuelto') return 'dev';
+  return 'bod'; // retirado, retorno, no_entregado: físicamente en bodega
+}
+function tlDashMesNombre(m){ const n=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']; const p=String(m).split('-'); return (n[(+p[1])-1]||m)+' '+p[0]; }
+function tlDashOjo(){
+  const t = document.getElementById('tab-tl');
+  const ocultar = !t.classList.contains('plata-oculta');
+  t.classList.toggle('plata-oculta', ocultar);
+  document.getElementById('ojo-tl').textContent = ocultar ? '👁 Ver montos' : '🙈 Ocultar montos';
+}
+function tlDashAviso(msg){ const b=document.getElementById('tl-dash-aviso'); if(!b) return; if(msg){ b.style.display='block'; b.innerHTML=msg; } else { b.style.display='none'; } }
+async function tlDashCargar(manual){
+  let url='', clave='';
+  try{ url=localStorage.getItem('tl_url')||''; clave=localStorage.getItem('tl_clave')||''; }catch(e){}
+  if(!url || !clave){
+    try{ tlDashOrdenes = JSON.parse(localStorage.getItem('tl_cache')||'[]')||[]; }catch(e){ tlDashOrdenes=[]; }
+    tlDashAviso('⚙️ Este navegador aún no tiene la conexión con el Sheets de TL. Ábrela una vez desde la OPS (pestaña TL con el link de conexión) y vuelve aquí.'+(tlDashOrdenes.length?' Mientras tanto muestro lo último guardado.':''));
+    tlDashPintar(); return;
+  }
+  try{
+    const r = await fetch(url+'?tipo=tl&clave='+encodeURIComponent(clave));
+    const j = await r.json();
+    if(!j || !j.ok) throw new Error((j&&j.error)||'error');
+    tlDashOrdenes = j.ordenes||[];
+    try{ localStorage.setItem('tl_cache', JSON.stringify(tlDashOrdenes)); }catch(e){}
+    tlDashAviso('');
+  }catch(e){
+    try{ tlDashOrdenes = JSON.parse(localStorage.getItem('tl_cache')||'[]')||[]; }catch(x){ tlDashOrdenes=[]; }
+    tlDashAviso('📡 No pude leer el Sheets de TL ahora ('+tlDashEsc(e.message)+'). Muestro lo último guardado.');
+  }
+  tlDashPintar();
+}
+function tlDashPintar(){
+  const O = tlDashOrdenes;
+  // meses disponibles (por fecha de retiro o de entrega)
+  const meses = {};
+  const hoy = new Date(); const mesHoy = hoy.getFullYear()+'-'+String(hoy.getMonth()+1).padStart(2,'0');
+  meses[mesHoy]=1;
+  O.forEach(o=>{ const a=String(o.fecha_retiro||'').slice(0,7), b=String(o.fecha_entrega||'').slice(0,7); if(/^\d{4}-\d{2}$/.test(a)) meses[a]=1; if(/^\d{4}-\d{2}$/.test(b)) meses[b]=1; });
+  const lista = Object.keys(meses).sort().reverse();
+  const sel = document.getElementById('tl-mes');
+  const actual = sel.value && meses[sel.value] ? sel.value : mesHoy;
+  sel.innerHTML = lista.map(m=>'<option value="'+m+'"'+(m===actual?' selected':'')+'>'+tlDashMesNombre(m)+'</option>').join('');
+  const mes = sel.value || actual;
+
+  // cálculo por mes: recibidas = retiradas ese mes; entregadas/ingreso = entregadas ese mes
+  function calc(m){
+    const r = {rec:0, ent:0, ing:0, sinFact:0, ingSinFact:0, porCliente:{}};
+    O.forEach(o=>{
+      const k = o.cliente||'(sin cliente)';
+      const c = r.porCliente[k] = r.porCliente[k] || {rec:0,ent:0,ing:0,ruta:0,bod:0,dan:0,dev:0,sinFact:0,tallas:{}};
+      const e = tlDashEstado(o), tar = Number(o.tarifa)||0;
+      if(String(o.fecha_retiro||'').slice(0,7)===m){ r.rec++; c.rec++; }
+      if(e==='ent' && String(o.fecha_entrega||'').slice(0,7)===m){
+        r.ent++; c.ent++; r.ing+=tar; c.ing+=tar; const t=o.talla||'S'; c.tallas[t]=(c.tallas[t]||0)+1;
+        if(!String(o.factura||'').trim()){ r.sinFact++; r.ingSinFact+=tar; c.sinFact++; }
+      }
+    });
+    return r;
+  }
+  const R = calc(mes);
+  // estado actual (foto de hoy) de lo que sigue en nuestras manos, por cliente
+  const foto = {ruta:0,bod:0,dan:0,dev:0};
+  O.forEach(o=>{
+    const e=tlDashEstado(o), k=o.cliente||'(sin cliente)';
+    const c = R.porCliente[k] = R.porCliente[k] || {rec:0,ent:0,ing:0,ruta:0,bod:0,dan:0,dev:0,sinFact:0,tallas:{}};
+    if(e==='ruta'){ c.ruta++; foto.ruta++; } else if(e==='bod'){ c.bod++; foto.bod++; } else if(e==='dan'){ c.dan++; foto.dan++; } else if(e==='dev'){ c.dev++; foto.dev++; }
+  });
+  const k = (lbl,val,sub,plata)=>'<div class="card tl-kpi"><div class="card-label">'+lbl+'</div><div class="card-value'+(plata?' plata':'')+'">'+val+'</div>'+(sub?'<div class="card-sub">'+sub+'</div>':'')+'</div>';
+  document.getElementById('tl-kpis').innerHTML =
+    k('Órdenes recibidas', R.rec, 'retiradas en '+tlDashMesNombre(mes)) +
+    k('Órdenes entregadas', R.ent, 'entregadas en '+tlDashMesNombre(mes)) +
+    k('Ingreso TL del mes', tlDashPesos(R.ing), 'IVA incluido · solo lo entregado', true) +
+    k('Por facturar', tlDashPesos(R.ingSinFact), R.sinFact+' entregadas sin factura', true) +
+    k('En bodega ahora', foto.bod, 'incluye retornos') +
+    k('En ruta ahora', foto.ruta, 'salieron a entregar');
+  const nombres = Object.keys(R.porCliente).sort();
+  const conAlgo = nombres.filter(n=>{ const c=R.porCliente[n]; return c.rec||c.ent||c.ruta||c.bod||c.dan||c.dev; });
+  document.getElementById('tl-clientes').innerHTML = conAlgo.length ? conAlgo.map(n=>{
+    const c = R.porCliente[n];
+    const tallas = Object.keys(c.tallas).sort().map(t=>c.tallas[t]+'×'+t).join(' · ');
+    return '<div class="tl-card"><h4>'+tlDashEsc(n)+'</h4>'+
+      '<div class="tl-mini"><span>📥 <b>'+c.rec+'</b> recibidas</span><span>✅ <b>'+c.ent+'</b> entregadas'+(tallas?' ('+tlDashEsc(tallas)+')':'')+'</span><span>📦 '+c.bod+' en bodega</span><span>🚐 '+c.ruta+' en ruta</span><span>⚠️ '+c.dan+' dañadas</span><span>📮 '+c.dev+' devueltas</span></div>'+
+      '<div class="plata" style="font-size:1.05rem;font-weight:800;color:#8a6508;margin-top:6px;">'+tlDashPesos(c.ing)+' <span style="font-size:0.74rem;font-weight:600;color:#7c4a03;">· '+c.sinFact+' sin factura</span></div></div>';
+  }).join('') : '<div class="banner-info">Sin órdenes TL en este mes.</div>';
+  // historial mes a mes
+  document.getElementById('tl-hist').innerHTML = lista.map(m=>{ const x=calc(m); return '<tr><td>'+tlDashMesNombre(m)+'</td><td class="num">'+x.rec+'</td><td class="num">'+x.ent+'</td><td class="num plata">'+tlDashPesos(x.ing)+'</td><td class="num">'+x.sinFact+'</td></tr>'; }).join('') || '<tr><td colspan="5" style="text-align:center;color:#94a3b8;">Sin datos todavía</td></tr>';
+}
+document.querySelector('.tab[data-tab="tl"]').addEventListener('click', ()=>{ tlDashPintar(); tlDashCargar(); });
 </script>
 
 </body>
