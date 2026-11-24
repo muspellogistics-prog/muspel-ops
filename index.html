@@ -6610,10 +6610,13 @@ function tlCapturarFilaRuta(row, idx){
   } else {
     res='nueva';
     o = {id:tlNuevaId(), cliente:cliente, fecha_retiro:hoy, n_pedido:pedido, destinatario:nombre, direccion:dir, comuna:comuna, telefono:tel,
-         talla:talla, tarifa:tlTarifaSugerida(comuna, talla), estado:'retirado', motivo:'', fecha_entrega:'', hora_entrega:'', foto_url:'', factura:'', obs:c('obs')};
+         talla:talla, tarifa:tlTarifaSugerida(comuna, talla), estado:'en_ruta', motivo:'', fecha_entrega:'', hora_entrega:'', foto_url:'', factura:'', obs:c('obs')};
     tlOrdenes.push(o);
   }
-  if(tlMapaEstado(o)==='retorno'){ o.estado='retirado'; o.motivo=''; o.fecha_entrega=''; o.hora_entrega=''; } // vuelve a salir en esta ruta
+  // Si viene en la ruta, está EN RUTA (no en bodega). Entregadas/devueltas ya se excluyeron arriba.
+  { var e0 = tlMapaEstado(o);
+    if(e0==='retorno'||e0==='no_entregado'){ o.motivo=''; o.fecha_entrega=''; o.hora_entrega=''; }
+    if(e0==='retirado'||e0==='retorno'||e0==='no_entregado') o.estado='en_ruta'; }
   o.num_ruta = num===''?'':String(num); o.fecha_ruta = hoy; o.actualizado = new Date().toISOString();
   return {orden:o, res:res};
 }
