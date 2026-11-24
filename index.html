@@ -6450,6 +6450,7 @@ function tlAbrirEntrega(id, soloFoto){
     + '<img id="tl-prev-'+id+'" style="display:none;width:100%;max-height:220px;object-fit:contain;margin-top:6px;border-radius:6px;border:1px solid #e5d28f;">'
     + '<input id="tl-rn-'+id+'" placeholder="Nombre de quien recibe" value="'+tlEsc(o.recibe_nombre||'')+'" style="width:100%;margin-top:6px;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:0.85rem;">'
     + '<input id="tl-rr-'+id+'" placeholder="RUT (ej. 12.345.678-5)" value="'+tlEsc(o.recibe_rut||'')+'" inputmode="text" oninput="this.value=tlFmtRut(this.value)" style="width:100%;margin-top:6px;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:0.85rem;">'
+    + '<div id="tl-ia-'+id+'" style="font-size:0.75rem;margin-top:4px;color:#475569;"></div>'
     + '<div id="tl-err-'+id+'" style="color:#b91c1c;font-size:0.75rem;margin-top:4px;"></div>'
     + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">'
     + '<button class="btn btn-verde" style="width:auto;flex:1 1 60%;margin:0;" onclick="tlConfirmarEntrega(\''+id+'\','+(soloFoto?1:0)+')">✅ '+(soloFoto?'Guardar foto':'Confirmar entrega')+'</button>'
@@ -6468,6 +6469,7 @@ function tlFotoElegida(id, inp){
       var d = cv.toDataURL('image/jpeg',0.72);
       TL_FOTO_TMP[id] = d;
       var pv = document.getElementById('tl-prev-'+id); if(pv){ pv.src = d; pv.style.display='block'; }
+      tlLeerEtiqueta(id, d);
     };
     im.src = rd.result;
   };
@@ -6475,12 +6477,39 @@ function tlFotoElegida(id, inp){
 }
 function tlColaFotos(){ try{ return JSON.parse(localStorage.getItem('tl_fotos_cola')||'[]')||[]; }catch(e){ return []; } }
 function tlGuardarColaFotos(c){ try{ localStorage.setItem('tl_fotos_cola', JSON.stringify(c)); return true; }catch(e){ return false; } }
+
+// ── Lectura automática de lo escrito a mano (nombre y RUT de quien recibe) con IA, vía el script TL ──
+function tlRutOk(r){
+  var t = String(r||'').replace(/[^0-9kK]/g,'').toUpperCase(); if(t.length<7) return false;
+  var cuerpo = t.slice(0,-1), dv = t.slice(-1), suma = 0, m = 2;
+  for(var i=cuerpo.length-1;i>=0;i--){ suma += Number(cuerpo[i])*m; m = m===7?2:m+1; }
+  var r2 = 11-(suma%11), esp = r2===11?'0':(r2===10?'K':String(r2));
+  return esp===dv;
+}
+function tlLeerEtiqueta(id, dataUrl){
+  var st = document.getElementById('tl-ia-'+id); if(st) st.textContent = '🔍 Leyendo lo escrito a mano...';
+  tlEnviar('leer_etiqueta',{imagen:dataUrl}).then(function(j){
+    var n = document.getElementById('tl-rn-'+id), r = document.getElementById('tl-rr-'+id);
+    var nom = String(j.nombre||'').trim(), rut = tlFmtRut(j.rut||'');
+    if(n && nom) n.value = nom;
+    if(r && rut) r.value = rut;
+    if(st){
+      if(!nom && !rut) st.innerHTML = '⚠️ No encontré nombre ni RUT escritos a mano. Escríbelos tú.';
+      else if(rut && !tlRutOk(rut)) st.innerHTML = '<span style="color:#b45309;">⚠️ Leí el RUT pero no cuadra. Revísalo con la foto.</span>';
+      else st.innerHTML = '<span style="color:#1a7a4a;">✅ Leído de la foto. Revisa que esté bien.</span>';
+    }
+  }).catch(function(e){
+    if(st) st.textContent = (String(e&&e.message).indexOf('sin_clave_ia')>=0) ? 'La lectura automática aún no está activa. Escribe nombre y RUT.' : '⚠️ No pude leer la foto (señal o IA). Escribe nombre y RUT.';
+  });
+}
+var TL_RUT_AVISO = {};
 function tlConfirmarEntrega(id, soloFoto, sinFoto){
   var o = tlOrdenes.find(function(x){ return x.id===id; }); if(!o) return;
   var foto = TL_FOTO_TMP[id] || '';
   var nom = (document.getElementById('tl-rn-'+id)||{}).value || '', rut = (document.getElementById('tl-rr-'+id)||{}).value || '';
   var err = document.getElementById('tl-err-'+id);
   if(!foto && !sinFoto){ if(err) err.textContent = 'Toma la foto de la etiqueta, o toca «Sin foto».'; return; }
+  if(rut.trim() && !tlRutOk(rut) && !TL_RUT_AVISO[id]){ TL_RUT_AVISO[id]=1; if(err) err.textContent = 'El RUT no cuadra. Revísalo con la foto. Si está bien, toca de nuevo para confirmar.'; return; }
   o.recibe_nombre = nom.trim(); o.recibe_rut = rut.trim();
   if(soloFoto){ o.actualizado = new Date().toISOString(); tlGuardarCache(); tlRender(); tlSubirOrdenes([o]); }
   else { tlCambiarEstado(id,'entregado'); }
