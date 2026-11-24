@@ -6440,6 +6440,14 @@ function tlVisibles(){
     return e===tlFiltroEstado;
   }).sort(function(a,b){ return String(b.fecha_retiro||'').localeCompare(String(a.fecha_retiro||'')) || String(a.n_pedido||'').localeCompare(String(b.n_pedido||''),undefined,{numeric:true}); });
 }
+// AGREGADO 24-11-2026: aviso de clientes propios (TL). Mensaje propio de Muspel, distinto al de ALAS.
+function tlLinkAviso(o, tel){
+  var nom = String(o.destinatario||'').trim().split(/\s+/)[0] || '';
+  nom = nom ? nom.charAt(0).toUpperCase()+nom.slice(1).toLowerCase() : '';
+  var tienda = String(o.cliente||'').trim();
+  var txt = 'Hola'+(nom?' '+nom:'')+', te escribimos de Muspel. Hoy vamos a entregar tu pedido'+(tienda?' de '+tienda:'')+'. Te contactaremos cuando estemos cerca para que puedas recibirlo. ¡Gracias!';
+  return 'https://wa.me/'+tel+'?text='+encodeURIComponent(txt);
+}
 function tlTarjeta(o){
   var e = tlMapaEstado(o), est = TL_ESTADOS[e];
   var mapa = 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(o.direccion+', '+(o.comuna||'Osorno')+', Chile');
@@ -6468,7 +6476,7 @@ function tlTarjeta(o){
   } else {
     h += B('btn-outline','↺ Volver a en ruta',"tlCambiarEstado('"+o.id+"','en_ruta')");
   }
-  if(tel) h += '<a href="https://wa.me/'+tel+'" target="_blank" rel="noopener" class="btn btn-outline" style="width:auto;margin:0;text-decoration:none;">💬</a>';
+  if(tel) h += '<a href="'+tlLinkAviso(o,tel)+'" target="_blank" rel="noopener" class="btn btn-outline" style="width:auto;margin:0;text-decoration:none;">💬</a>';
   if(o.foto_url) h += '<a href="'+tlEsc(o.foto_url)+'" target="_blank" rel="noopener" class="btn btn-outline" style="width:auto;margin:0;text-decoration:none;">📷</a>';
   h += '</div><div id="tl-motivo-'+o.id+'"></div></div>';
   return h;
