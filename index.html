@@ -6448,37 +6448,49 @@ function tlLinkAviso(o, tel){
   var txt = 'Hola'+(nom?' '+nom:'')+', te escribimos de Muspel. Hoy vamos a entregar tu pedido'+(tienda?' de '+tienda:'')+'. Te contactaremos cuando estemos cerca para que puedas recibirlo. ¡Gracias!';
   return 'https://wa.me/'+tel+'?text='+encodeURIComponent(txt);
 }
+// 24-11-2026: la tarjeta TL ahora es igual a la de ALAS (mismo orden y mismos botones: ✅ 🔁 ⚠️ 💬 📞), solo cambian los datos y el color dorado.
+function tlWaEnviado(id){ try{ return !!(JSON.parse(localStorage.getItem('tl_wa_ok')||'{}')||{})[id]; }catch(e){ return false; } }
+function tlMarcarWaEnviado(id){ try{ var m=JSON.parse(localStorage.getItem('tl_wa_ok')||'{}')||{}; m[id]=1; localStorage.setItem('tl_wa_ok', JSON.stringify(m)); }catch(e){} setTimeout(function(){ try{ tlRender(); }catch(e){} }, 400); }
 function tlTarjeta(o){
   var e = tlMapaEstado(o), est = TL_ESTADOS[e];
   var mapa = 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(o.direccion+', '+(o.comuna||'Osorno')+', Chile');
   var tel = (typeof normalizarTelChile==='function') ? normalizarTelChile(o.telefono) : String(o.telefono||'').replace(/\D/g,'');
-  var h = '<div class="card" style="background:#f7e9b8;border-left:6px solid #b8860b;padding:12px;">';
-  h += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">';
+  var ramal = String(o.comuna||'').trim().toLowerCase()!=='osorno';
+  var cls = (e==='entregado'||e==='devuelto'||e==='retorno'||e==='daniado') ? e : 'pendiente';
+  var h = '<div class="paquete-item '+cls+'" style="display:flex;align-items:flex-start;gap:10px;background:#f7e9b8;border:1px solid #e5d28f;border-left:6px solid #b8860b;">';
   if(o.num_ruta!=='' && o.num_ruta!=null && !isNaN(Number(o.num_ruta))) h += '<div style="flex-shrink:0;background:#b8860b;color:#fff;border-radius:8px;min-width:38px;height:38px;display:flex;align-items:center;justify-content:center;font-size:1.15rem;font-weight:800;">'+tlEsc(o.num_ruta)+'</div>';
-  h += '<div style="min-width:0;flex:1;"><div style="font-weight:800;font-size:0.95rem;">'+tlEsc(o.destinatario||'(sin nombre)')+'</div>';
-  h += '<div style="font-size:0.72rem;color:#6b5206;margin-top:2px;"><span style="background:#b8860b;color:#fff;border-radius:6px;padding:1px 6px;font-weight:700;">TL</span> '+tlEsc(o.cliente)+(o.n_pedido?' · Pedido '+tlEsc(o.n_pedido):'')+'</div></div>';
-  h += '<div style="text-align:right;font-size:0.72rem;font-weight:700;white-space:nowrap;">'+est.ico+' '+est.txt+'<div style="font-weight:600;color:#6b5206;">Talla '+tlEsc(o.talla||'S')+'</div></div></div>';
-  h += '<a href="'+mapa+'" target="_blank" rel="noopener" style="display:block;margin-top:6px;font-size:0.85rem;color:#1a3a5c;font-weight:600;text-decoration:underline;">📍 '+tlEsc(o.direccion)+', '+tlEsc(o.comuna||'Osorno')+'</a>';
+  h += '<div class="paquete-info" style="flex:1;min-width:0;">';
+  h += '<div class="paquete-nombre">'+tlEsc(o.destinatario||'(sin nombre)')+'</div>';
+  h += '<div style="font-size:0.7rem;font-weight:800;color:#8a6508;margin-bottom:1px;"><span style="background:#b8860b;color:#fff;border-radius:6px;padding:1px 6px;">TL</span> 🏪 '+tlEsc(o.cliente)+(o.n_pedido?' · '+tlEsc(o.n_pedido):'')+'</div>';
+  h += '<div class="paquete-dir"><a class="dir-maps" href="'+mapa+'" target="_blank" rel="noopener" onclick="event.stopPropagation()">🗺️ '+tlEsc(o.direccion)+', '+tlEsc(o.comuna||'Osorno')+'</a>'+(o.telefono?' · '+tlEsc(o.telefono):'')+'</div>';
+  h += '<div class="paquete-codigo">'+tlEsc(o.id)+' <span class="badge '+(e==='entregado'?'badge-verde':e==='devuelto'?'badge-rojo':(e==='retorno'||e==='daniado')?'badge-naranja':'badge-gris')+'">'+est.ico+' '+est.txt+'</span> <span style="font-size:0.65rem;font-weight:700;color:'+(ramal?'var(--naranja)':'var(--azul2)')+';">'+(ramal?'🛣 Ramal':'🏙 Principal')+'</span> <span style="font-size:0.65rem;font-weight:700;color:#6b5206;">· Talla '+tlEsc(o.talla||'S')+'</span></div>';
   if(o.obs) h += '<div style="font-size:0.75rem;color:#6b5206;margin-top:4px;">📝 '+tlEsc(o.obs)+'</div>';
-  if((e==='no_entregado'||e==='retorno'||e==='daniado'||e==='devuelto') && o.motivo) h += '<div style="font-size:0.75rem;color:#b91c1c;margin-top:4px;">'+est.ico+' '+tlEsc(o.motivo)+'</div>';
+  if((e==='no_entregado'||e==='retorno'||e==='daniado'||e==='devuelto') && o.motivo) h += '<div style="margin-top:4px;background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:4px 8px;font-size:0.82rem;font-weight:700;color:#b91c1c;">Motivo: '+tlEsc(o.motivo)+'</div>';
   if(e==='entregado' && o.hora_entrega) h += '<div style="font-size:0.72rem;color:#1a7a4a;margin-top:4px;">Entregada '+tlEsc(o.fecha_entrega)+' a las '+tlEsc(o.hora_entrega)+'</div>';
   h += '<div class="solo-comercial" style="font-size:0.72rem;color:#6b5206;margin-top:4px;">'+tlPesos(o.tarifa)+'</div>';
-  h += '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">';
-  var B = function(cls,txt,fn,extra){ return '<button class="btn '+cls+'" style="width:auto;flex:1 1 30%;margin:0;'+(extra||'')+'" onclick="'+fn+'">'+txt+'</button>'; };
+  h += '<div id="tl-motivo-'+o.id+'"></div>';
+  h += '</div>';
+  var B = function(cls2,txt,fn,tit){ return '<button class="btn '+cls2+' btn-sm" title="'+(tit||'')+'" onclick="'+fn+'">'+txt+'</button>'; };
+  h += '<div class="paquete-acciones" onclick="event.stopPropagation()">';
   if(e==='retirado'||e==='en_ruta'){
-    if(e==='retirado') h += B('btn-primary','🚐 En ruta',"tlCambiarEstado('"+o.id+"','en_ruta')");
-    h += B('','✅ Entregada',"tlCambiarEstado('"+o.id+"','entregado')",'background:#1a7a4a;color:#fff;');
-    h += B('btn-naranja','🔁 Retorno',"tlPedirMotivo('"+o.id+"','retorno')");
-    h += B('btn-rojo','⚠️ Dañada',"tlPedirMotivo('"+o.id+"','daniado')");
+    h += B('btn-verde','✅',"tlCambiarEstado('"+o.id+"','entregado')",'Entregada');
+    h += B('btn-naranja','🔁',"tlPedirMotivo('"+o.id+"','retorno')",'Retorno');
+    h += B('btn-rojo','⚠️',"tlPedirMotivo('"+o.id+"','daniado')",'Dañada');
+    if(tel){
+      if(tlWaEnviado(o.id)) h += '<a href="https://wa.me/'+tel+'" target="_blank" rel="noopener"><button class="btn btn-sm" style="background:#128C7E;color:#fff;" title="Aviso ya enviado — abre el chat para llamar">✅💬</button></a>';
+      else h += '<a href="'+tlLinkAviso(o,tel)+'" target="_blank" rel="noopener" onclick="tlMarcarWaEnviado(\''+o.id+'\')"><button class="btn btn-sm" style="background:#25D366;color:#fff;" title="Enviar aviso por WhatsApp">💬</button></a>';
+      h += '<a href="tel:+'+tel+'"><button class="btn btn-verde btn-sm" title="Llamar">📞</button></a>';
+    }
+    if(e==='retirado') h += B('btn-primary','🚐',"tlCambiarEstado('"+o.id+"','en_ruta')",'Pasar a en ruta');
   } else if(e==='retorno'||e==='daniado'){
-    h += B('btn-rojo','📮 Devuelta al cliente',"tlPedirMotivo('"+o.id+"','devuelto')");
-    h += B('btn-outline','↺ Volver a en ruta',"tlCambiarEstado('"+o.id+"','en_ruta')");
+    h += B('btn-rojo','📮',"tlPedirMotivo('"+o.id+"','devuelto')",'Devuelta al cliente');
+    h += B('btn-outline','↺',"tlCambiarEstado('"+o.id+"','en_ruta')",'Volver a en ruta');
+    if(tel) h += '<a href="tel:+'+tel+'"><button class="btn btn-verde btn-sm" title="Llamar">📞</button></a>';
   } else {
-    h += B('btn-outline','↺ Volver a en ruta',"tlCambiarEstado('"+o.id+"','en_ruta')");
+    h += B('btn-outline','↺',"tlCambiarEstado('"+o.id+"','en_ruta')",'Volver a en ruta');
   }
-  if(tel) h += '<a href="'+tlLinkAviso(o,tel)+'" target="_blank" rel="noopener" class="btn btn-outline" style="width:auto;margin:0;text-decoration:none;">💬</a>';
-  if(o.foto_url) h += '<a href="'+tlEsc(o.foto_url)+'" target="_blank" rel="noopener" class="btn btn-outline" style="width:auto;margin:0;text-decoration:none;">📷</a>';
-  h += '</div><div id="tl-motivo-'+o.id+'"></div></div>';
+  if(o.foto_url) h += '<a href="'+tlEsc(o.foto_url)+'" target="_blank" rel="noopener"><button class="btn btn-outline btn-sm" title="Foto de la etiqueta">📷</button></a>';
+  h += '</div></div>';
   return h;
 }
 function tlRender(){
