@@ -3112,7 +3112,7 @@ function abrirModal(id){
   var boxObs = document.getElementById('modal-observacion-box');
   var txtObs = document.getElementById('modal-observacion-texto');
   var inputObs = document.getElementById('modal-observacion-input');
-  if(p.observacion && p.observacion.trim()){
+  if(p.observacion && String(p.observacion).trim()){
     boxObs.style.display = 'block';
     txtObs.innerHTML = linkificarTexto(p.observacion);
   } else {
@@ -3936,7 +3936,7 @@ function importarExcel(input){
         if(!ubicDeObs(nuevoPaquete.observacion)){
           var ubG = ubicGuardadaDe(nuevoPaquete);
           if(ubG){
-            nuevoPaquete.observacion = (nuevoPaquete.observacion ? nuevoPaquete.observacion.trim() + ' | ' : '') + ubG.texto.replace(/\s*\(guardada de un pedido anterior\)/gi,'') + ' (guardada de un pedido anterior)';
+            nuevoPaquete.observacion = (nuevoPaquete.observacion ? String(nuevoPaquete.observacion).trim() + ' | ' : '') + ubG.texto.replace(/\s*\(guardada de un pedido anterior\)/gi,'') + ' (guardada de un pedido anterior)';
             cuentaUbic++;
           }
         }
@@ -4839,7 +4839,7 @@ function renderComunasDeTipo(items, diaSemana, tipo){
       if(mReag){
         html+='<div style="display:inline-block;background:#f3e8ff;border:1px solid #7c3aed;border-radius:6px;padding:3px 8px;margin-bottom:4px;margin-right:4px;font-size:0.68rem;font-weight:800;color:#5b21b6;">📅 REAGENDADO · '+mReag[1].replace(/[<>&]/g,'')+'</div>';
       }
-      if(p.observacion && p.observacion.trim()){
+      if(p.observacion && String(p.observacion).trim()){
         html+='<div style="display:inline-block;background:#ede9fe;border:1px solid #a855f7;border-radius:6px;padding:3px 8px;margin-bottom:4px;font-size:0.68rem;font-weight:700;color:#6b21a8;">📝 Observación del cliente</div>';
       }
       if(esAbastecimientoTienda(p)){
