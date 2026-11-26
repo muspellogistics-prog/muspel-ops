@@ -33,6 +33,10 @@
   .perfil-flotante:active{background:rgba(255,255,255,0.24);}
   #usuario-btn option{color:#0f172a;background:#fff;}
   body:not(.perfil-comercial) .solo-comercial{display:none !important;}
+  /* 25-11-2026: la pestaña TL solo la ve quien abrió la OPS una vez con ?vtl=1 (Kathy). Cristian y el apoyo no la ven. */
+  body:not(.ver-tl) #tab-btn-tl{display:none !important;}
+  /* El apoyo no cambia de perfil ni de usuario */
+  body.rol-apoyo #perfil-btn, body.rol-apoyo #usuario-btn{display:none !important;}
   body.perfil-comercial .solo-operativo{display:none !important;}
   /* CONTENIDO */
   .content{display:none;padding:14px;max-width:700px;margin:0 auto;}
@@ -339,7 +343,7 @@
   <div class="tab solo-comercial" onclick="showTab('cierre')">✅ Cierre</div>
   <div class="tab solo-comercial" onclick="showTab('dashboard')">📈 Dashboard</div>
   <div class="tab solo-comercial" onclick="showTab('historial')">🗂 Historial</div>
-  <div class="tab solo-comercial" onclick="showTab('tl')" style="color:#f2d27a;">🚂 TL</div>
+  <div class="tab solo-comercial" id="tab-btn-tl" onclick="showTab('tl')" style="color:#f2d27a;">🚂 TL</div>
 </div>
 
 <!-- ══════════════════════════════════════════ -->
@@ -847,6 +851,21 @@
 // CONFIGURACIÓN GOOGLE SHEETS
 // ════════════════════════════════════════
 var SHEETS_URL = 'https://script.google.com/macros/s/AKfycbx6aAlb99tMoR2leEQep0V7k3fBFh2JxvpjWXdwKuY1n4NUptpO6stNSc4gFU0xEalG/exec';
+
+// 25-11-2026: ?vtl=1 activa la pestaña TL en este equipo (solo Kathy); ?vtl=0 la apaga.
+(function(){
+  try{
+    var v = /[?&]vtl=([01])/.exec(location.search);
+    if(v){ if(v[1]==='1') localStorage.setItem('muspel_ver_tl','1'); else localStorage.removeItem('muspel_ver_tl'); }
+  }catch(e){}
+})();
+function aplicarRolesVisuales(){
+  try{
+    document.body.classList.toggle('ver-tl', localStorage.getItem('muspel_ver_tl')==='1');
+    document.body.classList.toggle('rol-apoyo', (localStorage.getItem('muspel_usuario')||'')==='apoyo');
+  }catch(e){}
+}
+if(document.body) aplicarRolesVisuales(); else document.addEventListener('DOMContentLoaded', aplicarRolesVisuales);
 
 // ════════════════════════════════════════
 // LLAVE DE ACCESO (AGREGADO 24-09-2026)
@@ -1619,7 +1638,7 @@ function descargarOrdenesDesdeSheets(onFin){
       // cliente que Kathy deja para Cristian) — por eso quedaba escrita en Sheets pero
       // nunca le llegaba al celular de Cristian, que depende del auto-sync de 10s y no
       // del botón manual "traer de la nube" (el único lugar donde sí se leía antes).
-      var cloudObservacion = String(row[20]==null?'':row[20]);
+      var cloudObservacion = row[20]||'';
 
       if(vistosEnSheets[codigo] <= yaLocal){
         // Esta ocurrencia ya existe localmente (por código y por posición) — solo revisamos
@@ -2315,7 +2334,8 @@ function cambiarPerfil(){
 // nombre. Si algún día vuelve, basta cambiar activo:false por activo:true.
 var REPARTIDORES_TODOS = [
   {id:'cristian', nombre:'OP. Cristian', jefe:true,  activo:true},    // Cristian
-  {id:'op2',      nombre:'OP. Luchín',   jefe:false, activo:false}    // Luis "Luchín", primo de Cristian (Cyber)
+  {id:'op2',      nombre:'OP. Luchín',   jefe:false, activo:false},   // Luis "Luchín", primo de Cristian (Cyber)
+  {id:'apoyo',    nombre:'OP. Jaime',    jefe:false, activo:true}     // AGREGADO 25-11-2026: apoyo desde el viernes 27-11. Para cambiar el nombre, edita solo esta línea.
 ];
 var REPARTIDORES = REPARTIDORES_TODOS.filter(function(r){ return r.activo!==false; });
 // Link para el celular del primo: agregar ?op=2 al final (ej. .../muspel-ops/?op=2).
@@ -2324,10 +2344,13 @@ var REPARTIDORES = REPARTIDORES_TODOS.filter(function(r){ return r.activo!==fals
   try{
     var m = /[?&]op=([^&]+)/.exec(location.search);
     if(m && m[1]==='2') localStorage.setItem('muspel_usuario','cristian'); // Luchín inactivo
+    if(m && m[1]==='apoyo'){ localStorage.setItem('muspel_usuario','apoyo'); localStorage.setItem('muspel_perfil','operativo'); } // 25-11-2026: celular del apoyo
   }catch(e){}
 })();
 var usuarioActual = localStorage.getItem('muspel_usuario') || 'cristian';
 if(!REPARTIDORES.some(function(r){ return r.id===usuarioActual; })) usuarioActual = 'cristian';
+if(usuarioActual==='apoyo'){ perfilActual='operativo'; try{ localStorage.setItem('muspel_perfil','operativo'); }catch(e){} } // 25-11-2026: el apoyo siempre en Operativo
+aplicarRolesVisuales();
 var verTodasOperativo = false;       // solo aplica si el usuario es jefe
 var filtroRepartidorComercial = 'todos'; // 'todos' | id repartidor | 'sin'
 var asignaciones = {};               // codigo -> {r: idRepartidor ('' = sin asignar), ts}
@@ -2457,6 +2480,7 @@ function confirmarUsuario(id){
   actualizarResumen();
 }
 function aplicarUsuario(){
+  aplicarRolesVisuales();
   var chip = document.getElementById('usuario-btn');
   if(chip){
     chip.innerHTML = REPARTIDORES.map(function(r){ return '<option value="'+r.id+'"'+(r.id===usuarioActual?' selected':'')+'>🚚 '+r.nombre+'</option>'; }).join('');
@@ -2702,7 +2726,6 @@ function quitarCopiasPorId(lista){
 }
 function cargarStorage(){
   try{ paquetes = JSON.parse(localStorage.getItem('muspel_paquetes')||'[]'); }catch(e){ paquetes=[]; }
-  try{ paquetes.forEach(function(p){ if(p && p.observacion!=null && typeof p.observacion!=='string') p.observacion=String(p.observacion); }); }catch(e){}
   try{
     var sinCopias = quitarCopiasPorId(paquetes);
     if(sinCopias.length !== paquetes.length){ paquetes = sinCopias; localStorage.setItem('muspel_paquetes', JSON.stringify(paquetes)); }
@@ -4277,7 +4300,7 @@ function traerOrdenesDesdeNube(){
       if(!codigo) return;
       var cloudNumRuta = (row[17]===''||row[17]===null||row[17]===undefined) ? null : Number(row[17]);
       var cloudTs = Number(row[12])||0;
-      var cloudObservacion = String(row[20]==null?'':row[20]);
+      var cloudObservacion = row[20]||'';
       var locales = paquetes.filter(function(p){ return p.codigo === codigo; });
       var local = locales[0];
       if(local){
