@@ -1619,7 +1619,7 @@ function descargarOrdenesDesdeSheets(onFin){
       // cliente que Kathy deja para Cristian) — por eso quedaba escrita en Sheets pero
       // nunca le llegaba al celular de Cristian, que depende del auto-sync de 10s y no
       // del botón manual "traer de la nube" (el único lugar donde sí se leía antes).
-      var cloudObservacion = row[20]||'';
+      var cloudObservacion = String(row[20]==null?'':row[20]);
 
       if(vistosEnSheets[codigo] <= yaLocal){
         // Esta ocurrencia ya existe localmente (por código y por posición) — solo revisamos
@@ -2702,6 +2702,7 @@ function quitarCopiasPorId(lista){
 }
 function cargarStorage(){
   try{ paquetes = JSON.parse(localStorage.getItem('muspel_paquetes')||'[]'); }catch(e){ paquetes=[]; }
+  try{ paquetes.forEach(function(p){ if(p && p.observacion!=null && typeof p.observacion!=='string') p.observacion=String(p.observacion); }); }catch(e){}
   try{
     var sinCopias = quitarCopiasPorId(paquetes);
     if(sinCopias.length !== paquetes.length){ paquetes = sinCopias; localStorage.setItem('muspel_paquetes', JSON.stringify(paquetes)); }
@@ -4276,7 +4277,7 @@ function traerOrdenesDesdeNube(){
       if(!codigo) return;
       var cloudNumRuta = (row[17]===''||row[17]===null||row[17]===undefined) ? null : Number(row[17]);
       var cloudTs = Number(row[12])||0;
-      var cloudObservacion = row[20]||'';
+      var cloudObservacion = String(row[20]==null?'':row[20]);
       var locales = paquetes.filter(function(p){ return p.codigo === codigo; });
       var local = locales[0];
       if(local){
